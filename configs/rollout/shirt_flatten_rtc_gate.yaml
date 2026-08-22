@@ -1,0 +1,13 @@
+schema: clothdojo_rtc_scenario
+format_version: 1
+scenario_id: shirt_flatten_default_rtc_gate_v1
+task_name: shirt_flatten
+garment_id: rand_ZZCWITH5HY
+seed: 42
+prompt: Flatten the shirt.
+steps: 6
+action_horizon: 4
+rtc:
+  min_exec_horizon: 2
+  initial_delay_steps: 1
+  delay_buffer_size: 8

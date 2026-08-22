@@ -1,0 +1,17 @@
+.venv/
+.cache/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Generated experiment artifacts never belong to the source repository.
+outputs/
+data/
+checkpoints/
+
+# Complete project-local assets are managed outside Git.
+assets/
