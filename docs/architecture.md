@@ -91,12 +91,12 @@ selection before work starts, scans completed outputs on resume, and publishes
 the single root `meta.json` after all expected outputs validate. Scheduling does
 not introduce public shard or job directories.
 
-The physics scene retains only collision shapes. Rollout rendering builds a
-second, topology-identical Newton model with visual shapes and copies the live
-body/particle state into the public camera path. Thus rendering cannot add 446
-visual-only shapes back into collision detection. The first rollout slice owns
-three fixed RGB cameras; richer benchmark appearance randomization remains a
-later rendering workflow.
+The physics scene enables only Piper's expert collision envelope. Rollout
+rendering builds a second, topology-identical Newton model with visual shapes
+and copies the live body/particle state into the public camera path. Thus
+rendering cannot add 446 visual-only shapes back into collision detection. The
+first rollout slice owns three fixed RGB cameras; richer benchmark appearance
+randomization remains a later rendering workflow.
 
 Reviewed legacy data crosses one additional, temporary format boundary. A
 narrow read-only adapter streams the old LeRobot v3 review cache with
@@ -160,10 +160,13 @@ directories, and generated artifacts remain separate from reusable scene
 assets. `tests/` contains only durable regression tests, never one-off
 development or diagnostic scripts.
 
-Piper is stored as one 12-layer USD closure at
-`assets/robots/piper/piper.usda`. The simulation imports its authored collision
-shapes directly and leaves visual geometry to the rendering boundary. The old
-URDF companion, source mesh tree and custom Newton collision cache are not
+Piper is stored as one 13-layer USD closure at
+`assets/robots/piper/piper.usda`. A one-time migration bakes the old expert
+collision envelope into `payloads/collisions.usdc`: 99 cloth/external-contact
+shapes and 27 robot-self-collision proxies. The simulation imports that authored
+layer through Newton 1.5's public USD API, disables the superseded native
+colliders and restores the expert collision groups and body-pair filters. The
+old URDF companion, source mesh tree, cache loader and Newton 1.4 cache are not
 runtime dependencies.
 
 The physics process sets OpenUSD's supported `PXR_WORK_THREAD_LIMIT=1` default
@@ -171,11 +174,12 @@ before Newton imports OpenUSD. USD parsing is a one-time setup operation, and
 serial Work/TBB traversal avoids a measured native race on the current
 high-core-count host without serializing Warp simulation. An explicit external
 setting is respected. OpenUSD 26.3 cannot reliably lower this limit after
-Newton initializes pxr, so a host application that imports Newton first must
-set the same environment variable at process startup; ClothDojo fails clearly
-if that ordering contract is violated. The Isaac teleoperation host also sets
-SimulationApp's public `limit_cpu_threads=1` option because Kit otherwise
-replaces the process-wide TBB limit during extension startup.
+Newton initializes pxr. The Isaac teleoperation entry therefore uses
+SimulationApp's public `limit_cpu_threads=1`; that wrapper otherwise overwrites
+the OpenUSD environment before USDPhysics initializes. This also bounds
+Carbonite/TBB host workers, but leaves CUDA Graph GPU execution parallel. A
+32-thread acceptance run did not improve frame cadence and reproduced the
+native USDPhysics race on restart.
 
 ## Newton scene
 
@@ -190,6 +194,12 @@ Piper remains on `SolverMuJoCo` position targets and the garment remains on
 `SolverCoupled` participant in Newton 1.5, so the application retains one
 explicit two-solver stepping boundary. A VBD coupled scene is only eligible
 after it matches the observable cloth acceptance metrics.
+
+The Newton dependency is an immutable fork commit based on the 1.5.0 release
+tag. Its Style3D collision solve owns VF/EE Coulomb self-friction, candidate
+capacity and untangling suppression as public constructor options. ClothDojo
+only supplies scene parameters; it does not import private solver kernels,
+replace collision objects or patch an installed package.
 
 That boundary uses two public `CollisionPipeline` instances: a rigid-only
 pipeline with `soft_contact_max=0` for MuJoCo, and a full rigid/soft pipeline

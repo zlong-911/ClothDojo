@@ -22,6 +22,7 @@ from isaacteleop.cloudxr.runtime import run
 run()
 """
 _SHUTDOWN_TIMEOUT_S = 60.0
+_MAX_STREAM_FPS = 20
 
 
 def main() -> None:
@@ -161,6 +162,11 @@ def _write_overrides(plan: SessionPlan, install_dir: Path) -> Path:
         "\n".join(
             (
                 f"NV_CXR_GPU_INDEX_VULKAN={vulkan_gpu}",
+                # CloudXR 6.2 uses this hint to pace applications that render
+                # well below the HMD refresh rate. Without it, a 40--50 ms
+                # frame can repeatedly miss the 72 Hz display deadline and
+                # fall onto an approximately 10 Hz cadence.
+                f"NV_MAX_FPS={_MAX_STREAM_FPS}",
                 f"NV_CXR_SERVER_PORT={plan.signaling_port}",
                 f"NV_CXR_MEDIA_PORT={plan.media_port}",
                 f"PROXY_PORT={plan.proxy_port}",

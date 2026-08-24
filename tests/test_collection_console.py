@@ -6,6 +6,7 @@ import sys
 import time
 import tomllib
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from fastapi.testclient import TestClient
@@ -20,7 +21,7 @@ from clothdojo.collection.config import (
 from clothdojo.collection.hil import HILCatalog
 from clothdojo.collection.review import AnnotationConflictError, ReviewCatalog
 from clothdojo.collection.supervisor import NoAvailableSlotError, TeleopSupervisor
-from clothdojo.collection.web import create_app
+from clothdojo.collection.web import build_cloudxr_client_url, create_app
 from clothdojo.collection.workspace import CollectionWorkspace
 from clothdojo.teleop.install import TeleopInstallation
 from clothdojo.teleop.session import SessionPlan, SessionStatusWriter
@@ -198,6 +199,22 @@ def test_hil_plan_binds_rollout_and_trajectory_hashes(tmp_path: Path) -> None:
     assert len(plan["breakpoints"][0]["manifest_sha256"]) == 64
     assert catalog.set_good("run_a", "shirt_a_000000", good=True)["good"] is True
     assert catalog.runs()[0]["episodes"][0]["good"] is True
+    intervention = profile.intervention_root / "teleop_branch"
+    _manifest(intervention, actions=4)
+    manifest_path = intervention / "manifest.json"
+    value = json.loads(manifest_path.read_text(encoding="utf-8"))
+    value["metadata"].update(
+        {
+            "source": "human_intervention",
+            "source_run_id": "run_a",
+            "source_episode_id": "shirt_a_000000",
+            "source_sample_index": 3,
+        }
+    )
+    manifest_path.write_text(json.dumps(value), encoding="utf-8")
+    assert catalog.interventions()[("run_a", "shirt_a_000000")] == [
+        {"id": "teleop_branch", "sample_index": 3, "action_count": 4}
+    ]
 
 
 def test_preserved_workspace_uses_canonical_catalogs(tmp_path: Path) -> None:
@@ -263,7 +280,25 @@ def test_collection_console_preserves_old_workspace_design() -> None:
     assert "function renderSlot" in script
     assert "'<strong>${t(\"service_offline\")}</strong>'" not in script
     assert "expected_revision" in script
+    assert 'deviceProfile:"pico4ultra"' in script
+    assert 'useQuestColorWorkaround:"false"' in script
+    assert 'cloudxrAutoRefreshMode:"any"' in script
     assert ".runtime{" in styles
+
+
+def test_cloudxr_client_url_uses_validated_pico_profile() -> None:
+    url = urlparse(build_cloudxr_client_url("33.229.154.175:44401"))
+    query = parse_qs(url.query)
+
+    assert (url.scheme, url.hostname, url.port, url.path) == (
+        "https",
+        "33.229.154.175",
+        44401,
+        "/client/",
+    )
+    assert query["deviceProfile"] == ["pico4ultra"]
+    assert query["useQuestColorWorkaround"] == ["false"]
+    assert query["cloudxrAutoRefreshMode"] == ["any"]
 
 
 def test_collection_frontend_and_teleop_experience_are_packaged() -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -28,13 +29,28 @@ class TeleopRecorder:
     def frame_count(self) -> int:
         return self.sample_index
 
-    def start(self) -> Path:
+    def start(self, *, origin: Mapping[str, object] | None = None) -> Path:
         if self.writer is not None:
             raise RuntimeError("teleoperation recording is already active")
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         episode_id = f"teleop_{stamp}_{uuid.uuid4().hex[:8]}"
         output = self.plan.output_root / episode_id
         robot = self.plan.assets_root / "robots/piper/piper.usda"
+        metadata: dict[str, object] = {
+            "producer": "clothdojo_isaac_teleop",
+            "session_id": self.plan.session_id,
+            "profile_id": self.plan.profile_id,
+            "asset_id": self.plan.asset_id,
+            "mode": self.plan.mode,
+            "training_eligible": self.plan.mode == "collection",
+        }
+        if origin is not None:
+            protected = set(metadata) & set(origin)
+            if protected:
+                raise ValueError(
+                    f"restore metadata cannot replace session fields: {sorted(protected)}"
+                )
+            metadata.update(origin)
         self.writer = TrajectoryWriter(
             output,
             control_fps=self.runtime.spec.control_fps,
@@ -49,14 +65,7 @@ class TeleopRecorder:
                 },
                 config_fingerprints={},
             ),
-            metadata={
-                "producer": "clothdojo_isaac_teleop",
-                "session_id": self.plan.session_id,
-                "profile_id": self.plan.profile_id,
-                "asset_id": self.plan.asset_id,
-                "mode": self.plan.mode,
-                "training_eligible": self.plan.mode == "collection",
-            },
+            metadata=metadata,
         )
         try:
             states = capture_states(self.runtime, 0)

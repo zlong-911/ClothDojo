@@ -132,6 +132,14 @@ class ShirtFlattenRuntime:
             self.model,
             iterations=self.spec.style3d_iterations,
             linear_iterations=self.spec.style3d_linear_iterations,
+            self_contact_max_candidates_per_primitive=(
+                self.spec.self_contact_max_candidates_per_primitive
+            ),
+            self_contact_friction_mu=self.spec.self_contact_friction_mu,
+            self_contact_friction_epsilon=self.spec.self_contact_friction_epsilon,
+            suppress_self_friction_during_untangling=(
+                self.spec.suppress_self_friction_during_untangling
+            ),
         )
         self.cloth.collision.body_contact_max = self.contacts.soft_contact_max
         self.cloth.collision.radius = self.spec.self_contact_radius
@@ -335,6 +343,86 @@ class ShirtFlattenRuntime:
         self.cloth.dx.zero_()
         self.cloth.rebuild_bvh(self.state_0)
         self.grasp.reset(self._all_worlds)
+
+    def restore_state(self, frame) -> None:
+        """Cold-restore one canonical trajectory boundary without reallocating GPU state."""
+
+        import newton
+
+        if self.model.world_count != 1:
+            raise ValueError("trajectory cold restore requires one world")
+        arrays = self._validated_restore_arrays(frame)
+        self.grasp.validate_restore_state(frame)
+        robot_values = {
+            "joint_q": arrays["joint_q"][None, None],
+            "joint_qd": arrays["joint_qd"][None, None],
+        }
+        start, end = self.grasp.particle_ranges()[0]
+        if (start, end) != (0, int(self.model.particle_count)):
+            raise RuntimeError("single-world garment particles must cover the particle state")
+        for state in (self.state_0, self.state_1):
+            for name, value in robot_values.items():
+                self.scene.robot.get_attribute(name, state).assign(value)
+            state.particle_q.assign(arrays["particle_q"])
+            state.particle_qd.assign(arrays["particle_qd"])
+            state.clear_forces()
+            newton.eval_fk(self.model, state.joint_q, state.joint_qd, state)
+        # flags=0 keeps the restored joint coordinates while clearing MuJoCo's
+        # acceleration, force, activation and control warm-start buffers.
+        self.rigid.reset(self.state_0, flags=0)
+        self.cloth.dx.zero_()
+        self.cloth.rebuild_bvh(self.state_0)
+        self.grasp.restore_state(frame)
+        self.scene.arms.set_attribute(
+            "joint_target_q",
+            self.control,
+            self.scene.arms.get_attribute("joint_q", self.state_0),
+        )
+        self.scene.grippers.set_attribute(
+            "joint_target_q",
+            self.control,
+            self.scene.grippers.get_attribute("joint_q", self.state_0),
+        )
+        wp.synchronize_device(self.model.device)
+
+    def _validated_restore_arrays(self, frame) -> dict[str, np.ndarray]:
+        expected = {
+            "joint_q": tuple(self.scene.robot.get_attribute("joint_q", self.state_0).shape[2:]),
+            "joint_qd": tuple(self.scene.robot.get_attribute("joint_qd", self.state_0).shape[2:]),
+            "body_q": (
+                int(self.scene.robot.get_attribute("body_q", self.state_0).shape[2]),
+                7,
+            ),
+            "body_qd": (
+                int(self.scene.robot.get_attribute("body_qd", self.state_0).shape[2]),
+                6,
+            ),
+        }
+        start, end = self.grasp.particle_ranges()[0]
+        expected.update(
+            {
+                "particle_q": (end - start, 3),
+                "particle_qd": (end - start, 3),
+            }
+        )
+        arrays = {}
+        for name, shape in expected.items():
+            value = np.asarray(getattr(frame, name))
+            if value.shape != shape:
+                raise ValueError(f"{name} shape {value.shape} != {shape}")
+            if value.dtype != np.float32:
+                raise TypeError(f"{name} dtype {value.dtype} != float32")
+            if not np.isfinite(value).all():
+                raise ValueError(f"{name} contains non-finite values")
+            arrays[name] = np.ascontiguousarray(value)
+        gripper_open = np.asarray(frame.gripper_open_state)
+        if gripper_open.shape != (2,) or gripper_open.dtype != np.float32:
+            raise ValueError("gripper_open_state must be float32 with shape (2,)")
+        if not np.isfinite(gripper_open).all() or np.any(
+            (gripper_open < 0.0) | (gripper_open > 1.0)
+        ):
+            raise ValueError("gripper_open_state must be finite and in [0, 1]")
+        return arrays
 
     def _step_rigid(self, dt: float) -> None:
         self.state_0.clear_forces()

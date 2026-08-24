@@ -7,11 +7,13 @@ from ClothDojo's canonical storage formats.
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from typing import TYPE_CHECKING, Any
 
 from clothdojo.collection.assets import AssetCatalog, AssetStatus
 from clothdojo.collection.config import CollectionConfig
+from clothdojo.collection.continuation import continuation_sources
 from clothdojo.collection.hil import HILCatalog
 from clothdojo.collection.review import ReviewCatalog
 
@@ -46,11 +48,17 @@ class CollectionWorkspace:
                 for item in episodes
                 if item["status"] == "complete" and item["asset_id"] is not None
             )
+            continuation = profile.continuation_source_profile is not None
+            display_episodes = (
+                self._continuation_episode_rows(profile_id, episodes)
+                if continuation
+                else [self._episode_view(profile_id, item) for item in episodes]
+            )
             tasks.append(
                 {
                     "id": profile.id,
                     "display_name": profile.display_name,
-                    "continuation": False,
+                    "continuation": continuation,
                     "episode_count": len(episodes),
                     "frame_count": sum(int(item["action_count"]) for item in episodes),
                     "duration_seconds": sum(
@@ -66,7 +74,7 @@ class CollectionWorkspace:
                         }
                         for asset_id in asset_ids
                     ],
-                    "episodes": [self._episode_view(profile_id, item) for item in episodes],
+                    "episodes": display_episodes,
                 }
             )
         slots = self.slots()
@@ -130,6 +138,7 @@ class CollectionWorkspace:
         profiles = []
         for profile_id, profile in self.config.profiles.items():
             runs = self.hil[profile_id].runs()
+            interventions = self.hil[profile_id].interventions()
             profiles.append(
                 {
                     "id": profile.id,
@@ -148,7 +157,13 @@ class CollectionWorkspace:
                         {
                             **run,
                             "episodes": [
-                                {**episode, "interventions": []} for episode in run["episodes"]
+                                {
+                                    **episode,
+                                    "interventions": interventions.get(
+                                        (run["id"], episode["id"]), []
+                                    ),
+                                }
+                                for episode in run["episodes"]
                             ],
                         }
                         for run in runs
@@ -206,6 +221,77 @@ class CollectionWorkspace:
         for page in range(2, int(first["page_count"]) + 1):
             result.extend(catalog.episodes(page=page, page_size=200)["episodes"])
         return result
+
+    def _continuation_episode_rows(
+        self,
+        profile_id: str,
+        destination_episodes: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        profile = self.config.profiles[profile_id]
+        source_profile_id = profile.continuation_source_profile
+        assert source_profile_id is not None
+        results = {}
+        destination_by_id = {item["id"]: item for item in destination_episodes}
+        for manifest_path in profile.trajectory_root.glob("*/manifest.json"):
+            try:
+                value = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            metadata = value.get("metadata")
+            if (
+                value.get("status") == "complete"
+                and int(value.get("action_count", 0)) > 0
+                and isinstance(metadata, dict)
+                and metadata.get("source") == "task_continuation"
+                and metadata.get("source_profile_id") == source_profile_id
+                and isinstance(metadata.get("source_episode_id"), str)
+            ):
+                result = destination_by_id.get(manifest_path.parent.name)
+                if result is not None:
+                    results.setdefault(metadata["source_episode_id"], result)
+
+        rows = []
+        for source in continuation_sources(self.config, profile):
+            source_id = source["source_episode_id"]
+            result = results.get(source_id)
+            if result is None:
+                rows.append(
+                    {
+                        "id": source_id,
+                        "status": "pending",
+                        "stop_reason": None,
+                        "reviewable": False,
+                        "usable": False,
+                        "action_count": None,
+                        "duration_seconds": None,
+                        "session_id": None,
+                        "profile_id": profile_id,
+                        "asset_id": source["asset_id"],
+                        "abort_reason": None,
+                        "deletable": False,
+                        "review": None,
+                        "source": "task_continuation",
+                        "source_profile_id": source_profile_id,
+                        "source_episode_id": source_id,
+                        "source_sample_index": source["source_sample_index"],
+                        "result_episode_id": None,
+                    }
+                )
+                continue
+            row = self._episode_view(profile_id, result)
+            row.update(
+                {
+                    "id": source_id,
+                    "source": "task_continuation",
+                    "source_profile_id": source_profile_id,
+                    "source_episode_id": source_id,
+                    "source_sample_index": source["source_sample_index"],
+                    "result_episode_id": result["id"],
+                }
+            )
+            rows.append(row)
+        rows.sort(key=lambda item: item["id"], reverse=True)
+        return rows
 
     @staticmethod
     def _episode_view(profile_id: str, item: dict[str, Any]) -> dict[str, Any]:

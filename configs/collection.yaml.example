@@ -19,3 +19,11 @@ profiles:
     rollout_root: data/rollouts/shirt_flatten
     intervention_root: data/interventions/shirt_flatten
     max_actions: 3600
+  shirt_fold:
+    display_name: T 恤折叠（从展平终态续采）
+    scene: shirt_fold
+    continuation_source_profile: shirt_flatten
+    dataset_root: data/collections/shirt_fold
+    rollout_root: data/rollouts/shirt_fold
+    intervention_root: data/interventions/shirt_fold
+    max_actions: 3600

@@ -3,7 +3,7 @@
 ClothDojo preserves the validated teleoperation path from `newton-cloth-rl`:
 
 ```text
-Quest / NVIDIA Isaac Teleop web client
+Pico 4 Ultra / NVIDIA Isaac Teleop web client
   ↕ CloudXR WSS, media and OpenXR input
 Isaac Teleop + Isaac Kit RTX
   ↕ same-process render bridge
@@ -36,12 +36,16 @@ The fixed application bundle overlays Newton 1.5/Warp 1.16 in its own Python
 3.12 environment and starts a minimal Kit experience that deliberately omits
 `omni.warp.core`. This preserves the old same-process GPU Fabric bridge without
 allowing Isaac Sim's pinned Newton 1.0 package to own physics. The application
-bundle is machine provisioning, not a project workflow environment. Kit's
-official 32-thread application default is retained for Carbonite, TBB and RTX
-rendering, matching the accepted old-project teleoperation path. Physics-only
-processes still set the OpenUSD startup default to one worker before importing
-pxr; that process-local parser guard is not imposed on an already initialized
-Isaac application runtime.
+bundle is machine provisioning, not a project workflow environment.
+
+Physics-only processes set the OpenUSD startup default to one worker before
+importing pxr. The Isaac entry point also uses SimulationApp's public
+`limit_cpu_threads=1`: SimulationApp otherwise overwrites the environment with
+its 32-thread default before USDPhysics starts, reproducing a native descriptor
+traversal race. This restriction affects host scheduling, not CUDA Graph GPU
+parallelism. Measured 1-thread and 32-thread sessions had the same low frame
+cadence, so CloudXR low-FPS pacing is configured separately rather than treating
+TBB as the rendering bottleneck.
 
 The supervisor launches one fixed ClothDojo teleoperation entry with a
 server-authored session plan; browsers cannot submit commands, paths,
@@ -54,16 +58,23 @@ A session plan contains only resolved project identities and paths:
 - the canonical trajectory output root;
 - fixed CloudXR ports and the public client endpoint;
 - for HIL, an immutable rollout source plus one or more sample indices.
+- for continuation, an immutable leased set of terminal trajectory states.
 
 Collection and HIL use the same GPU lease, supervisor and teleoperation loop.
 HIL differs only in its validated reset source and intervention provenance.
+Continuation profiles use the same loop and record source-profile, episode,
+terminal sample and manifest hashes in every result.
 
 The CUDA teleoperation runtime captures fixed-allocation Newton physics and IK
 graphs by default. Capture failure is fatal on GPU rather than a silent eager
 fallback; CPU-only tests retain the eager path. The live status records both
 graph identities and rolling loop/phase timings so performance acceptance can
 verify the executed path. IK is submitted only when Cartesian targets change,
-matching the validated old-project control loop.
+matching the validated old-project control loop. CloudXR 6.2 is given a fixed
+20 FPS `max-fps` pacing hint because this application renders materially below
+the 72/90 Hz headset rate. The hint lets the runtime schedule that low-rate
+producer directly instead of repeatedly missing headset display deadlines; it
+does not change the headset refresh rate or the Newton simulation timestep.
 
 ## Data ownership
 
@@ -107,10 +118,17 @@ poll without weakening on-disk validation or making SQLite authoritative.
 
 There is no second Node environment or generated frontend lock. Asset curation,
 trajectory review, teleoperation and HIL remain four panels in one workspace.
-Collection teleoperation now uses the fixed supervisor and canonical Newton 1.5
-writer. Buttons whose commands do not yet have a ClothDojo implementation
-(asset conversion/deletion and HIL restore) remain disabled or return an
-explicit unavailable response instead of silently calling old-project scripts.
+Collection teleoperation uses the fixed supervisor and canonical Newton 1.5
+writer. HIL cold restore and terminal-state continuation are implemented with
+strict runtime/asset/source hashes. Asset conversion and deletion remain
+disabled instead of silently calling old-project scripts.
+
+The live controller preserves the operator-facing controls: Y/B return the
+left/right arm independently to startup Home; release then squeeze is required
+to resume tracking. A fixed-allocation GPU probe drives continuous per-hand
+grasp-region vibration through asynchronous pinned-memory readback. The render
+cloth carries rest-mesh NOCS as a vertex primvar, so color identity remains
+stable while the simulated particles deform.
 
 ## Migration order
 
@@ -122,7 +140,7 @@ explicit unavailable response instead of silently calling old-project scripts.
    real-GPU IK/recording and Isaac application-bundle startup checks; headset
    input remains the hardware acceptance gate.
 4. HIL rollout browsing, cold restore and intervention recording through the
-   same runtime.
+   same runtime. Implemented; headset acceptance remains.
 5. Multi-host aggregation only after the local workflow passes concurrent
    Quest acceptance; the old AFO-specific cluster manager is not a migration
    unit.

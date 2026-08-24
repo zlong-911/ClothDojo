@@ -31,6 +31,7 @@ class SessionPlan:
     proxy_port: int
     max_actions: int
     intervention_plan: Path | None = None
+    continuation_plan: Path | None = None
 
     def to_json_dict(self) -> dict[str, Any]:
         value = asdict(self)
@@ -65,6 +66,7 @@ class SessionPlan:
             "session_root",
             "status_path",
             "intervention_plan",
+            "continuation_plan",
         ):
             if value.get(key) is not None:
                 value[key] = Path(value[key]).expanduser().resolve()

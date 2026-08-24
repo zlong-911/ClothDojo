@@ -65,25 +65,35 @@ implementation that satisfies a migrated acceptance test.
   browsing, revision-guarded annotations, HIL rollout browsing and immutable
   intervention plans use ClothDojo contracts. Local GPU leases, the fixed Isaac
   Teleop/CloudXR supervisor, Newton 1.5 IK/control and canonical recording are
-  implemented; asset conversion/deletion, HIL cold restore and concurrent Quest
-  acceptance remain. None of the old cluster or runtime modules is a dependency.
-- [x] Piper's minimal 12-layer USD closure copied under the simplified
-  `piper.usda` entry; native Newton 1.5 collision shapes replace the old custom
-  collision-cache loader.
+  implemented. HIL full-state cold restore, source-hashed intervention recording,
+  terminal-state continuation leases, Y/B single-arm Home, asynchronous grasp
+  haptics and teleop NOCS display are migrated. Asset conversion/deletion and
+  concurrent Quest acceptance remain. None of the old cluster or runtime modules
+  is a dependency.
+- [x] Piper's 13-layer USD closure lives under the simplified `piper.usda`
+  entry. The old cache geometry was migrated once into an authored USD layer;
+  the runtime uses Newton 1.5's public importer and does not load the old cache.
 - [x] Minimal Newton 1.5 `shirt_flatten` model builder implemented with a
   single-world template, zero-spacing replication, public Style3D construction
   and `ArticulationView` selection.
-- [x] Minimal runtime, connected-patch grasp and selected-world reset implemented
-  behind one `clothdojo sim check` acceptance entry.
+- [x] Minimal runtime, expert four-seed/two-ring connected-patch grasp and
+  selected-world reset implemented behind one `clothdojo sim check` acceptance
+  entry. Attach/release thresholds and the gripper's 2.5% soft-limit margin are
+  preserved.
 - [x] Exact pinned environment builds and steps the `shirt_flatten` scene.
-- [ ] Land the proposed Newton Style3D `numpy.arctan2` fix upstream and verify
-  it from a clean released installation; the local validation reaches a full
-  GPU step without changing ClothDojo's NumPy pin.
+- [x] Pin the Newton 1.5.0 fork commit containing the Style3D
+  `numpy.arctan2`/`numpy.power` corrections; no site-package mutation or NumPy
+  upgrade is required.
+- [x] Move the old VF/EE cloth self-friction into the fork's formal Style3D
+  collision solve, expose the 63-candidate capacity publicly and enable the old
+  `mu=0.35`, `epsilon=0.01`, untangling-suppression configuration in ClothDojo.
 - [x] Local `shirt_flatten` runtime passes reset, control and finite-state GPU
   gates; bitwise repeatability is reported as a diagnostic, not required for
   Style3D compatibility.
-- [x] Remove visual USD shapes from the physics-only importer, reducing Piper
-  from 515 mixed shapes to 69 physical shapes.
+- [x] Remove visual USD shapes from the physics-only importer. The 69 native
+  colliders remain present but disabled; the active envelope is the migrated
+  126-shape expert set (99 cloth/external-contact shapes plus 27 self-collision
+  proxies).
 - [x] Resolve the intermittent OpenUSD import status-139 failure with its
   supported single-thread Work/TBB setting. The minimal importer passed 8/8
   fresh processes and the ordinary full GPU CLI passed 3/3 without debug

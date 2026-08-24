@@ -73,14 +73,19 @@ curl http://127.0.0.1:8000/api/snapshot
 
 页面中的常用操作：
 
-- **遥操**：选择任务、服装和空闲 GPU，点击“启动”，再用 Quest 扫描页面给出的
+- **遥操**：选择任务、服装和空闲 GPU，点击“启动”，再用 Pico 4 Ultra 扫描页面给出的
   CloudXR 二维码。双手 `squeeze` 是 clutch，`trigger` 控制夹爪，右手 `A`
-  开始或结束录制，左手 `X` 重置场景，同时按下两侧摇杆重置 XR 视点。
+  开始或结束录制，左手 `X` 重置场景；`Y`/`B` 分别让左/右臂回 Home，松开后
+  再握紧对应手柄才恢复跟手。夹爪进入可抓取区域时对应手柄持续震动；同时按下
+  两侧摇杆重置 XR 视点。布料按静止网格 NOCS 着色，形变时颜色身份保持不变。
 - **审查**：选择轨迹和相机；空格播放/暂停，左右方向键逐帧移动。点击两次
   “标记 bad 片段”确定区间，没有 bad 区间时可点击 `Good`。标注会自动写入
   `trajectories/annotations/`。
-- **HIL**：当前可浏览 rollout 视频并保存介入点规划；从介入点冷恢复并启动遥操
-  尚未开放。
+- **HIL**：在 rollout 视频上添加介入点并启动遥操。运行时校验 rollout、轨迹和
+  资产哈希，冷恢复完整机器人、布料、夹爪与抓取生命周期；安全接管后按 `A`
+  录制，结束后按 `X` 进入下一个介入点。
+- **续采**：`shirt_fold` 从尚未消费的 `shirt_flatten` 完整轨迹终态恢复；来源按
+  会话租约防重，按 `A` 录制，按 `X` 保存并进入下一个终态。
 - **资产清洗**：查看服装正反面预览并接受或拒绝；资产决定保存于
   `assets/garments/selection.json`。
 
@@ -89,7 +94,8 @@ curl http://127.0.0.1:8000/api/snapshot
 强制捕获 Newton 物理与 IK CUDA Graph；会话状态中的 `physics_cuda_graph` 和
 `ik_cuda_graph` 可用于确认实际启用情况。性能排查可同时查看 `loop_fps`、
 `frame_ms`、`app_ms`、`physics_submit_ms` 和 `ik_updates`；正常松开 clutch 时 IK
-不会重复求解。
+不会重复求解。CloudXR 固定使用 20 FPS 的低帧率应用 pacing；这是给 72/90 Hz
+头显的调度提示，不会改变头显刷新率或 Newton 的仿真时间步。
 
 ## Rollout 离线数据
 
@@ -114,10 +120,15 @@ export CLOTHDOJO_EXPERT_TRAJECTORIES=/path/to/expert/trajectories
 
 ```bash
 .venv/bin/clothdojo policy serve-sft \
-  --checkpoint /checkpoints/sft \
-  --norm-stats data/norm_stats/pi05_aloha_reviewed_good_v1 \
+  --checkpoint /outputs/pi05-good-v2/checkpoints/global_step_40000 \
+  --norm-stats /data/norm_stats/pi05_aloha_shirt_flatten_reviewed_good_v2 \
   --device cuda:1
 ```
+
+`serve-sft` 会在 checkpoint 的祖先目录中查找训练时写入的
+`pi05_launch_manifest.json`，并在加载模型前同时核对 `norm_stats.json` 和
+`clothdojo.json` 的 SHA-256 与变换 provenance。因此移动 checkpoint 时应保留其
+run 目录结构；good-v2 checkpoint 与 v1 normalization statistics 的混搭会直接失败。
 
 在仿真 GPU 上消费初态池，输出多条与遥操相同格式的物理轨迹：
 

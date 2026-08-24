@@ -71,6 +71,44 @@ class HILCatalog:
         result.sort(key=lambda item: item["id"], reverse=True)
         return result
 
+    def interventions(self) -> dict[tuple[str, str], list[dict[str, Any]]]:
+        """Index completed HIL branches by rollout run and source episode."""
+
+        result: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        root = self.profile.intervention_root.resolve()
+        if not root.is_dir():
+            return result
+        for manifest_path in sorted(root.glob("*/manifest.json")):
+            trajectory = manifest_path.parent
+            if trajectory.is_symlink() or trajectory.resolve().parent != root:
+                continue
+            try:
+                manifest = TrajectoryReader(trajectory).manifest
+            except (KeyError, OSError, RuntimeError, TypeError, ValueError):
+                continue
+            metadata = manifest.metadata
+            run_id = metadata.get("source_run_id")
+            episode_id = metadata.get("source_episode_id")
+            sample_index = metadata.get("source_sample_index")
+            if (
+                manifest.status != "complete"
+                or manifest.action_count <= 0
+                or metadata.get("source") != "human_intervention"
+                or not isinstance(run_id, str)
+                or not isinstance(episode_id, str)
+                or isinstance(sample_index, bool)
+                or not isinstance(sample_index, int)
+            ):
+                continue
+            result.setdefault((run_id, episode_id), []).append(
+                {
+                    "id": trajectory.name,
+                    "sample_index": sample_index,
+                    "action_count": manifest.action_count,
+                }
+            )
+        return result
+
     def video(self, run_id: str, episode_id: str, camera: str) -> Path:
         run_id = _identity(run_id, "run id")
         episode_id = _identity(episode_id, "episode id")

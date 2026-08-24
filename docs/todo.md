@@ -1,19 +1,5 @@
 # Deferred decisions
 
-## Newton 1.5 GPU acceptance
-
-Newton 1.5's anisotropic Style3D cloth builder calls `numpy.atan2`, an alias
-provided by NumPy 2 but not the current NumPy 1.26.4 pin. The CPU Newton smoke
-passes. A locally proposed `numpy.arctan2` upstream fix lets the GPU scene pass
-this build stage without changing NumPy, but the released package is not fixed
-yet.
-
-The local validation completes a finite GPU step and an exact reset. Style3D
-does not produce bitwise-identical repeated steps, which is accepted as a
-numerical property rather than treated as a package compatibility failure.
-Rerun the clean-install GPU acceptance after the upstream builder fix lands.
-Do not add a global alias or setup-time patch.
-
 ## Benchmark statistical reproducibility
 
 GPU Style3D execution is not bitwise repeatable: parallel numerical reduction
@@ -52,17 +38,17 @@ compatibility layer.
 ## Newton 1.5 cloth physics acceptance
 
 The old project implemented cloth self-friction by importing private Style3D
-kernels and replacing internal collision objects. ClothDojo will not migrate
-that coupling. Newton 1.5 also gives the old `shape_material_kf = 1e3` value a
-new MuJoCo friction-reference meaning, so carrying the numeric value would not
-preserve behavior.
+kernels and replacing internal collision objects. The pinned Newton 1.5 fork
+now owns the same VF/EE term formally and ClothDojo configures it through public
+constructor parameters. Newton 1.5 also gives the old
+`shape_material_kf = 1e3` value a new MuJoCo friction-reference meaning, so
+carrying the numeric value would not preserve behavior.
 
-Before collecting new teleoperation or benchmark base data, compare the pinned
-1.5 public baseline against representative old episodes for contact stability,
-self-contact sliding, grasp retention and final cloth spread. If public Newton
-cannot meet the measured requirement, produce a minimal upstream reproducer;
-do not restore private imports or setup-time patches. The API audit is in
-`docs/newton_15_audit.md`.
+Before collecting new benchmark base data, compare the pinned fork against
+representative old episodes for contact stability, self-contact sliding, grasp
+retention and final cloth spread. If it cannot meet the measured requirement,
+produce a minimal upstream reproducer; do not restore private imports or
+setup-time patches. The API audit is in `docs/newton_15_audit.md`.
 
 ## RTX renderer boundary
 

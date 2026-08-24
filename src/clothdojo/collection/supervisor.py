@@ -18,6 +18,7 @@ from typing import Any
 
 from clothdojo.assets import GarmentLibrary
 from clothdojo.collection.config import CollectionConfig
+from clothdojo.collection.continuation import build_continuation_plan
 from clothdojo.teleop.install import TeleopInstallation
 from clothdojo.teleop.session import SessionPlan
 
@@ -115,6 +116,8 @@ class TeleopSupervisor:
             raise ValueError(f"unknown teleoperation mode: {mode}")
         if mode == "intervention" and intervention_plan is None:
             raise ValueError("intervention sessions require an immutable plan")
+        if mode == "intervention" and profile.continuation_source_profile is not None:
+            raise ValueError("a continuation profile cannot run HIL intervention")
         problem = self.installation.problem()
         if problem is not None:
             raise RuntimeError(problem)
@@ -136,6 +139,26 @@ class TeleopSupervisor:
                     if intervention_plan is not None
                     else None
                 )
+                continuation_plan = None
+                continuation_path = None
+                if mode == "collection" and profile.continuation_source_profile is not None:
+                    leased = {
+                        str(row["source_episode_id"])
+                        for row in database.execute(
+                            """
+                            SELECT source_episode_id FROM continuation_leases
+                            WHERE source_profile_id = ?
+                            """,
+                            (profile.continuation_source_profile,),
+                        )
+                    }
+                    continuation_plan = build_continuation_plan(
+                        self.config,
+                        profile,
+                        asset_id=asset_id,
+                        leased_episode_ids=leased,
+                    )
+                    continuation_path = session_root / "continuation-plan.json"
                 output_root = (
                     profile.trajectory_root if mode == "collection" else profile.intervention_root
                 )
@@ -157,6 +180,7 @@ class TeleopSupervisor:
                     proxy_port=int(slot["proxy_port"]),
                     max_actions=profile.max_actions,
                     intervention_plan=intervention_path,
+                    continuation_plan=continuation_path,
                 )
                 database.execute(
                     """
@@ -180,12 +204,30 @@ class TeleopSupervisor:
                         created_at,
                     ),
                 )
+                if continuation_plan is not None:
+                    database.executemany(
+                        """
+                        INSERT INTO continuation_leases (
+                            source_profile_id, source_episode_id, session_id
+                        ) VALUES (?, ?, ?)
+                        """,
+                        [
+                            (
+                                profile.continuation_source_profile,
+                                source["source_episode_id"],
+                                session_id,
+                            )
+                            for source in continuation_plan["sources"]
+                        ],
+                    )
                 database.commit()
 
             try:
                 session_root.mkdir(parents=True, exist_ok=False)
                 if intervention_path is not None:
                     _atomic_json(intervention_path, intervention_plan)
+                if continuation_path is not None:
+                    _atomic_json(continuation_path, continuation_plan)
                 plan.write(plan_path)
                 process = self._launcher(plan, plan_path, log_path)
                 start_ticks = _pid_start_ticks(process.pid)
@@ -429,6 +471,10 @@ class TeleopSupervisor:
                 """,
                 (status, _utc_now(), exit_code, error, session_id),
             )
+            database.execute(
+                "DELETE FROM continuation_leases WHERE session_id = ?",
+                (session_id,),
+            )
             database.commit()
 
     def _initialize_database(self) -> None:
@@ -460,6 +506,13 @@ class TeleopSupervisor:
                 CREATE UNIQUE INDEX IF NOT EXISTS one_active_session_per_slot
                 ON sessions(slot_id)
                 WHERE status IN ('starting', 'waiting_for_vr', 'collecting', 'stopping');
+                CREATE TABLE IF NOT EXISTS continuation_leases (
+                    source_profile_id TEXT NOT NULL,
+                    source_episode_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    PRIMARY KEY (source_profile_id, source_episode_id),
+                    FOREIGN KEY (session_id) REFERENCES sessions(id)
+                );
                 """
             )
 
@@ -486,7 +539,7 @@ def _read_status(path: Path) -> dict[str, Any] | None:
 
 def _atomic_json(path: Path, value: dict[str, Any] | None) -> None:
     if value is None:
-        raise ValueError("cannot write an empty intervention plan")
+        raise ValueError("cannot write an empty teleoperation plan")
     temporary = path.with_name(f".{path.name}.tmp")
     temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.replace(temporary, path)

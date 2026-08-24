@@ -2,6 +2,7 @@ import ast
 import os
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -14,11 +15,13 @@ from clothdojo.sim.scene import (
     ARM_JOINTS,
     GRIPPER_JOINTS,
     ShirtFlattenSpec,
+    _add_robot,
     _body_indices,
     _configure_robot,
     _joint_dofs,
     _joint_indices,
     _nocs_visual_mesh,
+    _register_solver_attributes,
     _vertex_normals,
     rest_vertices_to_nocs,
 )
@@ -27,9 +30,7 @@ from clothdojo.sim.scene import (
 class _RobotBuilder:
     def __init__(self) -> None:
         labels = tuple(
-            f"/robot/{side}/joint{joint}"
-            for side in ("left", "right")
-            for joint in range(1, 9)
+            f"/robot/{side}/joint{joint}" for side in ("left", "right") for joint in range(1, 9)
         )
         self.joint_label = list(labels)
         self.joint_dof_dim = [(0, 1)] * len(labels)
@@ -111,6 +112,22 @@ def test_sim_runtime_enables_cuda_graph_by_default() -> None:
         runtime._capture_step_graph()
 
 
+def test_scene_self_contact_defaults_match_expert_data() -> None:
+    spec = ShirtFlattenSpec()
+
+    assert spec.self_contact_max_candidates_per_primitive == 63
+    assert spec.self_contact_friction_mu == 0.35
+    assert spec.self_contact_friction_epsilon == 0.01
+    assert spec.suppress_self_friction_during_untangling is True
+
+    with pytest.raises(ValueError, match="max_candidates"):
+        ShirtFlattenSpec(self_contact_max_candidates_per_primitive=0)
+    with pytest.raises(ValueError, match="friction_mu"):
+        ShirtFlattenSpec(self_contact_friction_mu=-0.1)
+    with pytest.raises(ValueError, match="friction_epsilon"):
+        ShirtFlattenSpec(self_contact_friction_epsilon=0.0)
+
+
 def test_piper_asset_is_a_small_self_contained_usd_closure() -> None:
     root = Path(__file__).parents[1] / "assets" / "robots" / "piper"
     if not root.is_dir():
@@ -119,6 +136,7 @@ def test_piper_asset_is_a_small_self_contained_usd_closure() -> None:
         "piper.usda",
         "piper_dual_m.usda",
         "payloads/base.usda",
+        "payloads/collisions.usdc",
         "payloads/geometries.usd",
         "payloads/installation.usdc",
         "payloads/installation_materials.usda",
@@ -132,6 +150,78 @@ def test_piper_asset_is_a_small_self_contained_usd_closure() -> None:
 
     assert {str(path.relative_to(root)) for path in root.rglob("*") if path.is_file()} == expected
     assert "@./piper_dual_m.usda@" in (root / "piper.usda").read_text(encoding="utf-8")
+
+
+def test_piper_collision_layer_preserves_expert_geometry_provenance() -> None:
+    from pxr import Usd
+
+    root = Path(__file__).parents[1] / "assets" / "robots" / "piper"
+    stage = Usd.Stage.Open(str(root / "piper.usda"))
+    assert stage is not None
+    collision_prims = [
+        prim
+        for prim in stage.Traverse()
+        if "/ClothDojoLegacyCollision/" in str(prim.GetPath())
+        and prim.HasAttribute("clothdojo:collisionRole")
+    ]
+    roles = Counter(
+        str(prim.GetAttribute("clothdojo:collisionRole").Get()) for prim in collision_prims
+    )
+    assert roles == {"contact": 99, "self_collision_proxy": 27}
+    assert sorted(
+        int(prim.GetAttribute("clothdojo:sourceShapeIndex").Get()) for prim in collision_prims
+    ) == list(range(126))
+    # The composed-stage layer order is not stable across USD versions; read
+    # the collision layer directly for its immutable migration signature.
+    collision_layer = Usd.Stage.Open(str(root / "payloads" / "collisions.usdc"))
+    assert collision_layer is not None
+    metadata = collision_layer.GetRootLayer().customLayerData
+    assert metadata["sourceGeometrySignatureSha256"] == (
+        "b2902d562abab777a9087938ffa346dd1c27a0123c24656c326f8585b7cce1d4"
+    )
+    assert metadata["sourceNewtonVersion"] == "1.4.0"
+
+
+def test_piper_import_selects_only_expert_collision_envelope() -> None:
+    import newton
+    import warp as wp
+
+    root = Path(__file__).parents[1] / "assets" / "robots" / "piper"
+    builder = newton.ModelBuilder()
+    _register_solver_attributes(newton, builder)
+
+    _add_robot(
+        newton,
+        wp,
+        builder,
+        root / "piper.usda",
+        ShirtFlattenSpec(),
+        load_visual_shapes=False,
+    )
+
+    labels = tuple(str(label) for label in builder.shape_label)
+    migrated = [
+        index for index, label in enumerate(labels) if "/ClothDojoLegacyCollision/" in label
+    ]
+    original = [
+        index for index, label in enumerate(labels) if "/ClothDojoLegacyCollision/" not in label
+    ]
+    shape_bit = int(newton.ShapeFlags.COLLIDE_SHAPES)
+    particle_bit = int(newton.ShapeFlags.COLLIDE_PARTICLES)
+    contact = [index for index in migrated if "/contact_" in labels[index]]
+    proxy = [index for index in migrated if "/self_collision_proxy_" in labels[index]]
+
+    assert len(contact) == 99
+    assert len(proxy) == 27
+    assert Counter(int(builder.shape_type[index]) for index in migrated) == {7: 4, 8: 10, 10: 112}
+    assert all(
+        int(builder.shape_flags[index]) & (shape_bit | particle_bit) == shape_bit | particle_bit
+        for index in contact
+    )
+    assert all(
+        int(builder.shape_flags[index]) & (shape_bit | particle_bit) == shape_bit for index in proxy
+    )
+    assert all(not int(builder.shape_flags[index]) & shape_bit for index in original)
 
 
 def test_joint_selection_resolves_named_one_dof_joints() -> None:

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
+from types import SimpleNamespace
+
 import numpy as np
 
+from clothdojo.teleop.cloudxr_slot import _write_overrides
 from clothdojo.teleop.control import (
     BimanualTeleopController,
     TeleopSafetyConfig,
@@ -10,7 +14,13 @@ from clothdojo.teleop.control import (
     XRHandFrame,
 )
 from clothdojo.teleop.ik import DualArmIKController
-from clothdojo.teleop.isaac_app import _targets_changed
+from clothdojo.teleop.interaction import ButtonEdges, HomeReturn
+from clothdojo.teleop.isaac_app import (
+    _configure_openusd_startup,
+    _prime_changed_inputs,
+    _targets_changed,
+)
+from clothdojo.teleop.openxr import IsaacOpenXRBackend
 
 
 def _pose(x: float, y: float, z: float) -> np.ndarray:
@@ -31,6 +41,86 @@ def test_teleop_only_updates_ik_when_cartesian_targets_change() -> None:
     moved = left.copy()
     moved[0, 3] += 0.01
     assert _targets_changed(moved, right, left, right)
+
+
+def test_home_return_requires_release_then_squeeze() -> None:
+    home = HomeReturn()
+    home.start()
+
+    assert not home.update(1.0, 0.5)
+    assert home.active
+    assert not home.update(0.0, 0.5)
+    assert home.update(1.0, 0.5)
+    assert not home.active
+
+
+def test_reconnected_controller_buttons_are_primed_without_edges() -> None:
+    edges = ButtonEdges()
+    frame = TimestampedXRFrame(
+        sequence=1,
+        receive_time_s=1.0,
+        left=XRHandFrame(buttons={"x": True, "y": True}, valid=True),
+        right=XRHandFrame(buttons={"a": True, "b": True}, valid=True),
+    )
+
+    assert _prime_changed_inputs(
+        edges,
+        frame,
+        left_input_valid=False,
+        right_input_valid=False,
+    ) == (True, True)
+    assert not edges.rising("reset", True)
+    assert not edges.rising("left_home", True)
+    assert not edges.rising("record", True)
+    assert not edges.rising("right_home", True)
+
+
+def test_grasp_haptics_are_continuous_and_independent_per_hand() -> None:
+    class Device:
+        def __init__(self) -> None:
+            self.value = 0.0
+
+        @staticmethod
+        def get_output_names():
+            return ["haptic"]
+
+        @staticmethod
+        def has_output(_name):
+            return True
+
+        def set_output_value(self, _name, value):
+            self.value = value
+
+    backend = IsaacOpenXRBackend(xr_core=object())
+    left, right = Device(), Device()
+    backend._devices = {"left": left, "right": right}
+
+    backend.set_grasp_haptics(True, False)
+    assert (left.value, right.value) == (0.25, 0.0)
+    backend.set_grasp_haptics(False, True)
+    assert (left.value, right.value) == (0.0, 0.25)
+    backend.stop_haptics()
+    assert (left.value, right.value) == (0.0, 0.0)
+
+
+def test_cloudxr_pacing_targets_the_measured_teleop_rate(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("CLOUDXR_VULKAN_GPU_INDEX", raising=False)
+    plan = SimpleNamespace(signaling_port=44388, media_port=33434, proxy_port=44401)
+
+    config = _write_overrides(plan, tmp_path).read_text(encoding="utf-8")
+
+    assert "NV_MAX_FPS=20\n" in config
+    assert "NV_CXR_GPU_INDEX_VULKAN=0\n" in config
+
+
+def test_isaac_limits_openusd_traversal_before_kit_startup(monkeypatch) -> None:
+    monkeypatch.delenv("PXR_WORK_THREAD_LIMIT", raising=False)
+    _configure_openusd_startup()
+    assert os.environ["PXR_WORK_THREAD_LIMIT"] == "1"
+
+    monkeypatch.setenv("PXR_WORK_THREAD_LIMIT", "2")
+    _configure_openusd_startup()
+    assert os.environ["PXR_WORK_THREAD_LIMIT"] == "2"
 
 
 def test_bimanual_controller_preserves_clutch_and_stale_input_safety() -> None:

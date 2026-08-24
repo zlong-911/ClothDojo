@@ -85,7 +85,7 @@ def build_render_stage(runtime, plan) -> Path:
     UsdShade.MaterialBindingAPI.Apply(table.GetPrim()).Bind(table_material)
 
     points = runtime.state_0.particle_q.numpy().astype(np.float32)
-    _, triangles, _, _ = load_garment_mesh(plan.asset_path)
+    rest_vertices, triangles, _, _ = load_garment_mesh(plan.asset_path)
     indices = np.asarray(triangles, dtype=np.int32).reshape(-1)
     cloth = UsdGeom.Mesh.Define(stage, "/World/Cloth")
     cloth.CreatePointsAttr(Vt.Vec3fArray.FromNumpy(points))
@@ -93,7 +93,12 @@ def build_render_stage(runtime, plan) -> Path:
     cloth.CreateFaceVertexIndicesAttr(Vt.IntArray.FromNumpy(indices))
     cloth.CreateDoubleSidedAttr(True)
     cloth.CreateSubdivisionSchemeAttr(UsdGeom.Tokens.catmullClark)
-    cloth_material = _preview_material(stage, "/World/Looks/Cloth", (0.13, 0.36, 0.78), 0.58)
+    if len(rest_vertices) != len(points):
+        raise RuntimeError(
+            "teleoperation NOCS requires one rest vertex per cloth particle"
+        )
+    _write_nocs_primvar(cloth, rest_vertices)
+    cloth_material = _nocs_material(stage, "/World/Looks/ClothNocs")
     UsdShade.MaterialBindingAPI.Apply(cloth.GetPrim()).Bind(cloth_material)
 
     ground_material = _preview_material(stage, "/World/Looks/Ground", (0.025, 0.027, 0.032), 0.82)

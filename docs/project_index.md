@@ -48,7 +48,9 @@
 - `src/clothdojo/collection/review.py`: trajectory/review index and
   revision-guarded atomic annotations.
 - `src/clothdojo/collection/hil.py`: rollout review and immutable HIL
-  intervention plans.
+  intervention plans plus completed-branch indexing.
+- `src/clothdojo/collection/continuation.py`: validated terminal-state discovery,
+  consumption tracking and immutable continuation plans.
 - `src/clothdojo/collection/workspace.py`: stable view-model adapter between
   the preserved old workspace and ClothDojo's canonical catalogs.
 - `src/clothdojo/collection/web.py`: local FastAPI control plane and static
@@ -58,17 +60,20 @@
 - `src/clothdojo/collection/static/`: the old console's DOM, CSS and interaction
   design, mechanically split into HTML/CSS/JavaScript without a Node runtime.
 - `src/clothdojo/teleop/`: fixed CloudXR/Isaac application entry, OpenXR input,
-  Newton 1.5 IK/control, Fabric display bridge and canonical recording.
+  Newton 1.5 IK/control, full-state cold restore, Fabric/NOCS display bridge and
+  canonical recording.
 - `src/clothdojo/teleop/teleop.kit`: packaged minimal Isaac RTX/OpenXR
   experience; it intentionally excludes Isaac's Warp extension.
 - `src/clothdojo/sim/cloth.py`: converted-USDC to public Style3D builder boundary.
 - `src/clothdojo/sim/scene.py`: minimal Piper/table/garment scene and Newton 1.5
   batch replication.
 - `src/clothdojo/sim/runtime.py`: explicit MuJoCo/Style3D control and reset.
-- `src/clothdojo/sim/grasp.py`: fixed-allocation connected cloth-patch grasp.
+- `src/clothdojo/sim/grasp.py`: fixed-allocation expert four-seed/two-ring
+  connected cloth-patch grasp.
 - `src/clothdojo/sim/check.py`: executable full-scene acceptance gate.
-- `assets/robots/piper/piper.usda`: simplified entry to the minimal Piper USD
-  closure; no URDF or custom collision cache is required at runtime.
+- `assets/robots/piper/piper.usda`: simplified entry to the Piper USD closure,
+  including the authored 99-contact/27-proxy expert collision layer; no URDF or
+  custom collision cache is required at runtime.
 - `assets/`: project-local source, preview and converted assets; ignored by Git.
 - `docs/architecture.md`: system boundaries and dependency direction.
 - `docs/migration.md`: ordered migration with acceptance gates.

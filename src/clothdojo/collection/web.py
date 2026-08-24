@@ -16,6 +16,26 @@ from clothdojo.collection.supervisor import NoAvailableSlotError, TeleopSupervis
 from clothdojo.collection.workspace import CollectionWorkspace
 
 
+def build_cloudxr_client_url(endpoint: str) -> str:
+    """Build the validated Pico 4 Ultra client URL for a teleoperation slot."""
+    host, port = endpoint.rsplit(":", 1)
+    query = urlencode(
+        {
+            "serverIP": host,
+            "port": port,
+            "codec": "h264",
+            "immersiveMode": "vr",
+            "deviceFrameRate": "72",
+            "maxStreamingBitrateMbps": "80",
+            "panelHiddenAtStart": "true",
+            "deviceProfile": "pico4ultra",
+            "useQuestColorWorkaround": "false",
+            "cloudxrAutoRefreshMode": "any",
+        }
+    )
+    return f"https://{host}:{port}/client/?{query}"
+
+
 class AssetDecisionRequest(BaseModel):
     decision: Literal["accepted", "rejected"]
 
@@ -44,6 +64,11 @@ class BreakpointRequest(BaseModel):
 class InterventionPlanRequest(BaseModel):
     run_id: str = Field(min_length=1, max_length=160)
     breakpoints: list[BreakpointRequest] = Field(min_length=1, max_length=128)
+
+
+class StartInterventionRequest(InterventionPlanRequest):
+    profile_id: str = Field(min_length=1, max_length=160)
+    slot_id: str | None = Field(default=None, max_length=160)
 
 
 class StartSessionRequest(BaseModel):
@@ -270,12 +295,28 @@ def create_app(config_path: str | Path):
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/api/hil/interventions")
-    async def workspace_start_intervention(request: dict):
-        del request
-        raise HTTPException(
-            status_code=503,
-            detail="HIL restore is the next workflow after collection teleoperation",
-        )
+    async def workspace_start_intervention(request: StartInterventionRequest):
+        try:
+            plan = hil_catalog(request.profile_id).intervention_plan(
+                request.run_id,
+                [item.model_dump() for item in request.breakpoints],
+            )
+            asset_id = str(plan["asset_id"])
+            if asset_id not in set(assets.library.collectable_ids()):
+                raise RuntimeError("rollout garment is no longer converted and collectable")
+            return supervisor.start_session(
+                profile_id=request.profile_id,
+                asset_id=asset_id,
+                slot_id=request.slot_id,
+                mode="intervention",
+                intervention_plan=plan,
+            )
+        except NoAvailableSlotError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/api/sessions", status_code=201)
     async def workspace_start_session(request: StartSessionRequest):
@@ -322,20 +363,8 @@ def create_app(config_path: str | Path):
             session = supervisor.session(session_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        host, port = str(session["endpoint"]).rsplit(":", 1)
-        query = urlencode(
-            {
-                "serverIP": host,
-                "port": port,
-                "codec": "h264",
-                "immersiveMode": "vr",
-                "deviceFrameRate": "72",
-                "maxStreamingBitrateMbps": "80",
-                "panelHiddenAtStart": "true",
-                "useQuestColorWorkaround": "true",
-            }
-        )
-        image = qrcode.make(f"https://{host}:{port}/client/?{query}", image_factory=SvgPathImage)
+        client_url = build_cloudxr_client_url(str(session["endpoint"]))
+        image = qrcode.make(client_url, image_factory=SvgPathImage)
         return Response(content=image.to_string(), media_type="image/svg+xml")
 
     @app.get("/api/v1/assets")

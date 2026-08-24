@@ -21,6 +21,11 @@ if "pxr.Work" not in sys.modules:
 ARM_JOINTS = tuple(f"{side}/joint{joint}" for side in ("left", "right") for joint in range(1, 7))
 GRIPPER_JOINTS = tuple(f"{side}/joint{joint}" for side in ("left", "right") for joint in (7, 8))
 END_EFFECTOR_LINKS = ("left/link6", "right/link6")
+_PIPER_COLLISION_MARKER = "/ClothDojoLegacyCollision/"
+_PIPER_CONTACT_MARKER = f"{_PIPER_COLLISION_MARKER}contact_"
+_PIPER_PROXY_MARKER = f"{_PIPER_COLLISION_MARKER}self_collision_proxy_"
+_PIPER_CONTACT_SHAPE_COUNT = 99
+_PIPER_PROXY_SHAPE_COUNT = 27
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +58,10 @@ class ShirtFlattenSpec:
     style3d_iterations: int = 4
     style3d_linear_iterations: int = 10
     self_contact_radius: float = 0.002
+    self_contact_max_candidates_per_primitive: int = 63
+    self_contact_friction_mu: float = 0.35
+    self_contact_friction_epsilon: float = 0.01
+    suppress_self_friction_during_untangling: bool = True
     cloth_body_friction_epsilon: float = 0.003
     self_contact_vf_stiffness: float = 0.05
     self_contact_ee_stiffness: float = 0.002
@@ -64,6 +73,12 @@ class ShirtFlattenSpec:
             raise ValueError("world_count must be positive")
         if self.control_fps < 1 or self.sim_substeps < 1:
             raise ValueError("control_fps and sim_substeps must be positive")
+        if self.self_contact_max_candidates_per_primitive < 1:
+            raise ValueError("self_contact_max_candidates_per_primitive must be positive")
+        if self.self_contact_friction_mu < 0.0:
+            raise ValueError("self_contact_friction_mu must be non-negative")
+        if self.self_contact_friction_epsilon <= 0.0:
+            raise ValueError("self_contact_friction_epsilon must be positive")
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,20 +222,21 @@ def _add_robot(
     builder.add_usd(
         source=str(path),
         floating=False,
-        enable_self_collisions=False,
+        # The baked expert geometry owns its self-collision proxy filters below.
+        enable_self_collisions=True,
         ignore_paths=[".*/root_joint"],
         load_visual_shapes=load_visual_shapes,
         xform=wp.transform_identity(),
     )
     body_end = int(builder.body_count)
-    collision_shapes = 0
-    collision_bits = int(newton.ShapeFlags.COLLIDE_SHAPES)
-    particle_bit = int(newton.ShapeFlags.COLLIDE_PARTICLES)
-    for shape in range(shape_start, int(builder.shape_count)):
-        if not int(builder.shape_flags[shape]) & collision_bits:
-            continue
-        collision_shapes += 1
-        builder.shape_flags[shape] |= particle_bit
+    collision_shapes = _configure_piper_collision_geometry(
+        newton,
+        builder,
+        body_start=body_start,
+        body_end=body_end,
+        shape_start=shape_start,
+    )
+    for shape in collision_shapes:
         builder.shape_material_mu[shape] = spec.robot_friction
         builder.shape_material_ke[shape] = spec.rigid_contact_ke
         builder.shape_material_kd[shape] = spec.rigid_contact_kd
@@ -228,9 +244,131 @@ def _add_robot(
         # contact uses mu, so keep this unrelated gain disabled explicitly.
         builder.shape_material_kf[shape] = 0.0
         builder.shape_margin[shape] = spec.rigid_contact_margin
-    if collision_shapes == 0 or body_end == body_start:
+    if not collision_shapes or body_end == body_start:
         raise RuntimeError("Piper USD did not provide rigid bodies and collision shapes")
     return body_end - body_start
+
+
+def _configure_piper_collision_geometry(
+    newton,
+    builder,
+    *,
+    body_start: int,
+    body_end: int,
+    shape_start: int,
+) -> tuple[int, ...]:
+    """Select the expert-data contact envelope and reproduce its proxy filters."""
+
+    shape_end = int(builder.shape_count)
+    labels = tuple(str(label) for label in builder.shape_label)
+    contact_shapes = tuple(
+        shape for shape in range(shape_start, shape_end) if _PIPER_CONTACT_MARKER in labels[shape]
+    )
+    proxy_shapes = tuple(
+        shape for shape in range(shape_start, shape_end) if _PIPER_PROXY_MARKER in labels[shape]
+    )
+    if (
+        len(contact_shapes) != _PIPER_CONTACT_SHAPE_COUNT
+        or len(proxy_shapes) != _PIPER_PROXY_SHAPE_COUNT
+    ):
+        raise RuntimeError(
+            "Piper expert collision layer is incomplete: "
+            f"contact={len(contact_shapes)}/{_PIPER_CONTACT_SHAPE_COUNT}, "
+            f"proxy={len(proxy_shapes)}/{_PIPER_PROXY_SHAPE_COUNT}"
+        )
+
+    shape_bit = int(newton.ShapeFlags.COLLIDE_SHAPES)
+    particle_bit = int(newton.ShapeFlags.COLLIDE_PARTICLES)
+    collision_bits = shape_bit | particle_bit
+    migrated = set(contact_shapes) | set(proxy_shapes)
+    for shape in range(shape_start, shape_end):
+        if shape not in migrated:
+            # The expert runtime disabled authored/visual colliders before adding
+            # its baked contact envelope. Preserve visibility but remove contact.
+            builder.shape_flags[shape] &= ~collision_bits
+            builder.shape_collision_group[shape] = 0
+    for shape in contact_shapes:
+        builder.shape_flags[shape] = (
+            int(builder.shape_flags[shape]) & ~collision_bits
+        ) | collision_bits
+        builder.shape_collision_group[shape] = 1
+    for shape in proxy_shapes:
+        builder.shape_flags[shape] = (int(builder.shape_flags[shape]) & ~collision_bits) | shape_bit
+        builder.shape_collision_group[shape] = 2
+
+    # Contact geometry collides with cloth and external rigid bodies, never
+    # with another part of the robot. The lighter proxy envelope owns only
+    # articulation self-collision, matching the data-collection scene.
+    for slot, left_shape in enumerate(contact_shapes):
+        for right_shape in contact_shapes[slot + 1 :]:
+            builder.add_shape_collision_filter_pair(left_shape, right_shape)
+
+    robot_bodies = set(range(body_start, body_end))
+    ignored_body_pairs = {(body, body) for body in robot_bodies}
+    for parent, child in zip(builder.joint_parent, builder.joint_child, strict=True):
+        parent = int(parent)
+        child = int(child)
+        if parent in robot_bodies and child in robot_bodies:
+            ignored_body_pairs.add((min(parent, child), max(parent, child)))
+
+    fixed_type = int(newton.JointType.FIXED)
+    fixed_parent = {body: body for body in robot_bodies}
+
+    def find(body: int) -> int:
+        while fixed_parent[body] != body:
+            fixed_parent[body] = fixed_parent[fixed_parent[body]]
+            body = fixed_parent[body]
+        return body
+
+    def union(left: int, right: int) -> None:
+        left_root = find(left)
+        right_root = find(right)
+        if left_root != right_root:
+            fixed_parent[right_root] = left_root
+
+    for joint_type, parent, child in zip(
+        builder.joint_type, builder.joint_parent, builder.joint_child, strict=True
+    ):
+        parent = int(parent)
+        child = int(child)
+        if int(joint_type) == fixed_type and parent in robot_bodies and child in robot_bodies:
+            union(parent, child)
+    fixed_components: dict[int, list[int]] = {}
+    for body in robot_bodies:
+        fixed_components.setdefault(find(body), []).append(body)
+    for component in fixed_components.values():
+        for slot, left_body in enumerate(component):
+            for right_body in component[slot:]:
+                ignored_body_pairs.add((min(left_body, right_body), max(left_body, right_body)))
+
+    children_by_parent: dict[int, set[int]] = {}
+    for parent, child in zip(builder.joint_parent, builder.joint_child, strict=True):
+        parent = int(parent)
+        child = int(child)
+        if parent in robot_bodies and child in robot_bodies:
+            children_by_parent.setdefault(parent, set()).add(child)
+    for root in _body_indices(builder, END_EFFECTOR_LINKS):
+        subtree = {root}
+        frontier = [root]
+        while frontier:
+            parent = frontier.pop()
+            for child in children_by_parent.get(parent, ()):
+                if child not in subtree:
+                    subtree.add(child)
+                    frontier.append(child)
+        ordered = sorted(subtree)
+        for slot, left_body in enumerate(ordered):
+            for right_body in ordered[slot:]:
+                ignored_body_pairs.add((min(left_body, right_body), max(left_body, right_body)))
+
+    for slot, left_shape in enumerate(proxy_shapes):
+        left_body = int(builder.shape_body[left_shape])
+        for right_shape in proxy_shapes[slot + 1 :]:
+            right_body = int(builder.shape_body[right_shape])
+            if (min(left_body, right_body), max(left_body, right_body)) in ignored_body_pairs:
+                builder.add_shape_collision_filter_pair(left_shape, right_shape)
+
+    return contact_shapes + proxy_shapes
 
 
 def _configure_robot(newton, builder, spec: ShirtFlattenSpec, body_count: int):

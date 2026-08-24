@@ -32,6 +32,7 @@ class CollectionProfile:
     rollout_root: Path
     intervention_root: Path
     max_actions: int
+    continuation_source_profile: str | None = None
 
     @property
     def trajectory_root(self) -> Path:
@@ -110,6 +111,7 @@ def load_config(path: str | Path) -> CollectionConfig:
                 "max_actions",
             },
             f"profiles.{profile_id}",
+            optional={"continuation_source_profile"},
         )
         display_name = str(profile["display_name"]).strip()
         scene = _identity(profile["scene"], f"profiles.{profile_id}.scene")
@@ -125,7 +127,23 @@ def load_config(path: str | Path) -> CollectionConfig:
             max_actions=_positive_integer(
                 profile["max_actions"], f"profiles.{profile_id}.max_actions"
             ),
+            continuation_source_profile=(
+                None
+                if profile.get("continuation_source_profile") is None
+                else _identity(
+                    profile["continuation_source_profile"],
+                    f"profiles.{profile_id}.continuation_source_profile",
+                )
+            ),
         )
+    for profile in profiles.values():
+        source = profile.continuation_source_profile
+        if source is None:
+            continue
+        if source == profile.id:
+            raise ValueError("continuation source profile must differ from its destination")
+        if source not in profiles:
+            raise ValueError(f"unknown continuation source profile: {source}")
     return CollectionConfig(
         project_root=project_root,
         assets_root=assets_root,
@@ -143,9 +161,16 @@ def _mapping(value: object, name: str) -> dict[str, Any]:
     return value
 
 
-def _keys(value: dict[str, Any], expected: set[str], name: str) -> None:
+def _keys(
+    value: dict[str, Any],
+    expected: set[str],
+    name: str,
+    *,
+    optional: set[str] | None = None,
+) -> None:
+    optional = set() if optional is None else optional
     missing = expected - set(value)
-    unknown = set(value) - expected
+    unknown = set(value) - expected - optional
     if missing:
         raise ValueError(f"{name} is missing keys: {sorted(missing)}")
     if unknown:

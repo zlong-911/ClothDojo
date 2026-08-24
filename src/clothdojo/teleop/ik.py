@@ -35,6 +35,19 @@ def _gather_arm_command(
     target[0, index] = source[indices[index]]
 
 
+@wp.kernel
+def _override_home_command(
+    home: wp.array2d(dtype=float),
+    left: int,
+    right: int,
+    command: wp.array2d(dtype=float),
+):
+    joint = wp.tid()
+    side = joint // 6
+    if (side == 0 and left != 0) or (side == 1 and right != 0):
+        command[0, joint] = home[0, joint]
+
+
 @dataclass
 class DualArmIKController:
     runtime: object
@@ -76,7 +89,15 @@ class DualArmIKController:
             device=self.device,
         )
         self._arm_command = wp.zeros((1, 12), dtype=wp.float32, device=self.device)
+        self._home_arm_command = wp.zeros_like(self._arm_command)
         self.sync_from_state()
+        wp.launch(
+            _gather_arm_command,
+            dim=12,
+            inputs=[self.runtime.state_0.joint_q, self._arm_indices],
+            outputs=[self._home_arm_command],
+            device=self.device,
+        )
 
         left_pos, left_rot, right_pos, right_rot = self.measured_targets()
         self._left_target_pos = left_pos
@@ -199,6 +220,19 @@ class DualArmIKController:
         wp.copy(self._joint_q_command, self.runtime.state_0.joint_q)
         left, right = self.measured_pose_matrices()
         self.set_targets(left, right)
+
+    def override_home(self, command, *, left: bool, right: bool) -> None:
+        """Replace selected arm targets with the startup posture on device."""
+
+        if not left and not right:
+            return
+        wp.launch(
+            _override_home_command,
+            dim=12,
+            inputs=[self._home_arm_command, int(left), int(right)],
+            outputs=[command],
+            device=self.device,
+        )
 
     def solution_status(self) -> int:
         return int(self._solution_status.numpy()[0])

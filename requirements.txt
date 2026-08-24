@@ -1,7 +1,9 @@
 # One readable environment specification for development, training and rollout.
 # Formal runs record the fully resolved `pip freeze` in artifact provenance.
-# Physics baseline: upgrade as one tested unit.
-newton[sim]==1.5.0
+# Physics baseline: Newton 1.5.0 plus the audited Style3D NumPy and implicit
+# self-friction commits. Upgrade the fork revision and numerical stack as one
+# tested unit; never patch the installed package during setup.
+newton[sim] @ git+https://github.com/zlong-911/newton.git@363aab40133fa72d8536ec5e15802a466b1f6601
 warp-lang==1.16.0
 mujoco==3.11.0
 mujoco-warp==3.11.0
