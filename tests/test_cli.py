@@ -4,6 +4,7 @@ import json
 import subprocess
 import sys
 import textwrap
+from pathlib import Path
 
 import pytest
 
@@ -85,46 +86,10 @@ def test_simulation_check_calls_acceptance_entry(monkeypatch, capsys) -> None:
     assert json.loads(capsys.readouterr().out) == {"compatible": True}
 
 
-def test_rtc_rollout_check_calls_acceptance_entry(monkeypatch, capsys) -> None:
-    call = {}
-    monkeypatch.setattr(
-        "clothdojo.rollout.check.run_rtc_rollout_check",
-        lambda *args, **kwargs: call.update(args=args, kwargs=kwargs) or {"compatible": True},
-    )
-
-    cli.main(
-        [
-            "rollout",
-            "check-rtc",
-            "--scenario",
-            "configs/rollout/gate.yaml",
-            "--assets",
-            "/data/assets",
-            "--trajectory-output",
-            "/data/trajectory",
-            "--lerobot-output",
-            "/data/lerobot",
-            "--device",
-            "cuda:2",
-        ]
-    )
-
-    assert call == {
-        "args": (
-            "configs/rollout/gate.yaml",
-            "/data/assets",
-            "/data/trajectory",
-            "/data/lerobot",
-        ),
-        "kwargs": {"device": "cuda:2"},
-    }
-    assert json.loads(capsys.readouterr().out) == {"compatible": True}
-
-
 def test_make_states_calls_generator(monkeypatch, capsys) -> None:
     call = {}
     monkeypatch.setattr(
-        "clothdojo.rollout.initial_states.generate_initial_states",
+        "clothdojo.rollout.initial_states.generate_initial_state_collection",
         lambda *args, **kwargs: call.update(args=args, kwargs=kwargs) or {"compatible": True},
     )
 
@@ -132,43 +97,205 @@ def test_make_states_calls_generator(monkeypatch, capsys) -> None:
         [
             "rollout",
             "make-states",
-            "--garment",
-            "shirt",
-            "--count",
+            "--seen-assets",
+            "2",
+            "--unseen-assets",
             "4",
+            "--states-per-asset",
+            "6",
+            "--expert-trajectories",
+            "/data/expert",
             "--output",
-            "/data/states.npz",
+            "/data/states",
             "--assets",
             "/data/assets",
-            "--device",
-            "cuda:2",
+            "--gpus",
+            "2,3",
             "--batch-size",
             "2",
             "--max-candidates",
             "16",
             "--seed",
             "7",
-            "--hold-seconds",
-            "1.0",
-            "--settle-seconds",
-            "2.0",
+            "--drop-seconds",
+            "3.0",
         ]
     )
 
     assert call == {
-        "args": ("/data/assets", "/data/states.npz"),
+        "args": ("/data/assets", "/data/states"),
         "kwargs": {
-            "garment_id": "shirt",
-            "state_count": 4,
+            "expert_trajectories": "/data/expert",
+            "seen_assets": 2,
+            "unseen_assets": 4,
+            "states_per_asset": 6,
+            "gpus": ("2", "3"),
             "candidate_batch": 2,
             "max_candidates": 16,
             "seed": 7,
-            "hold_seconds": 1.0,
-            "settle_seconds": 2.0,
-            "device": "cuda:2",
+            "drop_seconds": 3.0,
         },
     }
     assert json.loads(capsys.readouterr().out) == {"compatible": True}
+
+
+def test_rollout_run_calls_collection_workflow(monkeypatch, capsys) -> None:
+    call = {}
+    monkeypatch.setattr(
+        "clothdojo.rollout.collection.run_rollout_collection",
+        lambda *args, **kwargs: call.update(args=args, kwargs=kwargs) or {"compatible": True},
+    )
+
+    cli.main(
+        [
+            "rollout",
+            "run",
+            "--scenario",
+            "scenario.yaml",
+            "--states",
+            "/data/states",
+            "--policy",
+            "ws://policy:8080",
+            "--expected-checkpoint-sha256",
+            "ab" * 32,
+            "--output",
+            "/data/rollouts",
+            "--assets",
+            "/data/assets",
+            "--gpus",
+            "3,4",
+            "--limit-per-asset",
+            "2",
+            "--seen-assets",
+            "5",
+            "--unseen-assets",
+            "5",
+            "--execution",
+            "chunk",
+            "--exec-horizon",
+            "12",
+        ]
+    )
+
+    assert call == {
+        "args": (
+            "scenario.yaml",
+            "/data/states",
+            ("ws://policy:8080",),
+            "/data/rollouts",
+        ),
+        "kwargs": {
+            "expected_checkpoint_sha256": "ab" * 32,
+            "assets_root": "/data/assets",
+            "gpus": ("3", "4"),
+            "limit_per_asset": 2,
+            "seen_assets": 5,
+            "unseen_assets": 5,
+            "execution": "chunk",
+            "exec_horizon": 12,
+        },
+    }
+    assert json.loads(capsys.readouterr().out) == {"compatible": True}
+
+
+def test_policy_serve_calls_rlinf_boundary(monkeypatch) -> None:
+    call = {}
+    monkeypatch.setattr(
+        "clothdojo.rollout.policy.serve_sft_policy",
+        lambda *args, **kwargs: call.update(args=args, kwargs=kwargs),
+    )
+
+    cli.main(
+        [
+            "policy",
+            "serve-sft",
+            "--checkpoint",
+            "/models/sft",
+            "--norm-stats",
+            "/data/norm",
+            "--device",
+            "cuda:4",
+            "--port",
+            "9000",
+        ]
+    )
+
+    assert call == {
+        "args": ("/models/sft", "/data/norm"),
+        "kwargs": {
+            "openpi_config": "pi05_aloha_robotwin",
+            "action_horizon": 50,
+                "num_steps": 10,
+                "autocast": True,
+                "rtc_execution_horizon": 10,
+                "rtc_max_guidance_weight": 10.0,
+                "rtc_prefix_schedule": "linear",
+                "device": "cuda:4",
+            "host": "127.0.0.1",
+            "port": 9000,
+        },
+    }
+
+
+def test_export_lerobot_detects_rollout_collection(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    source = tmp_path / "rollouts"
+    source.mkdir()
+    (source / "meta.json").write_text(
+        json.dumps({"schema": "clothdojo_rollout"}),
+        encoding="utf-8",
+    )
+    call = {}
+    monkeypatch.setattr(
+        "clothdojo.data.rollout.export_rollout_collection",
+        lambda *args, **kwargs: call.update(args=args, kwargs=kwargs)
+        or {"compatible": True},
+    )
+
+    cli.main(
+        [
+            "data",
+            "export-lerobot",
+            "--source",
+            str(source),
+            "--output",
+            "/data/lerobot",
+            "--assets",
+            "/data/assets",
+            "--device",
+            "cuda:5",
+        ]
+    )
+
+    assert call == {
+        "args": (str(source), "/data/lerobot"),
+        "kwargs": {
+            "assets_root": "/data/assets",
+            "device": "cuda:5",
+            "repo_id": None,
+            "image_writer_threads": 6,
+        },
+    }
+    assert json.loads(capsys.readouterr().out) == {"compatible": True}
+
+
+def test_rollout_lerobot_defaults_inside_experiment(monkeypatch, tmp_path: Path) -> None:
+    source = tmp_path / "sft_rtc"
+    source.mkdir()
+    (source / "meta.json").write_text(
+        json.dumps({"schema": "clothdojo_rollout"}), encoding="utf-8"
+    )
+    call = {}
+    monkeypatch.setattr(
+        "clothdojo.data.rollout.export_rollout_collection",
+        lambda *args, **kwargs: call.update(args=args, kwargs=kwargs)
+        or {"compatible": True},
+    )
+
+    cli.main(["data", "export-lerobot", "--source", str(source)])
+
+    assert call["args"] == (str(source), str(source / "lerobot"))
 
 
 def test_training_command_calls_thin_rlinf_adapter(monkeypatch) -> None:

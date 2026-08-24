@@ -39,20 +39,34 @@ implementation that satisfies a migrated acceptance test.
 - [x] Fixed trajectory dataset, strict reader and atomic writer implemented.
 - [x] Newton-to-trajectory conversion isolated in a one-way adapter and tested
   with independent multi-world array copies.
-- [ ] Convert required old canonical trajectories offline into the current
-  manifest before migrating a dataset workflow.
+- [x] Imported the required `000004` collection through a one-way validated
+  migration into `data/collections/shirt_flatten`: 690 complete trajectories,
+  two incomplete records, 668 annotations and 690 four-camera review exports.
+  All manifests now use the strict ClothDojo schema and no old-project path is
+  a runtime dependency.
 - [x] Reviewed `000004` trajectories and v3 review exports resynchronized;
   bad-complement planning, v3 read-only adaptation, pinned LeRobot v2.1 writing,
   explicit episode extent metadata and atomic publication implemented.
-- [ ] Run the full 1,288,298-frame reviewed LeRobot export after the project
-  environment installation completes, then reload it through pinned LeRobot.
+- [x] Full 1,288,298-frame reviewed LeRobot v1 export published and reloaded
+  through pinned LeRobot; the active SFT run uses this immutable artifact.
+- [x] Published the v2 reviewed export with the 65-frame temporal floor: 719
+  episodes and 1,287,887 frames. The active v1 training input remains immutable;
+  exact retained MP4s are hard-linked while Parquet indices and metadata are
+  rebuilt and reloaded independently.
 - [x] Minimal garment source, front/back preview, accept/reject and converted
   storage contract implemented independently of the old web service.
 - [x] Old garment assets copied without modifying the source project: 35 source
   archives, 33,158 front/back candidates, 2,485 decisions and 757 converted
   garments now use the ClothDojo layout and names.
-- [ ] Local collection workflow migrated; the old combined web console is not a
-  package dependency or migration unit.
+- [x] Preserve the old four-panel web design for teleoperation, trajectory
+  review, HIL and asset curation. Its DOM/CSS/interaction code is now local
+  static source, with a small view-model adapter over ClothDojo catalogs.
+- [ ] Complete the local collection workflow. Asset decisions, trajectory
+  browsing, revision-guarded annotations, HIL rollout browsing and immutable
+  intervention plans use ClothDojo contracts. Local GPU leases, the fixed Isaac
+  Teleop/CloudXR supervisor, Newton 1.5 IK/control and canonical recording are
+  implemented; asset conversion/deletion, HIL cold restore and concurrent Quest
+  acceptance remain. None of the old cluster or runtime modules is a dependency.
 - [x] Piper's minimal 12-layer USD closure copied under the simplified
   `piper.usda` entry; native Newton 1.5 collision shapes replace the old custom
   collision-cache loader.
@@ -82,8 +96,25 @@ implementation that satisfies a migrated acceptance test.
   trajectory persistence and transactional LeRobot v2.1 publication pass a
   real-GPU hold-policy acceptance test. Its output is explicitly ineligible for
   training; old fixed asset/GPU/episode launchers remain read-only evidence.
-- [ ] Accepted SFT checkpoint connected through the remote policy boundary and
-  one RTC rollout published with `training_eligible: true`.
+- [x] Garment-specific initial-state pool generation, seeded free-drop dynamic
+  relaxation, strict table-contact validation and arbitrary particle restore
+  pass a real-GPU acceptance check.
+- [x] RLINF SFT service, deterministic seen/unseen asset selection, per-asset
+  initial-state pools, multi-GPU worker queues, teleoperation-layout RTC
+  trajectories and colocated offline LeRobot replay are implemented behind
+  stable commands. The earlier single-asset replay/export path passed a real-GPU
+  six-frame acceptance check; the new multi-asset queue still needs its remote
+  acceptance run.
+- [x] RLINF's approximate RTC correction is replaced at the project adapter
+  boundary by LeRobot's released guided RTC correction without modifying either
+  dependency. A same-checkpoint, same-state 400-step GPU run completed with
+  bounded joint velocity and a published three-camera LeRobot episode.
+- [x] Offline RTC now uses synchronous five-step replanning with zero inference
+  delay. On the same checkpoint and initial state, guided RTC reduced command
+  step p95 from 0.640 to 0.308 and state jerk p95 from 0.0171 to 0.0098 versus
+  independent chunk-5, while retaining the cloth grasp for 342/400 frames.
+- [ ] Connect the newly trained accepted SFT checkpoint and publish the first
+  real policy collection with `training_eligible: true`.
 - [ ] Owned STEAM value and advantage-labeling configs produce the tagged
   metadata consumed by the CFG preflight.
 - [ ] π0.5 training acceptance test passed.

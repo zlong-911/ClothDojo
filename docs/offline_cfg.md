@@ -20,8 +20,8 @@ expert LeRobot v2.1 ──┬── STEAM value/advantage labeling ──┤
 RTC changes how the frozen SFT policy samples actions. It does not change the
 offline dataset schema. The rollout exporter must publish a complete ClothDojo
 LeRobot v2.1 dataset with the same 50 Hz Piper feature contract as the expert
-dataset. Datasets, checkpoints, advantage labels and run outputs remain outside
-the Git repository.
+dataset. Datasets, checkpoints, advantage labels and run outputs remain under
+the Git-ignored project-root `data/` directory.
 
 The old `run_steam_pool_rollouts.py` and `export_steam_rollouts.py` are evidence,
 not migration targets. Their fixed asset list, GPU pairs, episode-number split,
@@ -105,7 +105,7 @@ tested. The extension only passes `model_path` and `openpi_data` consistently to
 RLINF's OpenPI config builder, which is required for `adapt_to_pi=false` and the
 external norm statistics.
 
-The user-facing RTC scheduler, real Newton three-camera observations, trajectory
+The user-facing RTC execution loop, real Newton three-camera observations, trajectory
 recording and transactional LeRobot v2.1 publication are implemented and have
 passed one GPU acceptance run. That gate uses a deterministic hold-position
 policy and stamps both outputs `training_eligible: false`; the CFG preflight

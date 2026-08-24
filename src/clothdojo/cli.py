@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from collections.abc import Sequence
+from pathlib import Path
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -42,13 +44,80 @@ def main(argv: Sequence[str] | None = None) -> None:
             overrides=passthrough,
         )
         return
+    if args.command == "policy" and args.policy_command == "serve-sft":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.rollout.policy import serve_sft_policy
+
+        serve_sft_policy(
+            args.checkpoint,
+            args.norm_stats,
+            openpi_config=args.openpi_config,
+            action_horizon=args.action_horizon,
+            num_steps=args.num_steps,
+            autocast=not args.no_autocast,
+            rtc_execution_horizon=args.rtc_execution_horizon,
+            rtc_max_guidance_weight=args.rtc_max_guidance_weight,
+            rtc_prefix_schedule=args.rtc_prefix_schedule,
+            device=args.device,
+            host=args.host,
+            port=args.port,
+        )
+        return
     if args.command == "data" and args.data_command == "export-lerobot":
         if passthrough:
             parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
-        from clothdojo.data.lerobot import export_review_dataset, inspect_review_export
+        source_root = Path(args.source).expanduser()
+        source_manifest = source_root / "meta.json"
+        if not source_manifest.is_file():
+            source_manifest = source_root / "manifest.json"
+        source_schema = None
+        if source_manifest.is_file():
+            try:
+                source_schema = json.loads(source_manifest.read_text(encoding="utf-8")).get(
+                    "schema"
+                )
+            except (OSError, json.JSONDecodeError) as exc:
+                raise RuntimeError(
+                    f"cannot read source manifest: {source_manifest}: {exc}"
+                ) from exc
+        if source_schema == "clothdojo_rollout":
+            from clothdojo.data.rollout import (
+                export_rollout_collection,
+                inspect_rollout_collection_export,
+            )
+
+            if args.plan_only:
+                print(
+                    json.dumps(
+                        inspect_rollout_collection_export(args.source),
+                        indent=2,
+                        sort_keys=True,
+                    )
+                )
+                return
+            output = args.output or str(source_root / "lerobot")
+            result = export_rollout_collection(
+                args.source,
+                output,
+                assets_root=args.assets,
+                device=args.device,
+                repo_id=args.repo_id,
+                image_writer_threads=args.image_writer_threads,
+            )
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return
+        from clothdojo.data.lerobot import (
+            export_review_dataset,
+            inspect_review_export,
+            republish_review_dataset,
+        )
 
         if args.plan_only:
-            plan, sources = inspect_review_export(args.source)
+            plan, sources = inspect_review_export(
+                args.source,
+                min_segment_frames=args.min_segment_frames,
+            )
             summary = plan.to_json_dict()
             summary.pop("episodes")
             summary.pop("source_action_counts")
@@ -67,11 +136,48 @@ def main(argv: Sequence[str] | None = None) -> None:
             return
         if args.output is None:
             parser.error("--output is required unless --plan-only is used")
-        result = export_review_dataset(
+        if args.reuse_from is None:
+            result = export_review_dataset(
+                args.source,
+                args.output,
+                repo_id=args.repo_id,
+                image_writer_threads=args.image_writer_threads,
+                min_segment_frames=args.min_segment_frames,
+            )
+        else:
+            result = republish_review_dataset(
+                args.source,
+                args.reuse_from,
+                args.output,
+                repo_id=args.repo_id,
+                min_segment_frames=args.min_segment_frames,
+            )
+        print(json.dumps(result.to_json_dict(), indent=2, sort_keys=True))
+        return
+    if args.command == "data" and args.data_command == "import-legacy-collection":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.data.legacy_collection import import_legacy_collection
+
+        last_reported = -1
+
+        def report(files: int, total_files: int, copied: int, total_bytes: int) -> None:
+            nonlocal last_reported
+            gib = copied // (1024**3)
+            if gib != last_reported or files == total_files:
+                last_reported = gib
+                print(
+                    f"imported {files}/{total_files} files "
+                    f"({copied / 1024**3:.1f}/{total_bytes / 1024**3:.1f} GiB)",
+                    flush=True,
+                )
+
+        result = import_legacy_collection(
             args.source,
             args.output,
-            repo_id=args.repo_id,
-            image_writer_threads=args.image_writer_threads,
+            include_reviews=not args.without_reviews,
+            workers=args.workers,
+            progress=report,
         )
         print(json.dumps(result.to_json_dict(), indent=2, sort_keys=True))
         return
@@ -94,36 +200,49 @@ def main(argv: Sequence[str] | None = None) -> None:
         result = inspect_cfg_training(args.config, passthrough)
         print(json.dumps(result, indent=2, sort_keys=True))
         return
+    if args.command == "collect" and args.collect_command == "serve":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.collection.web import serve
+
+        serve(args.config)
+        return
     if passthrough:
         parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
-    if args.command == "rollout" and args.rollout_command == "check-rtc":
-        from clothdojo.rollout.check import run_rtc_rollout_check
-
-        report = run_rtc_rollout_check(
-            args.scenario,
-            args.assets,
-            args.trajectory_output,
-            args.lerobot_output,
-            device=args.device,
-        )
-        print(json.dumps(report, indent=2, sort_keys=True))
-        if not report["compatible"]:
-            raise SystemExit(1)
-        return
     if args.command == "rollout" and args.rollout_command == "make-states":
-        from clothdojo.rollout.initial_states import generate_initial_states
+        from clothdojo.rollout.initial_states import generate_initial_state_collection
 
-        report = generate_initial_states(
+        report = generate_initial_state_collection(
             args.assets,
             args.output,
-            garment_id=args.garment,
-            state_count=args.count,
+            expert_trajectories=args.expert_trajectories,
+            seen_assets=args.seen_assets,
+            unseen_assets=args.unseen_assets,
+            states_per_asset=args.states_per_asset,
+            gpus=_comma_separated(args.gpus, "gpus"),
             candidate_batch=args.batch_size,
             max_candidates=args.max_candidates,
             seed=args.seed,
-            hold_seconds=args.hold_seconds,
-            settle_seconds=args.settle_seconds,
-            device=args.device,
+            drop_seconds=args.drop_seconds,
+        )
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return
+    if args.command == "rollout" and args.rollout_command == "run":
+        from clothdojo.rollout.collection import run_rollout_collection
+
+        report = run_rollout_collection(
+            args.scenario,
+            args.states,
+            _comma_separated(args.policy, "policy"),
+            args.output,
+            expected_checkpoint_sha256=args.expected_checkpoint_sha256,
+            assets_root=args.assets,
+            gpus=_comma_separated(args.gpus, "gpus"),
+            limit_per_asset=args.limit_per_asset,
+            seen_assets=args.seen_assets,
+            unseen_assets=args.unseen_assets,
+            execution=args.execution,
+            exec_horizon=args.exec_horizon,
         )
         print(json.dumps(report, indent=2, sort_keys=True))
         return
@@ -143,6 +262,8 @@ def main(argv: Sequence[str] | None = None) -> None:
 
 
 def _parser() -> argparse.ArgumentParser:
+    from clothdojo.data.annotations import DEFAULT_MIN_SEGMENT_FRAMES
+
     parser = argparse.ArgumentParser(prog="clothdojo")
     commands = parser.add_subparsers(dest="command")
 
@@ -169,31 +290,84 @@ def _parser() -> argparse.ArgumentParser:
     simulation_check.add_argument("--device", default="cuda:0")
     simulation_check.add_argument("--worlds", type=int, default=1)
 
-    rollout = commands.add_parser("rollout", help="run policy rollout acceptance gates")
+    rollout = commands.add_parser("rollout", help="generate initial states and policy trajectories")
     rollout_commands = rollout.add_subparsers(dest="rollout_command")
-    rtc_check = rollout_commands.add_parser(
-        "check-rtc",
-        help="run one scripted RTC episode through Newton and trajectory I/O",
-    )
-    rtc_check.add_argument("--scenario", required=True)
-    rtc_check.add_argument("--assets", default="assets")
-    rtc_check.add_argument("--trajectory-output", required=True)
-    rtc_check.add_argument("--lerobot-output", required=True)
-    rtc_check.add_argument("--device", default="cuda:0")
     make_states = rollout_commands.add_parser(
         "make-states",
-        help="generate a validated cloth initial-state pool",
+        help="select garments and generate one validated state pool per asset",
     )
-    make_states.add_argument("--garment", default="rand_ZZCWITH5HY")
-    make_states.add_argument("--count", type=int, default=32)
+    make_states.add_argument("--seen-assets", type=int, default=0)
+    make_states.add_argument("--unseen-assets", type=int, required=True)
+    make_states.add_argument("--states-per-asset", type=int, default=32)
+    make_states.add_argument(
+        "--expert-trajectories",
+        default=os.environ.get("CLOTHDOJO_EXPERT_TRAJECTORIES"),
+        help="expert trajectory or LeRobot dataset used to identify seen assets",
+    )
     make_states.add_argument("--output", required=True)
     make_states.add_argument("--assets", default="assets")
-    make_states.add_argument("--device", default="cuda:0")
+    make_states.add_argument("--gpus", default="0", help="comma-separated simulation GPU ids")
     make_states.add_argument("--batch-size", type=int, default=8)
     make_states.add_argument("--max-candidates", type=int, default=512)
     make_states.add_argument("--seed", type=int, default=260815)
-    make_states.add_argument("--hold-seconds", type=float, default=1.5)
-    make_states.add_argument("--settle-seconds", type=float, default=2.5)
+    make_states.add_argument("--drop-seconds", type=float, default=3.0)
+    run_rollout = rollout_commands.add_parser(
+        "run",
+        help="run an SFT policy over an initial-state pool",
+    )
+    run_rollout.add_argument("--scenario", required=True)
+    run_rollout.add_argument("--states", required=True)
+    run_rollout.add_argument(
+        "--policy",
+        default="ws://127.0.0.1:8080",
+        help="one endpoint or a comma-separated endpoint pool",
+    )
+    run_rollout.add_argument("--expected-checkpoint-sha256")
+    run_rollout.add_argument("--output", required=True)
+    run_rollout.add_argument("--assets", default="assets")
+    run_rollout.add_argument("--gpus", default="0", help="comma-separated simulation GPU ids")
+    run_rollout.add_argument("--limit-per-asset", type=int)
+    run_rollout.add_argument("--seen-assets", type=int)
+    run_rollout.add_argument("--unseen-assets", type=int)
+    run_rollout.add_argument(
+        "--execution",
+        choices=("chunk", "rtc"),
+        default="chunk",
+        help="independent chunks or synchronous guided RTC (default: chunk)",
+    )
+    run_rollout.add_argument(
+        "--exec-horizon",
+        type=int,
+        default=10,
+        help="actions executed before replanning (default: 10)",
+    )
+
+    policy = commands.add_parser("policy", help="serve frozen rollout policies")
+    policy_commands = policy.add_subparsers(dest="policy_command")
+    serve_sft = policy_commands.add_parser(
+        "serve-sft",
+        help="serve an RLINF SFT checkpoint with RTC support",
+    )
+    serve_sft.add_argument("--checkpoint", required=True)
+    serve_sft.add_argument("--norm-stats", required=True)
+    serve_sft.add_argument("--openpi-config", default="pi05_aloha_robotwin")
+    serve_sft.add_argument("--action-horizon", type=int, default=50)
+    serve_sft.add_argument("--num-steps", type=int, default=10)
+    serve_sft.add_argument("--rtc-execution-horizon", type=int, default=10)
+    serve_sft.add_argument("--rtc-max-guidance-weight", type=float, default=10.0)
+    serve_sft.add_argument(
+        "--rtc-prefix-schedule",
+        choices=("linear", "exp", "ones", "zeros"),
+        default="linear",
+    )
+    serve_sft.add_argument(
+        "--no-autocast",
+        action="store_true",
+        help="disable CUDA BF16 autocast for a full-FP32 inference baseline",
+    )
+    serve_sft.add_argument("--device", default="cuda:0")
+    serve_sft.add_argument("--host", default="127.0.0.1")
+    serve_sft.add_argument("--port", type=int, default=8080)
 
     train = commands.add_parser("train", help="run a ClothDojo config through RLINF")
     train.add_argument("training_kind", choices=("pi05", "steam", "cfg"))
@@ -212,7 +386,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     export.add_argument("--source", required=True, help="source dataset root")
     export.add_argument("--output", help="new LeRobot dataset directory")
+    export.add_argument("--assets", default="assets", help="assets used to replay rollout states")
+    export.add_argument("--device", default="cuda:0", help="render device for rollout replay")
     export.add_argument("--repo-id", help="LeRobot repository identity stored in metadata")
+    export.add_argument(
+        "--reuse-from",
+        help="completed ClothDojo v2.1 superset whose immutable videos can be reused",
+    )
     export.add_argument(
         "--image-writer-threads",
         type=int,
@@ -220,9 +400,27 @@ def _parser() -> argparse.ArgumentParser:
         help="threads used by the pinned LeRobot image writer",
     )
     export.add_argument(
+        "--min-segment-frames",
+        type=int,
+        default=DEFAULT_MIN_SEGMENT_FRAMES,
+        help="drop reviewed-good fragments shorter than this many frames",
+    )
+    export.add_argument(
         "--plan-only",
         action="store_true",
         help="synchronize and validate inputs without decoding or writing data",
+    )
+    legacy_import = data_commands.add_parser(
+        "import-legacy-collection",
+        help="copy and normalize one validated pre-ClothDojo collection",
+    )
+    legacy_import.add_argument("--source", required=True, help="legacy dataset root")
+    legacy_import.add_argument("--output", required=True, help="new ClothDojo dataset root")
+    legacy_import.add_argument("--workers", type=int, default=8)
+    legacy_import.add_argument(
+        "--without-reviews",
+        action="store_true",
+        help="migrate only canonical trajectories and annotations",
     )
     norm_stats = data_commands.add_parser(
         "compute-norm-stats",
@@ -237,4 +435,26 @@ def _parser() -> argparse.ArgumentParser:
         help="validate labeled expert/rollout datasets referenced by a CFG config",
     )
     cfg.add_argument("--config", required=True, help="path to the CFG Hydra YAML config")
+
+    collect = commands.add_parser(
+        "collect",
+        help="run teleoperation, review, HIL and asset-curation workflows",
+    )
+    collect_commands = collect.add_subparsers(dest="collect_command")
+    collect_serve = collect_commands.add_parser(
+        "serve",
+        help="serve the local collection console",
+    )
+    collect_serve.add_argument(
+        "--config",
+        default="configs/collection.yaml",
+        help="deployment-specific collection configuration",
+    )
     return parser
+
+
+def _comma_separated(value: str, name: str) -> tuple[str, ...]:
+    items = tuple(item.strip() for item in value.split(",") if item.strip())
+    if not items or len(items) != len(set(items)):
+        raise ValueError(f"{name} must be a non-empty comma-separated list without duplicates")
+    return items

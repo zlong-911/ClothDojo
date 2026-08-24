@@ -22,8 +22,12 @@ read-only source of behavior and evidence, not a package dependency.
   upstream source and prove the remaining gap with a minimal diff and test.
   Fork only when the required change cannot live in ClothDojo or be upstreamed;
   never apply patches during setup.
-- Keep datasets, checkpoints, caches and generated outputs outside the Git
-  repository. Configurations reference them explicitly.
+- Keep formal datasets, initial-state pools, rollouts, checkpoints and caches
+  under the project-root `data/` directory. Keep disposable logs, internal
+  acceptance results and temporary visualizations under `outputs/`. Both are
+  ignored by Git, and configurations reference formal data paths explicitly.
+- Keep `tests/` for durable regression tests only; never place one-off
+  development or diagnostic scripts there.
 - Do not copy old scripts in bulk. Migrate one user-visible workflow at a time
   with an acceptance test.
 - Distinguish "missing from the currently pinned version" from "missing
