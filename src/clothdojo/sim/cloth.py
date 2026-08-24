@@ -7,13 +7,19 @@ from pathlib import Path
 import numpy as np
 
 
-def add_style3d_garment(builder, path: str | Path, spec) -> tuple[int, int]:
+def add_style3d_garment(
+    builder,
+    path: str | Path,
+    spec,
+    *,
+    mesh: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None,
+) -> tuple[int, int]:
     """Add one triangulated, face-varying-UV garment and return its particle slice."""
 
     import warp as wp
     from newton.solvers import style3d
 
-    vertices, indices, panel_vertices, panel_indices = load_garment_mesh(path)
+    vertices, indices, panel_vertices, panel_indices = mesh or load_garment_mesh(path)
     particle_start = int(builder.particle_count)
     style3d.add_cloth_mesh(
         builder,

@@ -7,12 +7,14 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from clothdojo.assets import GarmentLibrary
-from clothdojo.sim.cloth import add_style3d_garment
+import numpy as np
 
-# OpenUSD 26.3 can crash while this asset is imported with its full Work/TBB
-# concurrency. Set its supported startup control only before pxr is loaded;
-# _limit_openusd_workers() handles host applications that loaded it already.
+from clothdojo.assets import GarmentLibrary
+from clothdojo.sim.cloth import add_style3d_garment, load_garment_mesh
+
+# Physics-only processes default OpenUSD to one worker before pxr is loaded.
+# Host applications such as Isaac own an already initialized task runtime and
+# retain their application-level concurrency.
 if "pxr.Work" not in sys.modules:
     os.environ.setdefault("PXR_WORK_THREAD_LIMIT", "1")
 
@@ -32,7 +34,7 @@ class ShirtFlattenSpec:
     table_half_extents: tuple[float, float, float] = (0.631, 0.7, 0.025)
     garment_position: tuple[float, float, float] = (0.65, 0.0, 1.162)
     garment_rotation_xyzw: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
-    garment_scale: float = 1.0e-3
+    garment_scale: float = 1.0e-2
     cloth_density: float = 0.18
     particle_radius: float = 0.0025
     stretch_stiffness_uv: tuple[float, float, float] = (50.0, 50.0, 2.5)
@@ -72,6 +74,7 @@ class ShirtFlattenScene:
     grippers: object
     end_effectors: object
     end_effector_body_indices: tuple[int, int]
+    arm_joint_coord_indices: tuple[int, ...]
     garment_particles_per_world: tuple[int, int]
     spec: ShirtFlattenSpec
 
@@ -117,7 +120,6 @@ def _build_shirt_flatten(
 ) -> ShirtFlattenScene:
     """Build the scene once, then replicate it into colocated independent worlds."""
 
-    _limit_openusd_workers()
     import newton
     import warp as wp
 
@@ -139,10 +141,21 @@ def _build_shirt_flatten(
         spec,
         load_visual_shapes=load_visual_shapes,
     )
-    arm_joints, gripper_joints = _configure_robot(newton, template, spec, robot_body_count)
+    arm_joints, gripper_joints, arm_coords = _configure_robot(
+        newton, template, spec, robot_body_count
+    )
     end_effector_links = _body_indices(template, END_EFFECTOR_LINKS)
     _add_table(newton, wp, template, spec)
-    particle_range = add_style3d_garment(template, garment_path, spec)
+    garment_mesh = load_garment_mesh(garment_path)
+    particle_range = add_style3d_garment(template, garment_path, spec, mesh=garment_mesh)
+    if load_visual_shapes:
+        _add_smooth_garment_visual(
+            newton,
+            wp,
+            template,
+            particle_range,
+            garment_mesh[0],
+        )
 
     builder = newton.ModelBuilder(gravity=spec.gravity)
     _register_solver_attributes(newton, builder)
@@ -169,21 +182,10 @@ def _build_shirt_flatten(
         grippers,
         end_effectors,
         tuple(end_effector_links),
+        tuple(arm_coords),
         particle_range,
         spec,
     )
-
-
-def _limit_openusd_workers() -> None:
-    """Verify that OpenUSD was limited before its Work runtime initialized."""
-
-    from pxr import Work
-
-    if Work.GetConcurrencyLimit() != 1:
-        raise RuntimeError(
-            "OpenUSD initialized before ClothDojo could set "
-            "PXR_WORK_THREAD_LIMIT=1; set it before importing Newton"
-        )
 
 
 def _register_solver_attributes(newton, builder) -> None:
@@ -240,26 +242,48 @@ def _configure_robot(newton, builder, spec: ShirtFlattenSpec, body_count: int):
     arm_ke = (31.0035, 45.6903, 28.8618, 17.8393, 18.7203, 17.8206) * 2
     arm_kd = (5.58063, 8.22425, 5.19513, 3.21108, 3.36966, 3.20771) * 2
     arm_effort = (32.0, 32.0, 18.0, 5.0, 5.0, 2.0) * 2
-    for dof, ke, kd, effort in zip(arm_dofs, arm_ke, arm_kd, arm_effort, strict=True):
+    for slot, (dof, ke, kd, effort) in enumerate(
+        zip(arm_dofs, arm_ke, arm_kd, arm_effort, strict=True)
+    ):
+        if slot in (0, 6):
+            builder.joint_limit_lower[dof] = -0.5 * np.pi
+            builder.joint_limit_upper[dof] = 0.5 * np.pi
         builder.joint_target_mode[dof] = int(newton.JointTargetMode.POSITION)
         builder.joint_target_ke[dof] = ke
         builder.joint_target_kd[dof] = kd
         builder.joint_effort_limit[dof] = effort
         builder.joint_armature[dof] = 0.1
+    open_positions = (0.04, -0.04, 0.04, -0.04)
     for slot, dof in enumerate(gripper_dofs):
         builder.joint_limit_lower[dof] = (0.0, -0.04, 0.0, -0.04)[slot]
         builder.joint_limit_upper[dof] = (0.04, 0.0, 0.04, 0.0)[slot]
+        # Teleoperation demonstrations start from home with both grippers open.
+        # Keep policy rollout and state generation on that same robot reset.
+        builder.joint_q[dof] = open_positions[slot]
+        builder.joint_target_q[dof] = open_positions[slot]
         builder.joint_target_mode[dof] = int(newton.JointTargetMode.POSITION)
         builder.joint_target_ke[dof] = 2500.0 if slot % 2 == 0 else 0.0
         builder.joint_target_kd[dof] = 80.0
         builder.joint_effort_limit[dof] = 30.0
         builder.joint_armature[dof] = 0.3
 
+    for side, leader, follower in (
+        ("left", gripper_joints[0], gripper_joints[1]),
+        ("right", gripper_joints[2], gripper_joints[3]),
+    ):
+        builder.add_constraint_mimic(
+            joint0=follower,
+            joint1=leader,
+            coef0=0.0,
+            coef1=-1.0,
+            label=f"{side}_gripper_mimic",
+        )
+
     gravcomp = builder.custom_attributes["mujoco:gravcomp"]
     gravcomp.values = dict.fromkeys(range(body_count), 1.0)
     actgravcomp = builder.custom_attributes["mujoco:jnt_actgravcomp"]
     actgravcomp.values = dict.fromkeys(arm_dofs, True)
-    return arm_joints, gripper_joints
+    return arm_joints, gripper_joints, arm_dofs
 
 
 def _add_table(newton, wp, builder, spec: ShirtFlattenSpec) -> None:
@@ -282,6 +306,169 @@ def _add_table(newton, wp, builder, spec: ShirtFlattenSpec) -> None:
         color=(0.85, 0.85, 0.85),
         label="table",
     )
+
+
+def _add_smooth_garment_visual(
+    newton,
+    wp,
+    builder,
+    particle_range: tuple[int, int],
+    rest_vertices: np.ndarray,
+) -> None:
+    """Add a smooth render-only mesh with the expert-data NOCS appearance."""
+
+    start, end = particle_range
+    vertices = np.asarray(builder.particle_q[start:end], dtype=np.float32)
+    indices = np.asarray(builder.tri_indices, dtype=np.int32).reshape(-1, 3)
+    if indices.size == 0 or np.any(indices < start) or np.any(indices >= end):
+        raise RuntimeError("garment triangles do not match the garment particle range")
+    local_indices = np.ascontiguousarray(indices - start)
+    if np.asarray(rest_vertices).shape != vertices.shape:
+        raise RuntimeError("garment rest and simulated vertex counts differ")
+    visual_vertices, visual_indices, normals, uvs, texture = _nocs_visual_mesh(
+        vertices,
+        local_indices,
+        rest_vertices,
+    )
+    mesh = newton.Mesh(
+        vertices=visual_vertices,
+        indices=visual_indices,
+        normals=normals,
+        uvs=uvs,
+        texture=texture,
+        compute_inertia=False,
+        is_solid=False,
+    )
+    builder.add_shape_mesh(
+        body=-1,
+        xform=wp.transform_identity(),
+        mesh=mesh,
+        cfg=newton.ModelBuilder.ShapeConfig(
+            density=0.0,
+            has_particle_collision=False,
+            has_shape_collision=False,
+        ),
+        color=(1.0, 1.0, 1.0),
+        label="garment_visual",
+    )
+
+
+def rest_vertices_to_nocs(rest_vertices: np.ndarray) -> np.ndarray:
+    """Encode canonical garment coordinates in display/sRGB NOCS.
+
+    Black remains reserved for the background, matching the expert-data
+    renderer used to collect the SFT demonstrations.
+    """
+
+    vertices = np.asarray(rest_vertices, dtype=np.float32).reshape((-1, 3))
+    if len(vertices) == 0:
+        raise ValueError("garment rest mesh has no vertices")
+    minimum = vertices.min(axis=0)
+    span = vertices.max(axis=0) - minimum
+    span[span < 1.0e-9] = 1.0
+    return ((1.0 + np.rint((vertices - minimum) / span * 254.0)) / 255.0).astype(np.float32)
+
+
+def _nocs_visual_mesh(
+    vertices: np.ndarray,
+    triangles: np.ndarray,
+    rest_vertices: np.ndarray,
+    *,
+    tile_size: int = 8,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Bake per-vertex NOCS into a small public-API texture atlas.
+
+    Newton 1.5 exposes per-mesh textures and UVs but not vertex colors. Each
+    dense cloth triangle therefore owns one tiny atlas tile. Render vertices
+    are face-varying while their order still matches the flattened physics
+    triangle indices, allowing the camera adapter to update them on the GPU.
+    """
+
+    points = np.asarray(vertices, dtype=np.float32)
+    faces = np.asarray(triangles, dtype=np.int32)
+    rest = np.asarray(rest_vertices, dtype=np.float32)
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError("vertices must have shape (N, 3)")
+    if rest.shape != points.shape:
+        raise ValueError("rest_vertices must match vertices")
+    if faces.ndim != 2 or faces.shape[1] != 3 or not len(faces):
+        raise ValueError("triangles must have non-empty shape (M, 3)")
+    if np.any(faces < 0) or np.any(faces >= len(points)):
+        raise ValueError("triangle index is outside the vertex array")
+    if tile_size < 6:
+        raise ValueError("NOCS atlas tiles must be at least 6 pixels")
+
+    source_indices = np.ascontiguousarray(faces.reshape(-1))
+    visual_vertices = np.ascontiguousarray(points[source_indices])
+    visual_indices = np.arange(len(source_indices), dtype=np.int32)
+    visual_normals = np.ascontiguousarray(_vertex_normals(points, faces)[source_indices])
+
+    face_count = len(faces)
+    columns = int(np.ceil(np.sqrt(face_count)))
+    rows = int(np.ceil(face_count / columns))
+    width = columns * tile_size
+    height = rows * tile_size
+    texture = np.zeros((height, width, 4), dtype=np.uint8)
+    texture[..., 3] = 255
+    corner_colors = np.rint(rest_vertices_to_nocs(rest)[source_indices] * 255.0).reshape(
+        face_count, 3, 3
+    )
+    uvs = np.empty((face_count, 3, 2), dtype=np.float32)
+    low = 1
+    high = tile_size - 2
+    pixel_axis = np.arange(tile_size, dtype=np.float32)
+    s = (pixel_axis[None, :] - low) / (high - low)
+    t = (pixel_axis[:, None] - low) / (high - low)
+    for face in range(face_count):
+        row, column = divmod(face, columns)
+        y0 = row * tile_size
+        x0 = column * tile_size
+        colors = corner_colors[face]
+        tile = (
+            colors[0][None, None, :]
+            + s[..., None] * (colors[1] - colors[0])[None, None, :]
+            + t[..., None] * (colors[2] - colors[0])[None, None, :]
+        )
+        texture[y0 : y0 + tile_size, x0 : x0 + tile_size, :3] = np.clip(
+            np.rint(tile), 0.0, 255.0
+        ).astype(np.uint8)
+        pixel_x = np.asarray([x0 + low, x0 + high, x0 + low], dtype=np.float32)
+        pixel_y = np.asarray([y0 + low, y0 + low, y0 + high], dtype=np.float32)
+        uvs[face, :, 0] = (pixel_x + 0.5) / width
+        # Newton's mesh sampler flips authored V before indexing image rows.
+        uvs[face, :, 1] = 1.0 - (pixel_y + 0.5) / height
+
+    return (
+        visual_vertices,
+        visual_indices,
+        visual_normals,
+        np.ascontiguousarray(uvs.reshape(-1, 2)),
+        texture,
+    )
+
+
+def _vertex_normals(vertices: np.ndarray, indices: np.ndarray) -> np.ndarray:
+    """Return area-weighted per-vertex normals for a triangle mesh."""
+
+    points = np.asarray(vertices, dtype=np.float32)
+    triangles = np.asarray(indices, dtype=np.int32)
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError("vertices must have shape (N, 3)")
+    if triangles.ndim != 2 or triangles.shape[1] != 3:
+        raise ValueError("indices must have shape (M, 3)")
+    if triangles.size and (np.any(triangles < 0) or np.any(triangles >= len(points))):
+        raise ValueError("triangle index is outside the vertex array")
+    normals = np.zeros_like(points)
+    face_normals = np.cross(
+        points[triangles[:, 1]] - points[triangles[:, 0]],
+        points[triangles[:, 2]] - points[triangles[:, 0]],
+    )
+    for corner in range(3):
+        np.add.at(normals, triangles[:, corner], face_normals)
+    lengths = np.linalg.norm(normals, axis=1)
+    nonzero = lengths > 1.0e-12
+    normals[nonzero] /= lengths[nonzero, None]
+    return np.ascontiguousarray(normals, dtype=np.float32)
 
 
 def _joint_indices(builder, names: tuple[str, ...]) -> list[int]:

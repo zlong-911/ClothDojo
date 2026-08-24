@@ -7,20 +7,10 @@ import warp as wp
 
 from clothdojo.sim.scene import ShirtFlattenScene
 
-
-@wp.func
-def _contains_pin(
-    pins: wp.array3d(dtype=int),
-    world: int,
-    side: int,
-    count: int,
-    particle: int,
-) -> bool:
-    found = bool(False)  # noqa: UP018
-    for slot in range(count):
-        if pins[world, side, slot] == particle:
-            found = True
-    return found
+_ATTACH_KE = 0.5
+_ATTACH_KD = 0.017
+_ATTACH_FORCE_MAX = 0.2
+_ATTACH_TIME_CONSTANT_S = 0.00467279
 
 
 @wp.kernel
@@ -60,15 +50,10 @@ def _update_grasp(
     pin_count: wp.array2d(dtype=int),
     pins: wp.array3d(dtype=int),
     pin_local: wp.array3d(dtype=wp.vec3),
-    frontier: wp.array3d(dtype=int),
-    next_frontier: wp.array3d(dtype=int),
     local_offsets: wp.array(dtype=wp.vec3),
     attach_threshold: float,
     release_threshold: float,
     capture_radius_sq: float,
-    seed_count: int,
-    expand_rings: int,
-    patch_max: int,
 ):
     world, side = wp.tid()
     joint = side * 2
@@ -93,41 +78,24 @@ def _update_grasp(
     center = wp.transform_point(transform, local_offsets[side])
     start = particle_start[world]
     end = particle_end[world]
-    selected_count = int(0)  # noqa: RUF046, UP018
-    for _seed in range(seed_count):
-        best_particle = int(-1)  # noqa: RUF046, UP018
-        best_distance = float(1.0e30)  # noqa: UP018
-        for particle in range(start, end):
-            distance = wp.length_sq(particle_q[particle] - center)
-            if (
-                distance <= capture_radius_sq
-                and distance < best_distance
-                and not _contains_pin(pins, world, side, selected_count, particle)
-            ):
-                best_particle = particle
-                best_distance = distance
-        if best_particle >= 0 and selected_count < patch_max:
-            pins[world, side, selected_count] = best_particle
-            frontier[world, side, selected_count] = best_particle
-            selected_count += 1
+    best_particle = int(-1)  # noqa: RUF046, UP018
+    best_distance = float(1.0e30)  # noqa: UP018
+    for particle in range(start, end):
+        distance = wp.length_sq(particle_q[particle] - center)
+        if distance <= capture_radius_sq and distance < best_distance:
+            best_particle = particle
+            best_distance = distance
 
-    frontier_count = selected_count
-    for _ring in range(expand_rings):
-        next_count = int(0)  # noqa: RUF046, UP018
-        for frontier_slot in range(frontier_count):
-            particle = frontier[world, side, frontier_slot]
-            for edge in range(neighbor_offsets[particle], neighbor_offsets[particle + 1]):
-                neighbor = neighbor_indices[edge]
-                if not _contains_pin(pins, world, side, selected_count, neighbor):
-                    if selected_count < patch_max:
-                        pins[world, side, selected_count] = neighbor
-                        selected_count += 1
-                    if next_count < patch_max:
-                        next_frontier[world, side, next_count] = neighbor
-                        next_count += 1
-        for slot in range(next_count):
-            frontier[world, side, slot] = next_frontier[world, side, slot]
-        frontier_count = next_count
+    selected_count = int(0)  # noqa: RUF046, UP018
+    if best_particle >= 0:
+        pins[world, side, selected_count] = best_particle
+        selected_count += 1
+        for edge in range(
+            neighbor_offsets[best_particle], neighbor_offsets[best_particle + 1]
+        ):
+            if selected_count < pins.shape[2]:
+                pins[world, side, selected_count] = neighbor_indices[edge]
+                selected_count += 1
 
     if selected_count > 0:
         frame_position = wp.transform_get_translation(transform) + wp.quat_rotate(
@@ -193,6 +161,87 @@ def _enforce_grasp(
     particle_qd[particle] = particle_qd[particle] + velocity_delta * velocity_blend
 
 
+@wp.kernel
+def _enforce_static_patch(
+    enabled: wp.array(dtype=int),
+    pin_count: wp.array(dtype=int),
+    pins: wp.array2d(dtype=int),
+    targets: wp.array2d(dtype=wp.vec3),
+    particle_q: wp.array(dtype=wp.vec3),
+    particle_qd: wp.array(dtype=wp.vec3),
+    particle_f: wp.array(dtype=wp.vec3),
+):
+    world, slot = wp.tid()
+    if enabled[0] == 0 or slot >= pin_count[world]:
+        return
+    particle = pins[world, slot]
+    particle_q[particle] = targets[world, slot]
+    particle_qd[particle] = wp.vec3(0.0)
+    particle_f[particle] = wp.vec3(0.0)
+
+
+class StaticParticlePatch:
+    """Kinematically hold one fixed connected particle patch per world."""
+
+    capacity = 32
+
+    def __init__(self, scene: ShirtFlattenScene):
+        self.world_count = int(scene.model.world_count)
+        self.device = scene.model.device
+        self.enabled = wp.zeros(1, dtype=wp.int32, device=self.device)
+        self.pin_count = wp.zeros(self.world_count, dtype=wp.int32, device=self.device)
+        self.pins = wp.full(
+            (self.world_count, self.capacity),
+            -1,
+            dtype=wp.int32,
+            device=self.device,
+        )
+        self.targets = wp.zeros(
+            (self.world_count, self.capacity),
+            dtype=wp.vec3,
+            device=self.device,
+        )
+
+    def configure(self, patches: list[np.ndarray], particle_q) -> None:
+        if len(patches) != self.world_count:
+            raise ValueError("static particle patches must contain one patch per world")
+        positions = particle_q.numpy()
+        counts = np.asarray([len(patch) for patch in patches], dtype=np.int32)
+        if np.any(counts < 1) or np.any(counts > self.capacity):
+            raise ValueError(f"static particle patch size must be in [1, {self.capacity}]")
+        pins = np.full((self.world_count, self.capacity), -1, dtype=np.int32)
+        targets = np.zeros((self.world_count, self.capacity, 3), dtype=np.float32)
+        for world, patch in enumerate(patches):
+            values = np.asarray(patch, dtype=np.int32)
+            if len(np.unique(values)) != len(values):
+                raise ValueError("static particle patch cannot contain duplicate particles")
+            pins[world, : len(values)] = values
+            targets[world, : len(values)] = positions[values]
+        self.pin_count.assign(counts)
+        self.pins.assign(pins)
+        self.targets.assign(targets)
+        self.enabled.assign(np.ones(1, dtype=np.int32))
+
+    def disable(self) -> None:
+        self.enabled.zero_()
+
+    def enforce(self, state) -> None:
+        wp.launch(
+            _enforce_static_patch,
+            dim=(self.world_count, self.capacity),
+            inputs=[
+                self.enabled,
+                self.pin_count,
+                self.pins,
+                self.targets,
+                state.particle_q,
+                state.particle_qd,
+                state.particle_f,
+            ],
+            device=self.device,
+        )
+
+
 class ParticleGrasp:
     """Capture and softly pin one connected garment patch per gripper."""
 
@@ -210,8 +259,6 @@ class ParticleGrasp:
         self.pin_count = wp.zeros(shape2, dtype=wp.int32, device=self.device)
         self.pins = wp.full(shape3, -1, dtype=wp.int32, device=self.device)
         self.pin_local = wp.zeros(shape3, dtype=wp.vec3, device=self.device)
-        self._frontier = wp.full(shape3, -1, dtype=wp.int32, device=self.device)
-        self._next_frontier = wp.full(shape3, -1, dtype=wp.int32, device=self.device)
         self._local_offsets = wp.array(
             ((0.0, 0.0, 0.13503), (0.0, 0.0, 0.13503)),
             dtype=wp.vec3,
@@ -266,15 +313,10 @@ class ParticleGrasp:
                 self.pin_count,
                 self.pins,
                 self.pin_local,
-                self._frontier,
-                self._next_frontier,
                 self._local_offsets,
                 0.1,
                 0.7,
                 0.01**2,
-                4,
-                2,
-                self.pin_capacity,
             ],
             device=self.device,
         )
@@ -296,11 +338,11 @@ class ParticleGrasp:
                 state_0.particle_f,
                 self._local_offsets,
                 dt,
-                0.5,
-                0.017,
-                0.2,
-                0.00467279,
-                0.00467279,
+                _ATTACH_KE,
+                _ATTACH_KD,
+                _ATTACH_FORCE_MAX,
+                _ATTACH_TIME_CONSTANT_S,
+                _ATTACH_TIME_CONSTANT_S,
             ],
             device=self.device,
         )
@@ -327,6 +369,24 @@ class ParticleGrasp:
         starts = self._particle_start.numpy()
         ends = self._particle_end.numpy()
         return tuple((int(start), int(end)) for start, end in zip(starts, ends, strict=True))
+
+    def connected_patch(self, particle: int) -> np.ndarray:
+        """Return the center particle and the same one-ring patch used by grasping."""
+
+        particle = int(particle)
+        if not 0 <= particle < int(self.model.particle_count):
+            raise IndexError("grasp particle is outside the model")
+        offsets = self._neighbor_offsets.numpy()
+        neighbors = self._neighbor_indices.numpy()
+        return np.concatenate(
+            (
+                np.asarray([particle], dtype=np.int32),
+                np.asarray(
+                    neighbors[int(offsets[particle]) : int(offsets[particle + 1])],
+                    dtype=np.int32,
+                ),
+            )
+        )
 
     def _particle_ranges(self):
         per_world = int(self.model.particle_count) // self.world_count

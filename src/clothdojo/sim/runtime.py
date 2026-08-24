@@ -69,15 +69,28 @@ def _reset_style3d_dx(
         dx[particle] = wp.vec3(0.0)
 
 
+@wp.kernel
+def _damp_particles(
+    retention: float,
+    particle_qd: wp.array(dtype=wp.vec3),
+):
+    particle = wp.tid()
+    particle_qd[particle] = particle_qd[particle] * retention
+
+
 class ShirtFlattenRuntime:
     """Own state, controls, contacts and the one intentional two-solver step."""
 
-    def __init__(self, scene: ShirtFlattenScene):
+    def __init__(self, scene: ShirtFlattenScene, *, use_cuda_graph: bool = True):
         import newton
 
+        if not isinstance(use_cuda_graph, bool):
+            raise TypeError("use_cuda_graph must be a bool")
         self.scene = scene
         self.model = scene.model
         self.spec = scene.spec
+        self.use_cuda_graph = use_cuda_graph
+        self._step_graph = None
         self.state_0 = self.model.state()
         self.state_1 = self.model.state()
         self.control = self.model.control()
@@ -147,10 +160,26 @@ class ShirtFlattenRuntime:
         )
         self.grasp = ParticleGrasp(scene)
         self.reset()
+        self._graph_arm_target = wp.empty(
+            (self.model.world_count, 12),
+            dtype=wp.float32,
+            device=self.model.device,
+        )
+        self._graph_gripper_open = wp.empty(
+            (self.model.world_count, 2),
+            dtype=wp.float32,
+            device=self.model.device,
+        )
+        if self.use_cuda_graph and wp.get_device(self.model.device).is_cuda:
+            self._capture_step_graph()
 
     @property
     def control_dt(self) -> float:
         return 1.0 / float(self.spec.control_fps)
+
+    @property
+    def cuda_graph_enabled(self) -> bool:
+        return self._step_graph is not None
 
     def apply_action(self, arm_target, gripper_open) -> None:
         """Apply batched device actions shaped ``(worlds, 12)`` and ``(worlds, 2)``."""
@@ -175,6 +204,16 @@ class ShirtFlattenRuntime:
         self.scene.grippers.set_attribute("joint_target_q", self.control, self._gripper_targets)
 
     def step(self, arm_target, gripper_open) -> None:
+        self._validate_action("arm_target", arm_target, (self.model.world_count, 12))
+        self._validate_action("gripper_open", gripper_open, (self.model.world_count, 2))
+        if self._step_graph is not None:
+            wp.copy(self._graph_arm_target, arm_target)
+            wp.copy(self._graph_gripper_open, gripper_open)
+            wp.capture_launch(self._step_graph)
+            return
+        self._step_eager(arm_target, gripper_open)
+
+    def _step_eager(self, arm_target, gripper_open) -> None:
         self.grasp.pre_step(self.state_0)
         self.apply_action(arm_target, gripper_open)
         sub_dt = self.control_dt / float(self.spec.sim_substeps)
@@ -182,12 +221,38 @@ class ShirtFlattenRuntime:
             self._step_rigid(sub_dt)
             self._step_cloth(sub_dt)
 
-    def step_cloth(self) -> None:
+    def _capture_step_graph(self) -> None:
+        if self.spec.sim_substeps % 2:
+            raise RuntimeError("CUDA Graph requires an even sim_substeps state-swap cycle")
+        self._graph_arm_target.zero_()
+        self._graph_gripper_open.fill_(1.0)
+        # Compile and allocate every lazy Newton/Warp path before capture, then
+        # restore the exact initial state so graph setup is not a simulation step.
+        self._step_eager(self._graph_arm_target, self._graph_gripper_open)
+        wp.synchronize_device(self.model.device)
+        self.reset()
+        wp.synchronize_device(self.model.device)
+        with wp.ScopedCapture(device=self.model.device, force_module_load=False) as capture:
+            self._step_eager(self._graph_arm_target, self._graph_gripper_open)
+        self._step_graph = capture.graph
+        self.reset()
+        wp.synchronize_device(self.model.device)
+
+    def step_cloth(self, *, velocity_retention: float = 1.0, static_patch=None) -> None:
         """Advance cloth against a stationary robot during initial-state preparation."""
 
+        if not 0.0 <= velocity_retention <= 1.0:
+            raise ValueError("velocity_retention must be in [0, 1]")
         sub_dt = self.control_dt / float(self.spec.sim_substeps)
         for _ in range(self.spec.sim_substeps):
-            self._step_cloth(sub_dt)
+            self._step_cloth(sub_dt, static_patch=static_patch)
+        if velocity_retention < 1.0:
+            wp.launch(
+                _damp_particles,
+                dim=self.model.particle_count,
+                inputs=[float(velocity_retention), self.state_0.particle_qd],
+                device=self.model.device,
+            )
 
     def reset(self, world_mask=None) -> None:
         """Reset selected worlds using Newton 1.5's trailing-global mask layout."""
@@ -285,13 +350,17 @@ class ShirtFlattenRuntime:
         for name in ("joint_q", "joint_qd", "body_q", "body_qd"):
             getattr(self.state_0, name).assign(getattr(self.state_1, name))
 
-    def _step_cloth(self, dt: float) -> None:
+    def _step_cloth(self, dt: float, *, static_patch=None) -> None:
         self.state_0.clear_forces()
         self.state_1.clear_forces()
         self.grasp.enforce(self.state_0, self.state_1, dt)
+        if static_patch is not None:
+            static_patch.enforce(self.state_0)
         self.collision.collide(self.state_0, self.contacts)
         self.cloth.step(self.state_0, self.state_1, None, self.contacts, dt)
         self.state_0, self.state_1 = self.state_1, self.state_0
+        if static_patch is not None:
+            static_patch.enforce(self.state_0)
 
     def _world_mask(self, world_mask):
         if world_mask is None:

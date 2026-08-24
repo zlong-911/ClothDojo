@@ -1,67 +1,76 @@
-# RTC rollout acceptance
+# RTC rollout
 
-This workflow proves the local rollout substrate before an accepted SFT
-checkpoint is allowed to generate CFG input. It owns one `shirt_flatten`
-scenario, asynchronous Real-Time Chunking, Newton observations and two external
-artifacts. It does not own policy training or cluster scheduling.
+RTC rollout is an offline data-production workflow. Simulation intentionally
+treats policy inference as zero-latency so wall-clock server speed cannot alter
+the generated trajectory.
 
-## Command
+## Control loop
 
-```bash
-.venv/bin/clothdojo rollout check-rtc \
-  --scenario configs/rollout/shirt_flatten_rtc_gate.yaml \
-  --assets assets \
-  --trajectory-output /path/to/rtc_gate_trajectory \
-  --lerobot-output /path/to/rtc_gate_lerobot \
-  --device cuda:0
-```
-
-Both output paths must be absent. Datasets and trajectories stay outside the
-repository. A failed LeRobot publication leaves the hidden sibling staging
-directory for diagnosis and never installs the requested output root.
-
-## Execution contract
-
-The initial chunk is synchronous. Once its minimum execution horizon is
-reached, one policy inference runs concurrently with simulation. When it
-finishes, the scheduler measures whole control steps since the request and
-starts the replacement chunk at that offset. It retains a bounded delay history
-and supplies the maximum observed delay to later policy calls. Only one request
-may be in flight; if a response is late, execution holds the last finite action.
-
-Policy state and actions use the exact ALOHA order:
+Both execution modes use the same synchronous cadence:
 
 ```text
-left joint1..6, left gripper openness,
-right joint1..6, right gripper openness
+chunk: observe -> predict 50 actions -> execute N actions -> replan
+
+RTC:   observe -> guided prediction using the old tail
+       -> execute N actions -> replan with delay=0
 ```
 
-The policy receives `observation.state`, the three RGB images, the task prompt
-and, for replans, the previous model-space chunk, executed horizon, predicted
-delay and chunk ID. Arrays are copied at the asynchronous boundary.
+- `chunk` predicts every chunk independently.
+- `rtc` passes the unexecuted model-space tail into the next denoising call.
+  Guidance softly aligns the new prefix with that tail before the new chunk
+  takes over.
+- `--exec-horizon` controls the cadence for both modes and defaults to 10.
+- Inference delay is always zero for offline production. Real-time delay belongs
+  to a separate evaluation concern and is not mixed into the dataset generator.
 
-## Rendering and outputs
+The default production mode is the synchronous chunk baseline:
 
-The solver model remains physics-only. The renderer builds a separate
-topology-identical visual model and synchronizes its live body and particle
-state before using Newton's public tiled camera. The first contract fixes three
-`640x480` uint8 RGB views: `cam_high`, `cam_left_wrist` and
-`cam_right_wrist`.
+```bash
+clothdojo rollout run \
+  --scenario configs/rollout/shirt_flatten.yaml \
+  --states data/states \
+  --policy ws://127.0.0.1:8080 \
+  --seen-assets 5 \
+  --unseen-assets 5 \
+  --limit-per-asset 2 \
+  --gpus 0 \
+  --output data/rollouts/sft_chunk
+```
 
-The trajectory is published before the LeRobot sidecar that refers to it. The
-LeRobot writer then encodes one H.264 video per camera, validates frame counts,
-checks v2.1 metadata, reloads the dataset through the pinned library, writes
-`meta/clothdojo.json`, and atomically installs the output root.
+It predicts 50 actions, executes the first 10, then observes and replans. Add
+`--execution rtc` to keep the same cadence and enable guided overlap.
 
-## Training eligibility
+Each active simulation worker requires a unique policy endpoint. For example,
+two workers use `--gpus 0,1 --policy ws://policy-a:8080,ws://policy-b:8080`.
+Sharing one policy process would interleave its global sampling RNG across
+episodes, so the coordinator rejects that topology before launching workers.
 
-`check-rtc` uses `hold_acceptance`, which repeats the observed arm and gripper
-state for an entire action chunk. It validates timing, rendering, physics and
-storage only. Both its trajectory manifest and LeRobot sidecar contain
-`training_eligible: false`; `clothdojo data check-cfg` rejects that dataset.
+## Policy boundary
 
-The next slice must connect an accepted remote SFT policy, pin checkpoint and
-normalization identities in provenance, validate returned model/action chunks,
-and pass one reviewed scenario before it may publish
-`training_eligible: true`. Pool launch, retries and GPU assignment remain out of
-scope until that single-policy boundary is accepted.
+The SFT service uses the pinned RLINF OpenPI model and its existing input/output
+transforms. Guided RTC is a small ClothDojo adapter at the flow-ODE sampling
+boundary: it matches LeRobot's released guided correction with a linear prefix,
+execution horizon 10 and maximum weight 10. It does not patch RLINF or upgrade
+the pinned LeRobot data dependency. Previous delta actions are rebased from
+their original observation state to the current state before guidance. The
+client records the checkpoint, normalization and RTC identities automatically.
+The policy service exposes `--rtc-prefix-schedule`,
+`--rtc-max-guidance-weight` and `--rtc-execution-horizon` for controlled RTC
+experiments; their defaults remain `linear`, 10 and 10.
+
+## Data flow
+
+```text
+data/states/<asset>/states.npz
+  -> data/rollouts/<run>/trajectories
+  -> data/rollouts/<run>/lerobot
+```
+
+The trajectory is the canonical artifact and uses the same physical format as
+teleoperation. The LeRobot dataset is rendered later by exact-state replay.
+Production metadata records the execution mode, zero-delay contract, scenario,
+policy identity, initial-state identity, and NOCS visual contract.
+
+Each GPU worker claims whole asset jobs. Existing compatible trajectories are
+reused when the same command resumes; workers never write root metadata
+concurrently.

@@ -73,6 +73,16 @@ meets topology/texture benchmark needs. Retain Isaac only if its added rendering
 capability is measured to be necessary; then freeze it as an external container
 that exchanges trajectory and rendered datasets with ClothDojo.
 
+## Newton deformable smooth shading
+
+Newton 1.5 interpolates authored normals for static Mesh shapes, but its
+deformable triangle-mesh camera path still exposes only face normals. The same
+gap remains in the current upstream source. ClothDojo therefore maintains one
+small render adapter: a non-colliding visual garment Mesh follows the physics
+particles, recomputes vertex normals on the GPU and updates the tiled camera's
+copied normal buffer. Remove this adapter when Newton exposes deformable vertex
+normals through a released camera API.
+
 ## Asset content identity
 
 The initial asset store intentionally uses readable asset IDs without a hash

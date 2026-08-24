@@ -64,3 +64,39 @@ def test_rollout_features_match_expert_policy_order() -> None:
     assert features["observation.state"]["names"][13] == "right_gripper_open_state"
     assert features["action"]["names"][6] == "left_gripper_open_cmd"
     assert features["action"]["names"][13] == "right_gripper_open_cmd"
+
+
+def test_rollout_writer_can_publish_multiple_episodes(tmp_path) -> None:
+    target = tmp_path / "rollouts"
+    writer = _Writer()
+    sink = RolloutLeRobotWriter(
+        target,
+        fps=50,
+        prompt="Flatten the shirt.",
+        scenario={"scenario_id": "batch"},
+        trajectory="/data/collection",
+        policy={"kind": "rlinf_sft"},
+        training_eligible=True,
+        source_kind="rollout_collection",
+        image_height=2,
+        image_width=4,
+        _writer_factory=lambda **kwargs: writer,
+    )
+    observation = {
+        "observation.state": np.zeros((1, 14), dtype=np.float32),
+        **{
+            f"observation.images.{camera}": np.zeros((1, 2, 4, 3), dtype=np.uint8)
+            for camera in CAMERA_NAMES
+        },
+    }
+
+    sink.add_frame(observation, np.zeros(14, dtype=np.float32))
+    sink.save_episode()
+    sink.add_frame(observation, np.zeros(14, dtype=np.float32))
+    sink.close()
+
+    sidecar = json.loads((target / "meta/clothdojo.json").read_text())
+    assert writer.saved == 2
+    assert sidecar["counts"] == {"output_episodes": 2, "output_frames": 2}
+    assert sidecar["episode_sets"]["full_trajectory"] == [0, 1]
+    assert sidecar["source"]["kind"] == "rollout_collection"

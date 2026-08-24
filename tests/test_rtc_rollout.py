@@ -6,13 +6,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from clothdojo.rollout.engine import PolicyOutput, run_rtc_episode
+from clothdojo.rollout.engine import PolicyOutput, run_chunk_episode, run_rtc_episode
 from clothdojo.rollout.newton import pack_policy_state, unpack_policy_action
-from clothdojo.rollout.scenario import RTCScenario, RTCSettings, load_rtc_scenario
+from clothdojo.rollout.scenario import RolloutScenario, load_rollout_scenario
 
 
-def _scenario(*, steps: int = 6) -> RTCScenario:
-    return RTCScenario(
+def _scenario(*, steps: int = 6) -> RolloutScenario:
+    return RolloutScenario(
         scenario_id="test",
         task_name="shirt_flatten",
         garment_id="garment",
@@ -20,11 +20,6 @@ def _scenario(*, steps: int = 6) -> RTCScenario:
         prompt="Flatten the shirt.",
         steps=steps,
         action_horizon=4,
-        rtc=RTCSettings(
-            min_exec_horizon=2,
-            initial_delay_steps=1,
-            delay_buffer_size=8,
-        ),
     )
 
 
@@ -60,33 +55,7 @@ class _Policy:
         return PolicyOutput(actions=actions, model_actions=model_actions)
 
 
-class _ImmediateFuture:
-    def __init__(self, value) -> None:
-        self.value = value
-
-    def done(self):
-        return True
-
-    def result(self):
-        return self.value
-
-
-class _ImmediateExecutor:
-    def submit(self, function, /, *args, **kwargs):
-        return _ImmediateFuture(function(*args, **kwargs))
-
-
-class _SlowFuture(_ImmediateFuture):
-    def done(self):
-        return False
-
-
-class _SlowExecutor(_ImmediateExecutor):
-    def submit(self, function, /, *args, **kwargs):
-        return _SlowFuture(function(*args, **kwargs))
-
-
-def test_rtc_replans_with_observed_delay_and_model_overlap() -> None:
+def test_rtc_replans_synchronously_with_guidance_and_zero_delay() -> None:
     episode = _Episode()
     policy = _Policy()
 
@@ -94,36 +63,41 @@ def test_rtc_replans_with_observed_delay_and_model_overlap() -> None:
         episode,
         policy,
         _scenario(steps=5),
-        executor=_ImmediateExecutor(),
+        exec_horizon=2,
     )
 
     assert policy.seed == 7
-    assert [action[0] for action in episode.actions] == [0, 1, 2, 101, 102]
-    assert report.inference_requests == 3
-    assert report.resolved_replans == 1
-    assert report.observed_delay_steps == (1,)
-    assert report.discarded_final_replan is True
+    assert [action[0] for action in episode.actions] == [0, 1, 100, 101, 200]
+    assert [int(call[0]["observation.state"][0, 0]) for call in policy.calls] == [0, 2, 4]
+    assert policy.calls[0][2] is None
     first_context = policy.calls[1][2]
     assert first_context.executed_horizon == 2
-    assert first_context.predicted_delay_steps == 1
+    assert first_context.predicted_delay_steps == 0
     assert first_context.chunk_id == 1
     assert first_context.previous_remaining.shape == (1, 2, 28)
+    assert report.to_json_dict() == {
+        "mode": "rtc",
+        "steps": 5,
+        "inference_requests": 3,
+        "exec_horizon": 2,
+    }
 
 
-def test_rtc_holds_last_action_while_replan_is_in_flight() -> None:
+def test_chunk_baseline_uses_the_same_synchronous_cadence_without_guidance() -> None:
     episode = _Episode()
-    report = run_rtc_episode(
-        episode,
-        _Policy(),
-        _scenario(),
-        executor=_SlowExecutor(),
-    )
+    policy = _Policy()
 
-    assert [action[0] for action in episode.actions] == [0, 1, 2, 3, 3, 3]
-    assert report.inference_requests == 2
-    assert report.resolved_replans == 0
-    assert report.held_action_steps == 2
-    assert report.discarded_final_replan is True
+    report = run_chunk_episode(episode, policy, _scenario(steps=5), exec_horizon=2)
+
+    assert policy.seed == 7
+    assert [action[0] for action in episode.actions] == [0, 1, 100, 101, 200]
+    assert all(call[2] is None for call in policy.calls)
+    assert report.to_json_dict() == {
+        "mode": "chunk",
+        "steps": 5,
+        "inference_requests": 3,
+        "exec_horizon": 2,
+    }
 
 
 def test_policy_layout_matches_aloha_order() -> None:
@@ -141,23 +115,22 @@ def test_policy_layout_matches_aloha_order() -> None:
     np.testing.assert_array_equal(unpacked_grippers, grippers)
 
 
-def test_project_rtc_scenario_is_strict_and_fingerprinted(tmp_path: Path) -> None:
+def test_project_rollout_scenario_is_strict_and_fingerprinted(tmp_path: Path) -> None:
     project = Path(__file__).resolve().parents[1]
-    scenario = load_rtc_scenario(project / "configs/rollout/shirt_flatten_rtc_gate.yaml")
+    scenario = load_rollout_scenario(project / "configs/rollout/shirt_flatten.yaml")
 
-    assert scenario.action_horizon == 4
-    assert scenario.rtc.min_exec_horizon == 2
+    assert scenario.action_horizon == 50
     assert len(scenario.fingerprint) == 64
 
     invalid = tmp_path / "invalid.yaml"
     invalid.write_text(
-        (project / "configs/rollout/shirt_flatten_rtc_gate.yaml")
+        (project / "configs/rollout/shirt_flatten.yaml")
         .read_text(encoding="utf-8")
-        .replace("min_exec_horizon: 2", "min_exec_horizon: 4"),
+        .replace("action_horizon: 50", "action_horizon: 0"),
         encoding="utf-8",
     )
-    with pytest.raises(ValueError, match="smaller than action_horizon"):
-        load_rtc_scenario(invalid)
+    with pytest.raises(ValueError, match="positive integer"):
+        load_rollout_scenario(invalid)
 
 
 def test_rtc_policy_rejects_wrong_action_horizon() -> None:
@@ -167,4 +140,9 @@ def test_rtc_policy_rejects_wrong_action_horizon() -> None:
             return replace(output, actions=output.actions[:, :3])
 
     with pytest.raises(ValueError, match="shape"):
-        run_rtc_episode(_Episode(), ShortPolicy(), _scenario())
+        run_rtc_episode(
+            _Episode(),
+            ShortPolicy(),
+            _scenario(),
+            exec_horizon=2,
+        )

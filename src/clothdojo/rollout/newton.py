@@ -1,4 +1,4 @@
-"""One-way Newton integration for the RTC rollout engine."""
+"""One-way Newton integration for policy rollouts."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 
 from clothdojo.rollout.engine import PolicyOutput, RTCContext
-from clothdojo.rollout.scenario import RTCScenario
+from clothdojo.rollout.scenario import RolloutScenario
 from clothdojo.trajectory import SceneMetadata, TrajectoryWriter
 from clothdojo.trajectory.newton import capture_actions, capture_states, gripper_openness
 
@@ -71,7 +71,7 @@ class HoldChunkPolicy:
 
 
 class NewtonTrajectoryEpisode:
-    """Expose one Newton world to RTC while recording exact transitions."""
+    """Expose one Newton world while recording exact transitions."""
 
     action_dim = POLICY_ACTION_DIM
 
@@ -79,11 +79,12 @@ class NewtonTrajectoryEpisode:
         self,
         runtime: Any,
         output: str | Path,
-        scenario: RTCScenario,
+        scenario: RolloutScenario,
         *,
         assets_root: str | Path,
         observation_provider=None,
         frame_sink=None,
+        trajectory_metadata: dict[str, Any] | None = None,
     ) -> None:
         if int(runtime.model.world_count) != 1:
             raise ValueError("the first RTC trajectory slice requires exactly one world")
@@ -92,11 +93,28 @@ class NewtonTrajectoryEpisode:
         self.observation_provider = observation_provider
         self.frame_sink = frame_sink
         self._cached_observation: dict[str, np.ndarray] | None = None
+        self._arm_lower = np.asarray(
+            runtime.scene.arms.get_attribute("joint_limit_lower", runtime.model).numpy()[:, 0],
+            dtype=np.float32,
+        )
+        self._arm_upper = np.asarray(
+            runtime.scene.arms.get_attribute("joint_limit_upper", runtime.model).numpy()[:, 0],
+            dtype=np.float32,
+        )
         assets = Path(assets_root).expanduser().resolve()
         garment = (
             assets / "garments" / "converted" / scenario.garment_id / f"{scenario.garment_id}.usdc"
         )
         robot = assets / "robots" / "piper" / "piper.usda"
+        metadata = {
+            "producer": "clothdojo_rollout",
+            "scenario_id": scenario.scenario_id,
+            "seed": scenario.seed,
+            "prompt": scenario.prompt,
+            "training_eligible": True,
+        }
+        if trajectory_metadata is not None:
+            metadata.update(trajectory_metadata)
         self.writer = TrajectoryWriter(
             output,
             control_fps=runtime.spec.control_fps,
@@ -111,19 +129,7 @@ class NewtonTrajectoryEpisode:
                 },
                 config_fingerprints={"rtc_scenario": scenario.fingerprint},
             ),
-            metadata={
-                "producer": "clothdojo_rtc_rollout_check",
-                "scenario_id": scenario.scenario_id,
-                "seed": scenario.seed,
-                "prompt": scenario.prompt,
-                "policy_kind": "hold_acceptance",
-                "rtc": {
-                    "min_exec_horizon": scenario.rtc.min_exec_horizon,
-                    "initial_delay_steps": scenario.rtc.initial_delay_steps,
-                    "delay_buffer_size": scenario.rtc.delay_buffer_size,
-                },
-                "training_eligible": False,
-            },
+            metadata=metadata,
         )
         try:
             initial = capture_states(runtime, 0)
@@ -163,6 +169,11 @@ class NewtonTrajectoryEpisode:
         if self.frame_sink is not None:
             self.frame_sink.add_frame(observation, policy_action)
         arms, grippers = unpack_policy_action(policy_action)
+        # Record the command that Newton actually executes.  The runtime clips
+        # the same physical limits on device; doing it here keeps trajectory
+        # actions and physical transitions exactly aligned.
+        arms = np.ascontiguousarray(np.clip(arms, self._arm_lower, self._arm_upper))
+        grippers = np.ascontiguousarray(np.clip(grippers, 0.0, 1.0))
         arm_device = wp.array(arms, dtype=wp.float32, device=self.runtime.model.device)
         gripper_device = wp.array(grippers, dtype=wp.float32, device=self.runtime.model.device)
         actions = capture_actions(
