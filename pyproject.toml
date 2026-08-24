@@ -16,6 +16,10 @@ clothdojo = "clothdojo.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"clothdojo.collection" = ["static/*.html", "static/*.js", "static/*.css"]
+"clothdojo.teleop" = ["teleop.kit"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

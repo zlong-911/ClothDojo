@@ -57,6 +57,14 @@ torchvision @ https://download.pytorch.org/whl/cu128/torchvision-0.22.1%2Bcu128-
 torchcodec==0.4.0
 av==15.0.0
 
+# Local collection console belongs to the one project environment. The fixed
+# supervisor treats Isaac Teleop/CloudXR as an application executable because
+# Isaac Sim 6's Python 3.12 package set cannot share this Python 3.11 stack.
+fastapi==0.117.1
+uvicorn==0.29.0
+qrcode==8.2
+
 # Project verification tools.
 pytest==9.1.1
+httpx==0.28.1
 ruff==0.16.0

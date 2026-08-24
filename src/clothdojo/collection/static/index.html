@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ClothDojo Collection</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<div class="shell">
+  <div class="topbar">
+    <a class="brand" href="/">ClothDojo Collection</a>
+    <div class="topbar-actions"><button class="icon-btn" id="lang-btn" onclick="toggleLang()" title="切换语言 / Language">EN</button><button class="icon-btn" id="theme-btn" onclick="toggleTheme()" title="切换主题 / Theme">☀</button></div>
+<script>{["/api/snapshot","/api/hil/snapshot","/api/assets"].forEach(url=>fetch(url,{priority:"low"}).catch(()=>{}))}</script>
+  </div>
+  <main>
+    <div class="hero">
+      <h1 data-i18n="title">数据控制台</h1>
+    </div>
+    <section class="runtime">
+      <article class="panel">
+        <div class="panel-head"><h2 data-i18n="instances">采集实例</h2><div class="task-picker"><label><span data-i18n="task">任务</span> <select id="task-select"></select></label><button id="asset-pick" class="asset-pick">选择衣服</button></div></div>
+        <div class="slot-columns"><span data-i18n="col_instance">实例</span><span data-i18n="col_status">状态</span><span data-i18n="col_task">任务</span><span data-i18n="col_actions">操作</span></div>
+        <div class="slots" id="slots"></div>
+      </article>
+      <article class="panel">
+        <div class="panel-head"><h2 data-i18n="log">日志</h2><span id="log-session"></span></div>
+        <div id="log"><div class="log-empty">启动实例后显示日志</div></div>
+      </article>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h2 data-i18n="task_data">采集数据</h2></div>
+      <div class="data-split">
+        <aside class="info-col">
+          <button id="data-asset-pick" class="asset-pick">全部资产</button>
+          <div class="info-stats">
+            <div class="stat"><strong id="episode-count">0</strong><span data-i18n="stat_count">条数据</span></div>
+            <div class="stat"><strong id="frame-count">0</strong><span data-i18n="stat_frames">总帧数</span></div>
+            <div class="stat"><strong id="duration">0 秒</strong><span data-i18n="stat_duration">总时长</span></div>
+            <div class="stat"><strong id="annotation-count">0</strong><span data-i18n="stat_annotations">标注</span></div>
+          </div>
+          <div class="info-controls">
+            <button class="sort-btn" id="time-sort" title="切换时间排序">采集时间 ↓</button>
+          </div>
+          <div class="info-asset-preview" id="asset-visual"></div>
+        </aside>
+        <div class="episode-list" id="episodes"></div>
+        <aside class="review-pane">
+          <div class="review-pane-body" id="pane-body">点击左侧轨迹条目<br>在此查看第一人称画面</div>
+          <div class="review-pane-segments" id="pane-segments"></div>
+          <div class="review-pane-actions" id="pane-actions"></div>
+        </aside>
+      </div>
+    </section>
+    <section class="panel stack-gap" id="hil">
+      <div class="panel-head"><h2 data-i18n="hil_title">HIL 介入</h2><div class="task-picker"><label><span data-i18n="task">任务</span> <select id="hil-profile"></select></label><span id="hil-status">—</span></div></div>
+      <div class="data-split">
+        <aside class="info-col">
+          <button id="hil-asset-pick" class="asset-pick">全部资产</button>
+          <div class="info-stats">
+            <div class="stat"><strong id="hil-run-count">0</strong><span>Rollout</span></div>
+            <div class="stat"><strong id="hil-episode-count">0</strong><span data-i18n="stat_count">条数据</span></div>
+            <div class="stat"><strong id="hil-points-count">0</strong><span data-i18n="hil_points">介入点</span></div>
+            <div class="stat"><strong id="hil-annotation-count">0</strong><span data-i18n="stat_annotations">标注</span></div>
+          </div>
+          <div class="info-controls">
+            <button class="primary" id="hil-vr" hidden data-i18n="vr_connect">VR 连接</button>
+            <button class="danger" id="hil-stop" hidden data-i18n="hil_stop">停止</button>
+            <button class="primary" id="hil-start" disabled data-i18n="hil_start">启动 HIL</button>
+          </div>
+          <div class="info-asset-preview" id="hil-asset-visual"></div>
+        </aside>
+        <div class="episode-list" id="hil-list"></div>
+        <aside class="review-pane">
+          <div class="review-pane-body" id="hil-body">选择左侧 rollout 轨迹<br>查看第一人称画面</div>
+          <div class="review-pane-segments" id="hil-segments"></div>
+          <div class="review-pane-actions" id="hil-actions"></div>
+        </aside>
+      </div>
+    </section>
+    <section class="panel stack-gap" id="assets">
+      <div class="panel-head"><h2 data-i18n="assets_title">资产筛选</h2><span id="as-converted"></span></div>
+      <div class="as-body">
+        <div class="as-toolbar">
+          <div class="as-tabs" id="as-tabs">
+            <button class="as-tab active" data-status="pending">待筛选 <strong id="as-pending-count">—</strong></button>
+            <button class="as-tab" data-status="accepted">已接受 <strong id="as-accepted-count">—</strong></button>
+            <button class="as-tab" data-status="rejected">已拒绝 <strong id="as-rejected-count">—</strong></button>
+          </div>
+          <input class="as-search" id="as-search" type="search" autocomplete="off" placeholder="搜索资产 ID">
+        </div>
+        <div class="as-summary"><span id="as-summary">正在加载…</span><div class="as-summary-actions"><button class="as-batch" id="as-batch-convert" hidden>批量转换</button></div></div>
+        <div class="as-grid" id="as-grid"></div>
+        <div class="as-pagination">
+          <button id="as-prev">上一页</button>
+          <span class="as-page-label" id="as-page-label">—</span>
+          <button id="as-next">下一页</button>
+          <form class="as-jump" id="as-jump-form"><label for="as-jump-page">跳到</label><input id="as-jump-page" type="number" min="1" inputmode="numeric"><button type="submit">跳转</button></form>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+<div class="modal" id="qr-modal" onclick="if(event.target===this)closeQr()">
+  <div class="qr-card">
+    <div class="qr-head"><strong id="qr-title">Quest 连接</strong><button onclick="closeQr()">×</button></div>
+    <img class="qr-image" id="qr-image" alt="Quest 连接二维码">
+    <div class="qr-endpoint" id="qr-endpoint"></div>
+    <div class="qr-help">首次显示 Certificate Accepted 时返回并再次扫码，然后点击 CONNECT</div>
+  </div>
+</div>
+<div class="modal" id="asset-modal" onclick="if(event.target===this)closeAssetPicker()">
+  <div class="asset-picker-card">
+    <div class="review-head"><strong id="asset-modal-title">选择衣服资产</strong><button onclick="closeAssetPicker()">×</button></div>
+    <div class="asset-cards" id="asset-cards"></div>
+  </div>
+</div>
+<script src="/static/app.js" defer></script>
+</body>
+</html>
