@@ -45,6 +45,10 @@ def check(
     """Compose and validate a config without launching training workers."""
 
     cfg = compose_config(config_path, overrides)
+    if kind == "pi05":
+        from clothdojo.training.pi05_preflight import inspect_pi05_training
+
+        return inspect_pi05_training(cfg)
     runtime = _load_runtime(kind)
     cfg = runtime.validate_cfg(cfg)
     resolved = runtime.omega_conf.to_container(cfg, resolve=True)
@@ -71,14 +75,25 @@ def compose_config(config_path: str | Path, overrides: Sequence[str] = ()) -> An
 def run_config(*, kind: TrainingKind, cfg: Any) -> None:
     """Run an already composed config without modifying RLINF source code."""
 
-    runtime = _load_runtime(kind)
-    runtime.multiprocessing.set_start_method("spawn", force=True)
-
     data_root = cfg.get("data", {}).get("data_root")
     if data_root:
         os.environ["HF_LEROBOT_HOME"] = str(data_root)
 
+    if kind == "pi05":
+        from clothdojo.training.pi05_preflight import (
+            inspect_pi05_training,
+            write_pi05_launch_manifest,
+        )
+
+        manifest = inspect_pi05_training(cfg)
+        manifest_path = write_pi05_launch_manifest(cfg, manifest)
+        logging.info("Pi0.5 launch manifest: %s", manifest_path)
+
+    # Importing the scheduler initializes Ray on this RLINF revision, so keep
+    # the runtime import strictly after the launch gate and manifest write.
+    runtime = _load_runtime(kind)
     cfg = runtime.validate_cfg(cfg)
+    runtime.multiprocessing.set_start_method("spawn", force=True)
     logging.info(
         "RLINF %s config:\n%s",
         kind,
@@ -107,9 +122,9 @@ def _load_runtime(kind: TrainingKind) -> _Runtime:
     from rlinf.utils.placement import HybridComponentPlacement
 
     if kind == "pi05":
-        from rlinf.workers.sft.fsdp_vla_sft_worker import FSDPVlaSftWorker
+        from clothdojo.training.rlinf_pi05 import ClothDojoPi05SftWorker
 
-        worker_type = FSDPVlaSftWorker
+        worker_type = ClothDojoPi05SftWorker
     elif kind == "steam":
         from rlinf.workers.sft.fsdp_steam_sft_worker import FSDPSteamSftWorker
 

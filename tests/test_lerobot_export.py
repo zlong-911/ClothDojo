@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import errno
 import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
+from clothdojo.data.annotations import build_good_segment_plan
 from clothdojo.data.lerobot import (
     _encode_episode_videos,
+    _match_reusable_episodes,
+    _publish_immutable_video,
+    _reindex_episode_stats,
     _writer_features,
     export_review_dataset,
+    inspect_review_export,
     load_episode_indices,
 )
 
@@ -220,6 +227,7 @@ def test_review_export_removes_bad_and_records_explicit_episode_extent(tmp_path:
     result = export_review_dataset(
         source,
         output,
+        min_segment_frames=1,
         _writer_factory=lambda **kwargs: writer,
         _reader_factory=_FakeReader,
     )
@@ -228,9 +236,13 @@ def test_review_export_removes_bad_and_records_explicit_episode_extent(tmp_path:
     assert result.output_episodes == 3
     assert result.output_frames == 7
     assert result.dropped_bad_frames == 2
+    assert result.min_segment_frames == 1
+    assert result.dropped_short_segments == 0
+    assert result.dropped_short_frames == 0
     assert result.full_trajectory_episodes == 1
     metadata = json.loads((output / "meta" / "clothdojo.json").read_text())
     assert metadata["export_status"] == "complete"
+    assert metadata["selection"]["min_segment_frames"] == 1
     assert metadata["episode_sets"] == {
         "good": [0, 1, 2],
         "full_trajectory": [2],
@@ -248,3 +260,162 @@ def test_review_export_removes_bad_and_records_explicit_episode_extent(tmp_path:
     assert load_episode_indices(output) == [0, 1, 2]
     assert load_episode_indices(output, trajectory_extent="full") == [2]
     assert load_episode_indices(output, trajectory_extent="partial") == [0, 1]
+
+
+def test_review_export_records_dropped_short_range_provenance(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    _source_trajectory(source, "native_short", 64)
+    _review_source(source, "native_short", 64)
+    _source_trajectory(source, "reviewed", 130)
+    _bad_annotation(source, "reviewed", 64, 64)
+    _review_source(source, "reviewed", 130)
+    output = tmp_path / "output"
+    writer = _FakeWriter()
+
+    result = export_review_dataset(
+        source,
+        output,
+        _writer_factory=lambda **kwargs: writer,
+        _reader_factory=_FakeReader,
+    )
+
+    assert [len(episode) for episode in writer.episodes] == [65]
+    assert result.source_trajectories == 2
+    assert result.represented_source_trajectories == 1
+    assert result.dropped_short_segments == 2
+    assert result.dropped_short_frames == 128
+    assert result.dropped_short_full_trajectory_segments == 1
+    assert result.dropped_short_partial_segments == 1
+    assert result.dropped_short_source_trajectories == 1
+
+    metadata = json.loads((output / "meta" / "clothdojo.json").read_text())
+    assert metadata["counts"]["represented_source_trajectories"] == 1
+    assert metadata["counts"]["dropped_short_full_trajectory_segments"] == 1
+    assert metadata["counts"]["dropped_short_partial_segments"] == 1
+    assert metadata["counts"]["dropped_short_source_trajectories"] == 1
+    assert metadata["dropped_short"]["source_trajectories_fully_removed"] == ["native_short"]
+    assert [
+        (
+            item["source_trajectory"],
+            item["action_start"],
+            item["action_end_exclusive"],
+            item["length"],
+            item["full_trajectory"],
+        )
+        for item in metadata["dropped_short"]["ranges"]
+    ] == [
+        ("native_short", 0, 64, 64, True),
+        ("reviewed", 0, 64, 64, False),
+    ]
+
+
+def test_review_inspection_can_validate_a_metadata_only_republish_index(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    _source_trajectory(source, "episode", 65)
+    _review_source(source, "episode", 65)
+    review = source / "reviews" / "review-episode"
+    for path in (
+        review / "data/chunk-000/file-000.parquet",
+        review / "meta/episodes/chunk-000/file-000.parquet",
+        review / "meta/tasks.parquet",
+        review / "videos/observation.images.main/chunk-000/file-000.mp4",
+    ):
+        path.unlink()
+
+    plan, sources = inspect_review_export(
+        source,
+        require_review_payload=False,
+    )
+
+    assert plan.output_episodes == 1
+    assert set(sources) == {"episode"}
+    with pytest.raises(RuntimeError, match="files are missing"):
+        inspect_review_export(source)
+
+
+def test_republish_matches_only_exact_retained_segments(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    _source_trajectory(source, "a", 4)
+    _bad_annotation(source, "a", 1, 1)
+    loose = build_good_segment_plan(source, min_segment_frames=1)
+    strict = build_good_segment_plan(source, min_segment_frames=2)
+    reusable = [
+        segment.to_json_dict(episode_index=index)
+        for index, segment in enumerate(loose.segments)
+    ]
+
+    assert [segment.length for segment in loose.segments] == [1, 2]
+    assert [segment.length for segment in strict.segments] == [2]
+    assert _match_reusable_episodes(strict, reusable) == (1,)
+
+
+def test_republish_rejects_changed_recorded_review_identity(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    _source_trajectory(source, "a", 65)
+    _review_source(source, "a", 65)
+    plan, sources = inspect_review_export(source)
+    reusable = [plan.segments[0].to_json_dict(episode_index=0)]
+    reusable[0].update(
+        {
+            "review_export": sources["a"].root.name,
+            "review_info_sha256": "0" * 64,
+            "review_provenance_sha256": sources["a"].provenance_sha256,
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="review provenance differs"):
+        _match_reusable_episodes(plan, reusable, sources=sources)
+
+
+def test_republish_copies_video_when_filesystem_rejects_hardlinks(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source = tmp_path / "source.mp4"
+    target = tmp_path / "target.mp4"
+    source.write_bytes(b"validated-video")
+
+    def reject_link(_source, _target):
+        raise OSError(errno.EPERM, "hard links disabled")
+
+    monkeypatch.setattr("clothdojo.data.lerobot.os.link", reject_link)
+
+    assert _publish_immutable_video(source, target) == "immutable_copy_reuse"
+    assert target.read_bytes() == source.read_bytes()
+
+
+def test_republish_rebuilds_generated_episode_statistics() -> None:
+    raw = {
+        "episode_index": 9,
+        "stats": {
+            "action": {"mean": [1.5]},
+            "episode_index": {"mean": [9.0]},
+            "index": {"min": [100], "max": [102]},
+        },
+    }
+
+    result = _reindex_episode_stats(
+        raw,
+        episode_index=2,
+        global_start=7,
+        length=3,
+    )
+
+    assert raw["episode_index"] == 9
+    assert result["episode_index"] == 2
+    assert result["stats"]["action"] == {"mean": [1.5]}
+    assert result["stats"]["episode_index"] == {
+        "min": [2],
+        "max": [2],
+        "mean": [2.0],
+        "std": [0.0],
+        "count": [3],
+    }
+    assert result["stats"]["index"] == {
+        "min": [7],
+        "max": [9],
+        "mean": [8.0],
+        "std": [(2 / 3) ** 0.5],
+        "count": [3],
+    }

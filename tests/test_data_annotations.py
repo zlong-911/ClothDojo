@@ -41,7 +41,7 @@ def _annotation(root: Path, trajectory_id: str, segments: list[dict], **extra) -
 def test_missing_annotation_defaults_to_complete_good_episode(tmp_path: Path) -> None:
     _trajectory(tmp_path, "unmarked", 5)
 
-    plan = build_good_segment_plan(tmp_path)
+    plan = build_good_segment_plan(tmp_path, min_segment_frames=1)
 
     assert plan.default_good_trajectories == 1
     assert plan.output_episodes == 1
@@ -65,7 +65,7 @@ def test_only_bad_ranges_split_and_good_label_does_not_select_data(tmp_path: Pat
         review_status="in_progress",
     )
 
-    plan = build_good_segment_plan(tmp_path)
+    plan = build_good_segment_plan(tmp_path, min_segment_frames=1)
 
     assert [(segment.action_start, segment.action_end_exclusive) for segment in plan.segments] == [
         (0, 2),
@@ -85,7 +85,7 @@ def test_empty_annotation_is_complete_even_if_review_status_is_not_complete(
     _trajectory(tmp_path, "empty", 3)
     _annotation(tmp_path, "empty", [], review_status="in_progress")
 
-    segment = build_good_segment_plan(tmp_path).segments[0]
+    segment = build_good_segment_plan(tmp_path, min_segment_frames=1).segments[0]
 
     assert segment.full_trajectory is True
     assert segment.review_status == "in_progress"
@@ -95,7 +95,7 @@ def test_incomplete_trajectory_is_skipped(tmp_path: Path) -> None:
     _trajectory(tmp_path, "complete", 3)
     _trajectory(tmp_path, "recording", 3, status="recording")
 
-    plan = build_good_segment_plan(tmp_path)
+    plan = build_good_segment_plan(tmp_path, min_segment_frames=1)
 
     assert plan.source_trajectories == 1
     assert plan.skipped_incomplete_trajectories == 1
@@ -118,7 +118,7 @@ def test_bad_can_remove_a_whole_source_and_both_timeline_boundaries(tmp_path: Pa
         ],
     )
 
-    plan = build_good_segment_plan(tmp_path)
+    plan = build_good_segment_plan(tmp_path, min_segment_frames=1)
 
     assert plan.source_trajectories == 2
     assert plan.source_action_counts == (("all_bad", 5), ("bad_edges", 5))
@@ -147,7 +147,7 @@ def test_invalid_or_legacy_drop_range_is_rejected(tmp_path: Path, segment: dict)
     _annotation(tmp_path, "episode", [segment])
 
     with pytest.raises(RuntimeError):
-        build_good_segment_plan(tmp_path)
+        build_good_segment_plan(tmp_path, min_segment_frames=1)
 
 
 def test_orphan_annotation_is_rejected(tmp_path: Path) -> None:
@@ -155,4 +155,83 @@ def test_orphan_annotation_is_rejected(tmp_path: Path) -> None:
     _annotation(tmp_path, "missing", [])
 
     with pytest.raises(RuntimeError, match="do not match"):
-        build_good_segment_plan(tmp_path)
+        build_good_segment_plan(tmp_path, min_segment_frames=1)
+
+
+def test_default_floor_drops_64_frames_and_keeps_65(tmp_path: Path) -> None:
+    _trajectory(tmp_path, "reviewed", 130)
+    _annotation(
+        tmp_path,
+        "reviewed",
+        [{"start_frame": 64, "end_frame": 64, "label": "bad"}],
+    )
+
+    plan = build_good_segment_plan(tmp_path)
+
+    assert plan.min_segment_frames == 65
+    assert [(segment.action_start, segment.action_end_exclusive) for segment in plan.segments] == [
+        (65, 130)
+    ]
+    assert plan.dropped_bad_frames == 1
+    assert plan.dropped_short_segments == 1
+    assert plan.dropped_short_frames == 64
+    assert plan.dropped_short_full_trajectory_segments == 0
+    assert plan.dropped_short_partial_segments == 1
+    assert plan.represented_source_trajectories == 1
+    assert plan.dropped_short_source_trajectories == 0
+    assert plan.dropped_short_source_ids == ()
+    assert [
+        (
+            segment.source_trajectory,
+            segment.action_start,
+            segment.action_end_exclusive,
+            segment.full_trajectory,
+        )
+        for segment in plan.dropped_short_ranges
+    ] == [("reviewed", 0, 64, False)]
+    assert plan.output_frames == 65
+
+
+def test_short_provenance_distinguishes_full_source_and_bad_fragment(
+    tmp_path: Path,
+) -> None:
+    _trajectory(tmp_path, "native_short", 64)
+    _trajectory(tmp_path, "reviewed", 130)
+    _annotation(
+        tmp_path,
+        "reviewed",
+        [{"start_frame": 64, "end_frame": 64, "label": "bad"}],
+    )
+
+    plan = build_good_segment_plan(tmp_path)
+    payload = plan.to_json_dict()
+
+    assert plan.source_trajectories == 2
+    assert plan.represented_source_trajectories == 1
+    assert plan.dropped_short_segments == 2
+    assert plan.dropped_short_frames == 128
+    assert plan.dropped_short_full_trajectory_segments == 1
+    assert plan.dropped_short_partial_segments == 1
+    assert plan.dropped_short_source_trajectories == 1
+    assert plan.dropped_short_source_ids == ("native_short",)
+    assert [
+        (
+            segment.source_trajectory,
+            segment.action_start,
+            segment.action_end_exclusive,
+            segment.full_trajectory,
+        )
+        for segment in plan.dropped_short_ranges
+    ] == [
+        ("native_short", 0, 64, True),
+        ("reviewed", 0, 64, False),
+    ]
+    assert payload["represented_source_trajectories"] == 1
+    assert payload["dropped_short_source_ids"] == ["native_short"]
+    assert [item["length"] for item in payload["dropped_short_ranges"]] == [64, 64]
+
+
+@pytest.mark.parametrize("minimum", [0, -1, True, None, "65"])
+def test_minimum_segment_length_must_be_positive(tmp_path: Path, minimum: object) -> None:
+    with pytest.raises(ValueError, match="positive integer"):
+        build_good_segment_plan(tmp_path, min_segment_frames=minimum)

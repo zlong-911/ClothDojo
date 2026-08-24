@@ -15,7 +15,7 @@ runner:
   logger:
     log_path: ${oc.env:CLOTHDOJO_TRAIN_OUTPUT}
     project_name: clothdojo
-    experiment_name: shirt_flatten_reviewed_good_pi05_aloha_40k
+    experiment_name: shirt_flatten_reviewed_good_pi05_aloha_40k_v2
     logger_backends: [tensorboard]
   max_epochs: -1
   # RLINF counts optimizer updates here, not frames or epochs.
@@ -39,6 +39,8 @@ actor:
   model:
     model_type: openpi
     model_path: ${oc.env:CLOTHDOJO_PI05_CHECKPOINT}
+    # RLINF's OpenPI factory applies OpenPI's selected-BF16 parameter policy
+    # after strict base-checkpoint validation; generic FSDP AMP stays disabled.
     precision: null
     num_action_chunks: 50
     action_dim: 14
@@ -65,6 +67,9 @@ actor:
       # physical ALOHA joint-axis realignment.
       adapt_to_pi: false
       extra_delta_transform: true
+      # Fallback only. prompt_from_task=true in the pinned Robotwin data config;
+      # launch preflight requires the dataset's unique task to be
+      # "flatten the shirt".
       default_prompt: Flatten the shirt.
       norm_stats_path: ${oc.env:CLOTHDOJO_PI05_NORM_STATS}
   optim:
@@ -74,12 +79,12 @@ actor:
     adam_eps: 1.0e-8
     weight_decay: 1.0e-10
     clip_grad: 1.0
-    # Two passes over 1,288,298 frames at global batch 64 are about 40k
-    # optimizer updates. Intermediate 10k checkpoints remain comparable.
-    total_training_steps: 40000
+    # Match OpenPI's referenced 30k warmup+decay schedule. The runner continues
+    # to 40k for the two-pass ClothDojo experiment; openpi_cosine clamps at the
+    # 2.5e-6 floor for steps 30k..40k.
+    total_training_steps: 30000
     lr_warmup_steps: 1000
-    lr_scheduler: cosine
-    num_cycles: 0.5
+    lr_scheduler: openpi_cosine
     min_lr: 2.5e-6
   fsdp_config:
     strategy: fsdp
