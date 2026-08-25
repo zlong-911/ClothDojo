@@ -262,6 +262,52 @@ class ShirtFlattenRuntime:
                 device=self.model.device,
             )
 
+    def advance_cloth(self, steps: int, *, graph=None, static_patch=None):
+        """Advance a cloth-only phase, reusing one captured Newton 1.5 step graph."""
+
+        if isinstance(steps, bool) or not isinstance(steps, int) or steps < 0:
+            raise ValueError("cloth step count must be a non-negative integer")
+        if not steps:
+            return graph
+        device = wp.get_device(self.model.device)
+        if not device.is_cuda:
+            for _ in range(steps):
+                self.step_cloth(static_patch=static_patch)
+            return None
+        if graph is None:
+            self.step_cloth(static_patch=static_patch)
+            steps -= 1
+            if steps:
+                with wp.ScopedCapture(device=device) as capture:
+                    self.step_cloth(static_patch=static_patch)
+                graph = capture.graph
+                steps -= 1
+        for _ in range(steps):
+            wp.capture_launch(graph)
+        return graph
+
+    def cloth_contact_counts(self) -> tuple[np.ndarray, np.ndarray]:
+        """Count current garment contacts with the table and robot per world."""
+
+        self.collision.collide(self.state_0, self.contacts)
+        count = int(self.contacts.soft_contact_count.numpy()[0])
+        count = min(count, len(self.contacts.soft_contact_particle))
+        particles = self.contacts.soft_contact_particle.numpy()[:count]
+        shapes = self.contacts.soft_contact_shape.numpy()[:count]
+        shape_bodies = self.model.shape_body.numpy()
+        particle_world = self.model.particle_world.numpy()
+        table = np.zeros(self.model.world_count, dtype=np.int32)
+        robot = np.zeros(self.model.world_count, dtype=np.int32)
+        for particle, shape in zip(particles, shapes, strict=True):
+            particle = int(particle)
+            shape = int(shape)
+            if particle < 0 or shape < 0:
+                continue
+            world = int(particle_world[particle])
+            target = table if int(shape_bodies[shape]) < 0 else robot
+            target[world] += 1
+        return table, robot
+
     def reset(self, world_mask=None) -> None:
         """Reset selected worlds using Newton 1.5's trailing-global mask layout."""
 
