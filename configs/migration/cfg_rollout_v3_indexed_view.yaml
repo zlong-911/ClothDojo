@@ -1,0 +1,14 @@
+schema: clothdojo_lerobot_v3_indexed_view
+format_version: 1
+source_path: ${oc.env:CLOTHDOJO_LEGACY_CFG_ROLLOUT_DATASET}
+output_path: ${oc.env:CLOTHDOJO_CFG_ROLLOUT_DATASET}
+repo_id: shirt_flatten_nocs_cfg_rollout_pool
+views:
+  - target_key: observation.images.cam_high
+    source_key: observation.images.primary
+  - target_key: observation.images.cam_left_wrist
+    source_key: observation.images.left_wrist
+  - target_key: observation.images.cam_right_wrist
+    source_key: observation.images.right_wrist
+  - target_key: observation.images.cam_third_person
+    source_key: observation.images.third_person
