@@ -55,7 +55,9 @@ lerobot @ https://github.com/huggingface/lerobot/archive/0cf864870cf29f4738d3ade
 torch @ https://download.pytorch.org/whl/cu128/torch-2.7.1%2Bcu128-cp311-cp311-manylinux_2_28_x86_64.whl
 torchvision @ https://download.pytorch.org/whl/cu128/torchvision-0.22.1%2Bcu128-cp311-cp311-manylinux_2_28_x86_64.whl
 # TorchCodec's compatibility matrix pairs the 0.4 line with PyTorch 2.7.
-# FFmpeg is a host runtime dependency and is checked separately.
+# FFmpeg is a host runtime dependency and is checked separately. OpenPI/JAX SFT
+# explicitly uses PyAV so a missing host FFmpeg cannot masquerade as a usable
+# TorchCodec install; RLINF may still use TorchCodec on compatible hosts.
 torchcodec==0.4.0
 av==15.0.0
 

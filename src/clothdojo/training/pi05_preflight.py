@@ -107,8 +107,8 @@ def inspect_pi05_training(cfg: Any) -> dict[str, Any]:
     actor = cfg.actor.model
     horizon = int(actor.num_action_chunks)
 
-    dataset = _inspect_dataset(cfg.data.train_data_paths)
-    norm = _inspect_norm_stats(
+    dataset = inspect_pi05_dataset(cfg.data.train_data_paths)
+    norm = inspect_pi05_norm_stats(
         actor.openpi_data.norm_stats_path,
         dataset=dataset,
         config_name=str(actor.openpi.config_name),
@@ -175,7 +175,8 @@ def write_pi05_launch_manifest(cfg: Any, manifest: dict[str, Any]) -> Path:
     return path
 
 
-def _inspect_dataset(value: Any) -> dict[str, Any]:
+def inspect_pi05_dataset(value: Any) -> dict[str, Any]:
+    """Inspect the reviewed-good LeRobot artifact shared by both SFT backends."""
     root = Path(str(value)).expanduser().resolve()
     if not root.is_dir():
         raise FileNotFoundError(f"Pi0.5 dataset does not exist: {root}")
@@ -268,7 +269,7 @@ def _inspect_dataset(value: Any) -> dict[str, Any]:
     }
 
 
-def _inspect_norm_stats(
+def inspect_pi05_norm_stats(
     value: Any,
     *,
     dataset: dict[str, Any],
@@ -276,6 +277,7 @@ def _inspect_norm_stats(
     data_kwargs: dict[str, Any],
     action_horizon: int,
 ) -> dict[str, Any]:
+    """Require normalization statistics to match the exact reviewed dataset."""
     root = Path(str(value)).expanduser().resolve()
     stats_path = root / "norm_stats.json"
     provenance_path = root / "clothdojo.json"
