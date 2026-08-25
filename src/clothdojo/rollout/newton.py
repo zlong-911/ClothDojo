@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from clothdojo.rollout.engine import PolicyOutput, RTCContext
 from clothdojo.rollout.scenario import RolloutScenario
 from clothdojo.trajectory import SceneMetadata, TrajectoryWriter
 from clothdojo.trajectory.newton import capture_actions, capture_states, gripper_openness
@@ -34,172 +34,218 @@ def pack_policy_state(arm_q: np.ndarray, gripper_open: np.ndarray) -> np.ndarray
     )
 
 
-def unpack_policy_action(action: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    values = np.asarray(action, dtype=np.float32)
-    if values.shape != (POLICY_ACTION_DIM,) or not np.isfinite(values).all():
-        raise ValueError(f"policy action must be finite float32[14], got {values.shape}")
-    arms = np.concatenate((values[:6], values[7:13])).reshape(1, 12)
-    grippers = values[[6, 13]].reshape(1, 2)
+def unpack_policy_actions(actions: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Split a policy batch into Newton's arm and gripper control arrays."""
+
+    values = np.asarray(actions, dtype=np.float32)
+    if (
+        values.ndim != 2
+        or values.shape[1] != POLICY_ACTION_DIM
+        or not np.isfinite(values).all()
+    ):
+        raise ValueError(
+            f"policy actions must be finite float32[batch, 14], got {values.shape}"
+        )
+    arms = np.concatenate((values[:, :6], values[:, 7:13]), axis=1)
+    grippers = values[:, [6, 13]]
     return np.ascontiguousarray(arms), np.ascontiguousarray(grippers)
 
 
-class HoldChunkPolicy:
-    """Deterministic acceptance policy; never a training-data policy."""
+class NewtonBatchEnvironment:
+    """The only policy-facing Newton environment; one world is a batch of one."""
 
-    def __init__(self, action_horizon: int):
-        self.action_horizon = int(action_horizon)
-        self.seed: int | None = None
+    action_dim = POLICY_ACTION_DIM
 
-    def reset(self, seed: int) -> None:
-        self.seed = int(seed)
+    def __init__(self, runtime: Any, *, observation_provider) -> None:
+        import warp as wp
 
-    def infer(
-        self,
-        observation: dict[str, np.ndarray],
-        prompt: str,
-        *,
-        rtc: RTCContext | None = None,
-    ) -> PolicyOutput:
-        del prompt, rtc
-        if self.seed is None:
-            raise RuntimeError("hold policy must be reset before inference")
-        state = np.asarray(observation["observation.state"], dtype=np.float32)
-        if state.shape != (1, POLICY_ACTION_DIM):
-            raise ValueError(f"hold policy state must have shape (1, 14), got {state.shape}")
-        actions = np.repeat(state[:, None, :], self.action_horizon, axis=1)
-        return PolicyOutput(actions=actions, model_actions=actions.copy())
+        self.runtime = runtime
+        self.observation_provider = observation_provider
+        self._cached_observation: dict[str, np.ndarray] | None = None
+        self._sample_index = 0
+        model = runtime.model
+        scene = runtime.scene
+        self._arm_lower = np.asarray(
+            scene.arms.get_attribute("joint_limit_lower", model).numpy()[:, 0],
+            dtype=np.float32,
+        )
+        self._arm_upper = np.asarray(
+            scene.arms.get_attribute("joint_limit_upper", model).numpy()[:, 0],
+            dtype=np.float32,
+        )
+        self._gripper_lower = np.asarray(
+            scene.grippers.get_attribute("joint_limit_lower", model).numpy()[:, 0],
+            dtype=np.float32,
+        )
+        self._gripper_upper = np.asarray(
+            scene.grippers.get_attribute("joint_limit_upper", model).numpy()[:, 0],
+            dtype=np.float32,
+        )
+        self._arm_device = wp.empty(
+            (self.world_count, 12), dtype=wp.float32, device=model.device
+        )
+        self._gripper_device = wp.empty(
+            (self.world_count, 2), dtype=wp.float32, device=model.device
+        )
+
+    @property
+    def world_count(self) -> int:
+        return int(self.runtime.model.world_count)
+
+    @property
+    def sample_index(self) -> int:
+        return self._sample_index
+
+    def observe(self) -> dict[str, np.ndarray]:
+        if self._cached_observation is not None:
+            return self._cached_observation
+        scene = self.runtime.scene
+        state = self.runtime.state_0
+        arms = scene.arms.get_attribute("joint_q", state).numpy()[:, 0]
+        gripper_q = scene.grippers.get_attribute("joint_q", state).numpy()[:, 0]
+        observation = {
+            "observation.state": pack_policy_state(
+                arms,
+                gripper_openness(
+                    gripper_q,
+                    self._gripper_lower,
+                    self._gripper_upper,
+                ),
+            )
+        }
+        images = self.observation_provider(self.runtime)
+        overlap = set(observation) & set(images)
+        if overlap:
+            raise ValueError(f"observation provider replaced reserved keys: {overlap}")
+        observation.update(images)
+        if any(value.shape[0] != self.world_count for value in observation.values()):
+            raise RuntimeError("policy observation does not contain one row per Newton world")
+        self._cached_observation = observation
+        return observation
+
+    def step(self, policy_actions: np.ndarray):
+        expected = (self.world_count, POLICY_ACTION_DIM)
+        if np.asarray(policy_actions).shape != expected:
+            raise ValueError(f"batched policy action shape must be {expected}")
+        arms, grippers = unpack_policy_actions(policy_actions)
+        arms = np.ascontiguousarray(np.clip(arms, self._arm_lower, self._arm_upper))
+        grippers = np.ascontiguousarray(np.clip(grippers, 0.0, 1.0))
+        self._arm_device.assign(arms)
+        self._gripper_device.assign(grippers)
+        self.runtime.step(self._arm_device, self._gripper_device)
+        self._sample_index += 1
+        self._cached_observation = None
+        return self._arm_device, self._gripper_device
 
 
-class NewtonTrajectoryEpisode:
-    """Expose one Newton world while recording exact transitions."""
+class NewtonTrajectoryEpisode(NewtonBatchEnvironment):
+    """Step one homogeneous Newton world batch and publish per-world trajectories."""
 
     action_dim = POLICY_ACTION_DIM
 
     def __init__(
         self,
         runtime: Any,
-        output: str | Path,
-        scenario: RolloutScenario,
+        outputs: tuple[str | Path | None, ...],
+        scenarios: tuple[RolloutScenario, ...],
         *,
         assets_root: str | Path,
-        observation_provider=None,
-        frame_sink=None,
-        trajectory_metadata: dict[str, Any] | None = None,
+        observation_provider,
+        trajectory_metadata: tuple[dict[str, Any], ...],
     ) -> None:
-        if int(runtime.model.world_count) != 1:
-            raise ValueError("the first RTC trajectory slice requires exactly one world")
-        self.runtime = runtime
-        self.scenario = scenario
-        self.observation_provider = observation_provider
-        self.frame_sink = frame_sink
-        self._cached_observation: dict[str, np.ndarray] | None = None
-        self._arm_lower = np.asarray(
-            runtime.scene.arms.get_attribute("joint_limit_lower", runtime.model).numpy()[:, 0],
-            dtype=np.float32,
-        )
-        self._arm_upper = np.asarray(
-            runtime.scene.arms.get_attribute("joint_limit_upper", runtime.model).numpy()[:, 0],
-            dtype=np.float32,
-        )
+        super().__init__(runtime, observation_provider=observation_provider)
+        self.scenarios = scenarios
+        if len(outputs) != self.world_count or len(scenarios) != self.world_count:
+            raise ValueError("outputs and scenarios must contain one entry per Newton world")
+        if len(trajectory_metadata) != self.world_count:
+            raise ValueError("trajectory_metadata must contain one entry per Newton world")
+        if len({scenario.steps for scenario in scenarios}) != 1:
+            raise ValueError("batched rollout scenarios must have the same step count")
+
         assets = Path(assets_root).expanduser().resolve()
-        garment = (
-            assets / "garments" / "converted" / scenario.garment_id / f"{scenario.garment_id}.usdc"
-        )
         robot = assets / "robots" / "piper" / "piper.usda"
-        metadata = {
-            "producer": "clothdojo_rollout",
-            "scenario_id": scenario.scenario_id,
-            "seed": scenario.seed,
-            "prompt": scenario.prompt,
-            "training_eligible": True,
+        robot_sha256 = _sha256(robot)
+        garment_sha256 = {
+            garment_id: _sha256(
+                assets / "garments" / "converted" / garment_id / f"{garment_id}.usdc"
+            )
+            for garment_id in {str(scenario.garment_id) for scenario in scenarios}
         }
-        if trajectory_metadata is not None:
-            metadata.update(trajectory_metadata)
-        self.writer = TrajectoryWriter(
-            output,
-            control_fps=runtime.spec.control_fps,
-            sim_substeps=runtime.spec.sim_substeps,
-            max_actions=scenario.steps,
-            scene=SceneMetadata(
-                task_name=scenario.task_name,
-                robot_name="piper",
-                asset_fingerprints={
-                    "garment_usdc": _sha256(garment),
-                    "piper_entry_usda": _sha256(robot),
-                },
-                config_fingerprints={"rtc_scenario": scenario.fingerprint},
-            ),
-            metadata=metadata,
-        )
+        initial_states = capture_states(runtime, 0)
+        if len(initial_states) != self.world_count:
+            raise RuntimeError("Newton state capture returned the wrong world count")
+
+        writers: list[TrajectoryWriter | None] = []
         try:
-            initial = capture_states(runtime, 0)
-            if len(initial) != 1:
-                raise RuntimeError("Newton state capture did not return one world")
-            self.writer.write_initial_state(initial[0])
+            for world, (output, scenario, extra) in enumerate(
+                zip(outputs, scenarios, trajectory_metadata, strict=True)
+            ):
+                if output is None:
+                    writers.append(None)
+                    continue
+                garment_id = str(scenario.garment_id)
+                metadata = {
+                    "producer": "clothdojo_rollout",
+                    "scenario_id": scenario.scenario_id,
+                    "seed": scenario.seed,
+                    "prompt": scenario.prompt,
+                    "training_eligible": True,
+                    **extra,
+                }
+                writer = TrajectoryWriter(
+                    output,
+                    control_fps=runtime.spec.control_fps,
+                    sim_substeps=runtime.spec.sim_substeps,
+                    max_actions=scenario.steps,
+                    scene=SceneMetadata(
+                        task_name=scenario.task_name,
+                        robot_name="piper",
+                        asset_fingerprints={
+                            "garment_usdc": garment_sha256[garment_id],
+                            "piper_entry_usda": robot_sha256,
+                        },
+                        config_fingerprints={"rtc_scenario": scenario.fingerprint},
+                    ),
+                    metadata=metadata,
+                )
+                writers.append(writer)
+                writer.write_initial_state(initial_states[world])
         except Exception:
-            self.writer.abort()
+            for writer in writers:
+                if writer is not None:
+                    writer.abort()
             raise
-        self._sample_index = 0
+        self.writers = tuple(writers)
 
-    def observe(self) -> dict[str, np.ndarray]:
-        if self._cached_observation is not None:
-            return {key: value.copy() for key, value in self._cached_observation.items()}
-        scene = self.runtime.scene
-        state = self.runtime.state_0
-        arms = scene.arms.get_attribute("joint_q", state).numpy()[:, 0]
-        gripper_q = scene.grippers.get_attribute("joint_q", state).numpy()[:, 0]
-        lower = scene.grippers.get_attribute("joint_limit_lower", self.runtime.model).numpy()[:, 0]
-        upper = scene.grippers.get_attribute("joint_limit_upper", self.runtime.model).numpy()[:, 0]
-        observation = {
-            "observation.state": pack_policy_state(arms, gripper_openness(gripper_q, lower, upper))
-        }
-        if self.observation_provider is not None:
-            images = self.observation_provider(self.runtime)
-            overlap = set(observation) & set(images)
-            if overlap:
-                raise ValueError(f"observation provider replaced reserved keys: {overlap}")
-            observation.update(images)
-        self._cached_observation = observation
-        return {key: value.copy() for key, value in observation.items()}
-
-    def step(self, policy_action: np.ndarray) -> None:
-        import warp as wp
-
-        observation = self.observe()
-        if self.frame_sink is not None:
-            self.frame_sink.add_frame(observation, policy_action)
-        arms, grippers = unpack_policy_action(policy_action)
-        # Record the command that Newton actually executes.  The runtime clips
-        # the same physical limits on device; doing it here keeps trajectory
-        # actions and physical transitions exactly aligned.
-        arms = np.ascontiguousarray(np.clip(arms, self._arm_lower, self._arm_upper))
-        grippers = np.ascontiguousarray(np.clip(grippers, 0.0, 1.0))
-        arm_device = wp.array(arms, dtype=wp.float32, device=self.runtime.model.device)
-        gripper_device = wp.array(grippers, dtype=wp.float32, device=self.runtime.model.device)
+    def step(self, policy_actions: np.ndarray) -> None:
+        sample_index = self.sample_index
+        arm_device, gripper_device = super().step(policy_actions)
         actions = capture_actions(
             self.runtime,
-            self._sample_index,
+            sample_index,
             arm_device,
             gripper_device,
         )
-        self.runtime.step(arm_device, gripper_device)
-        self._sample_index += 1
-        self._cached_observation = None
-        states = capture_states(self.runtime, self._sample_index)
-        self.writer.append_transition(actions[0], states[0])
+        states = capture_states(self.runtime, self.sample_index)
+        for writer, action, state in zip(self.writers, actions, states, strict=True):
+            if writer is not None:
+                writer.append_transition(action, state)
 
     def close(self) -> None:
-        # Publish the trajectory first: the LeRobot sidecar points at it and
-        # must never claim a complete paired dataset while that source is
-        # still in the recording state.
-        self.writer.close()
-        if self.frame_sink is not None:
-            self.frame_sink.close()
+        active = tuple(writer for writer in self.writers if writer is not None)
+        if not active:
+            return
+        # NPZ compression is independent per canonical trajectory and can use
+        # host cores while the GPU worker prepares no further simulation work.
+        with ThreadPoolExecutor(max_workers=min(4, len(active))) as executor:
+            futures = [executor.submit(writer.close) for writer in active]
+            for future in futures:
+                future.result()
 
     def abort(self) -> None:
-        if self.frame_sink is not None:
-            self.frame_sink.abort()
-        self.writer.abort()
+        for writer in self.writers:
+            if writer is not None:
+                writer.abort()
 
     def __enter__(self) -> NewtonTrajectoryEpisode:
         return self

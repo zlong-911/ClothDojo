@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import uuid
@@ -13,12 +12,18 @@ from typing import Any
 
 import numpy as np
 
-from clothdojo.rollout.engine import PolicyOutput, RTCContext
+from clothdojo.rollout.artifacts import validate_sft_norm_binding
+from clothdojo.rollout.checkpoint import (
+    inspect_rlinf_openpi_checkpoint,
+    rlinf_openpi_weights_sha256,
+    strict_reload_rlinf_openpi_checkpoint,
+)
+from clothdojo.rollout.engine import ExecutionMode
 from clothdojo.rollout.guided_rtc import GuidedRTCConfig, sample_guided_actions
 from clothdojo.rollout.newton import POLICY_ACTION_DIM
 from clothdojo.rollout.render import CAMERA_NAMES
 
-POLICY_PROTOCOL_VERSION = 1
+POLICY_PROTOCOL_VERSION = 2
 TRANSPORT_IMAGE_SIZE = (224, 224)
 RTC_GUIDANCE = GuidedRTCConfig()
 DELTA_ACTION_MASK = np.asarray(
@@ -58,56 +63,93 @@ class RemoteSFTPolicy:
         )
         self._pending_seed: int | None = None
         self._session_id = uuid.uuid4().hex
+        self._mode: ExecutionMode | None = None
+        self._exec_horizon: int | None = None
+        self._previous_model_actions: np.ndarray | None = None
         self._previous_model_state: np.ndarray | None = None
 
-    def reset(self, seed: int) -> None:
+    def reset(
+        self,
+        seed: int,
+        *,
+        mode: ExecutionMode,
+        exec_horizon: int,
+    ) -> None:
         if isinstance(seed, bool) or not isinstance(seed, (int, np.integer)) or seed < 0:
             raise ValueError("policy seed must be a non-negative integer")
+        if mode not in {"chunk", "rtc"}:
+            raise ValueError("mode must be 'chunk' or 'rtc'")
+        action_horizon = int(self.identity["action_horizon"])
+        if not 1 <= exec_horizon <= action_horizon:
+            raise ValueError("exec_horizon must be in [1, action_horizon]")
+        if mode == "rtc":
+            if exec_horizon == action_horizon:
+                raise ValueError("RTC exec_horizon must be smaller than action_horizon")
+            guidance = self.identity.get("rtc_guidance")
+            if guidance is None:
+                raise ValueError("RTC execution requires an RTC-capable policy server")
+            server_horizon = int(guidance["execution_horizon"])
+            if exec_horizon != server_horizon:
+                raise ValueError(
+                    "RTC exec_horizon must match the policy server guidance horizon: "
+                    f"{exec_horizon} != {server_horizon}"
+                )
         self._pending_seed = int(seed)
-        self._session_id = uuid.uuid4().hex
+        self._mode = mode
+        self._exec_horizon = int(exec_horizon)
+        self._previous_model_actions = None
         self._previous_model_state = None
 
     def infer(
         self,
         observation: dict[str, np.ndarray],
         prompt: str,
-        *,
-        rtc: RTCContext | None = None,
-    ) -> PolicyOutput:
+    ) -> np.ndarray:
+        if self._mode is None or self._exec_horizon is None:
+            raise RuntimeError("policy must be reset before inference")
         request = _prepare_remote_observation(observation)
+        if (
+            request["observation.state"].shape[0] > 1
+            and self.identity.get("batched_inference") is not True
+        ):
+            raise ValueError("policy server does not advertise batched inference")
         request["prompt"] = prompt
         request["clothdojo.session_id"] = self._session_id
         if self._pending_seed is not None:
             request["clothdojo.seed"] = self._pending_seed
             self._pending_seed = None
-        if rtc is not None:
-            if self.identity["backend"] != "rlinf-sft":
-                raise ValueError("RTC guidance requires an RLINF SFT policy server")
+        if self._mode == "rtc" and self._previous_model_actions is not None:
             if self._previous_model_state is None:
                 raise RuntimeError("RTC replan has no previous model-state reference")
             request["clothdojo.rtc"] = {
-                "previous_model_actions": np.asarray(
-                    rtc.previous_model_actions,
-                    dtype=np.float32,
-                ),
+                "previous_model_actions": self._previous_model_actions.copy(),
                 "previous_state": self._previous_model_state.copy(),
-                "executed_horizon": int(rtc.executed_horizon),
-                "delay_steps": int(rtc.predicted_delay_steps),
-                "chunk_id": int(rtc.chunk_id),
+                "executed_horizon": self._exec_horizon,
             }
         result = self._client.infer(request)
-        self._previous_model_state = np.asarray(
-            request["observation.state"], dtype=np.float32
-        ).copy()
         if not isinstance(result, dict):
             raise ValueError("policy server response must be an object")
         actions = _finite_actions(result.get("actions"), POLICY_ACTION_DIM, "actions")
+        batch_size = int(request["observation.state"].shape[0])
+        expected_prefix = (batch_size, int(self.identity["action_horizon"]))
+        if actions.shape[:2] != expected_prefix:
+            raise ValueError(
+                "policy response batch/horizon "
+                f"{actions.shape[:2]} does not match request {expected_prefix}"
+            )
         model_actions = result.get("model_actions")
         if model_actions is not None:
             model_actions = _finite_actions(model_actions, None, "model_actions")
             if model_actions.shape[:2] != actions.shape[:2]:
                 raise ValueError("model_actions must match the action batch and horizon")
-        return PolicyOutput(actions=actions, model_actions=model_actions)
+        if self._mode == "rtc":
+            if model_actions is None:
+                raise ValueError("RTC policy response must include model_actions")
+            self._previous_model_actions = model_actions.copy()
+            self._previous_model_state = np.asarray(
+                request["observation.state"], dtype=np.float32
+            ).copy()
+        return actions
 
 
 class _RLinfSFTPolicy:
@@ -124,6 +166,7 @@ class _RLinfSFTPolicy:
         autocast: bool,
         device: str,
         rtc_guidance: GuidedRTCConfig,
+        expected_checkpoint_sha256: str,
     ) -> None:
         import torch
         from omegaconf import OmegaConf
@@ -157,6 +200,16 @@ class _RLinfSFTPolicy:
         model = get_model(config)
         if model is None:
             raise RuntimeError("pinned RLINF did not register its OpenPI model")
+        strict_reload = strict_reload_rlinf_openpi_checkpoint(
+            model,
+            checkpoint,
+            openpi_config=openpi_config,
+            action_horizon=action_horizon,
+            action_env_dim=POLICY_ACTION_DIM,
+            num_steps=num_steps,
+        )
+        if strict_reload["weights_sha256"] != expected_checkpoint_sha256:
+            raise RuntimeError("SFT checkpoint changed between validation and strict model load")
         self.device = torch.device(device)
         self.model = model.to(self.device).eval()
         self.autocast = bool(autocast)
@@ -167,8 +220,6 @@ class _RLinfSFTPolicy:
         self,
         env_observation: dict[str, Any],
         previous_actions: Any,
-        *,
-        inference_delay: int,
     ) -> tuple[Any, Any]:
         from rlinf.models.embodiment.openpi.openpi_action_model import _model
 
@@ -183,7 +234,7 @@ class _RLinfSFTPolicy:
             self.model,
             observation,
             previous_actions,
-            inference_delay=inference_delay,
+            inference_delay=0,
             config=self.rtc_guidance,
         )
         actions = self.model.output_transform(
@@ -203,7 +254,7 @@ class _RLinfSFTPolicy:
         observation: dict[str, np.ndarray],
         prompt: str,
         rtc: dict[str, Any] | None,
-    ) -> PolicyOutput:
+    ) -> tuple[np.ndarray, np.ndarray]:
         import torch
 
         state = np.asarray(observation["observation.state"], dtype=np.float32)
@@ -233,10 +284,13 @@ class _RLinfSFTPolicy:
             previous_remaining = torch.from_numpy(
                 previous_model_actions[:, rtc["executed_horizon"] :]
             ).to(self.device)
-        with torch.no_grad(), torch.autocast(
-            device_type=self.device.type,
-            dtype=torch.bfloat16,
-            enabled=self.autocast and self.device.type == "cuda",
+        with (
+            torch.no_grad(),
+            torch.autocast(
+                device_type=self.device.type,
+                dtype=torch.bfloat16,
+                enabled=self.autocast and self.device.type == "cuda",
+            ),
         ):
             if previous_remaining is None:
                 actions, forward = self.model.predict_action_batch(
@@ -253,9 +307,8 @@ class _RLinfSFTPolicy:
                 actions, model_actions = self._guided_infer(
                     env_observation,
                     previous_remaining,
-                    inference_delay=rtc["delay_steps"],
                 )
-        return PolicyOutput(_to_numpy(actions), _to_numpy(model_actions))
+        return _to_numpy(actions), _to_numpy(model_actions)
 
 
 class _PolicySessionRouter:
@@ -280,10 +333,10 @@ class _PolicySessionRouter:
         if session not in self._seeded_sessions:
             raise ValueError("a policy session must provide a seed on its first request")
         rtc = _validate_rtc_request(request.pop("clothdojo.rtc", None))
-        output = self._policy.infer(request, prompt, rtc)
+        actions, model_actions = self._policy.infer(request, prompt, rtc)
         return {
-            "actions": output.actions,
-            "model_actions": output.model_actions,
+            "actions": actions,
+            "model_actions": model_actions,
         }
 
 
@@ -321,21 +374,51 @@ def serve_sft_policy(
         num_steps=num_steps,
         port=port,
     )
+    checkpoint_manifest = inspect_rlinf_openpi_checkpoint(
+        checkpoint_path,
+        openpi_config=openpi_config,
+        action_horizon=action_horizon,
+        action_env_dim=POLICY_ACTION_DIM,
+        num_steps=num_steps,
+    )
+    norm_identity = validate_sft_norm_binding(
+        checkpoint_path,
+        norm_path,
+        openpi_config=openpi_config,
+        action_horizon=action_horizon,
+    )
     identity = {
         "protocol_version": POLICY_PROTOCOL_VERSION,
         "backend": "rlinf-sft",
-        "checkpoint_sha256": checkpoint_sha256(checkpoint_path),
-        "norm_stats_sha256": _path_sha256(norm_path),
+        "checkpoint_sha256": checkpoint_manifest["weights_sha256"],
+        "checkpoint_validation": {
+            "strict_reload": True,
+            **{
+                key: checkpoint_manifest[key]
+                for key in (
+                    "schema",
+                    "format_version",
+                    "loader",
+                    "weights_format",
+                    "tensor_count",
+                    "dtype_counts",
+                    "stored_dtype_contract",
+                    "expected_state_dict_keys",
+                    "tied_aliases",
+                )
+            },
+        },
+        **norm_identity,
         "openpi_config": openpi_config,
         "action_dim": POLICY_ACTION_DIM,
         "action_horizon": action_horizon,
         "camera_names": list(CAMERA_NAMES),
         "transport_image_size": list(TRANSPORT_IMAGE_SIZE),
+        "batched_inference": True,
         "num_steps": num_steps,
         "autocast": bool(autocast),
         "rtc_guidance": rtc_guidance.to_json_dict(),
     }
-    print(json.dumps({"clothdojo": identity}, sort_keys=True), flush=True)
     policy = _RLinfSFTPolicy(
         checkpoint_path,
         norm_path,
@@ -345,7 +428,9 @@ def serve_sft_policy(
         autocast=autocast,
         device=device,
         rtc_guidance=rtc_guidance,
+        expected_checkpoint_sha256=checkpoint_manifest["weights_sha256"],
     )
+    print(json.dumps({"clothdojo": identity}, sort_keys=True), flush=True)
     WebsocketPolicyServer(
         _PolicySessionRouter(policy),
         host=host,
@@ -356,46 +441,7 @@ def serve_sft_policy(
 
 
 def checkpoint_sha256(checkpoint: str | Path) -> str:
-    root = Path(checkpoint).expanduser().resolve()
-    dcp_checkpoint = root / "actor/dcp_checkpoint"
-    if dcp_checkpoint.is_dir():
-        metadata = dcp_checkpoint / ".metadata"
-        shards = tuple(dcp_checkpoint.rglob("*.distcp"))
-        if not metadata.is_file() or not shards:
-            raise FileNotFoundError(f"RLINF DCP checkpoint is incomplete: {dcp_checkpoint}")
-        return _directory_sha256(dcp_checkpoint)
-    candidates = (
-        root / "actor/model_state_dict/full_weights.pt",
-        root / "model_state_dict/full_weights.pt",
-        root / "model.safetensors",
-    )
-    for candidate in candidates:
-        if candidate.is_file():
-            return _file_sha256(candidate)
-    raise FileNotFoundError(f"cannot identify an RLINF SFT checkpoint: {root}")
-
-
-def _directory_sha256(root: Path) -> str:
-    """Hash every regular checkpoint file with its stable relative identity."""
-
-    files = sorted(
-        (path for path in root.rglob("*") if path.is_file() or path.is_symlink()),
-        key=lambda path: path.relative_to(root).as_posix(),
-    )
-    if not files:
-        raise FileNotFoundError(f"checkpoint directory contains no files: {root}")
-    digest = hashlib.sha256()
-    for path in files:
-        if path.is_symlink():
-            raise ValueError(f"checkpoint identity does not allow symbolic links: {path}")
-        relative = path.relative_to(root).as_posix().encode("utf-8")
-        digest.update(len(relative).to_bytes(8, "big"))
-        digest.update(relative)
-        digest.update(path.stat().st_size.to_bytes(8, "big"))
-        with path.open("rb") as stream:
-            for block in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(block)
-    return digest.hexdigest()
+    return rlinf_openpi_weights_sha256(checkpoint)
 
 
 def _validate_server_metadata(
@@ -431,6 +477,11 @@ def _validate_server_metadata(
     if not isinstance(identity.get("openpi_config"), str) or not identity["openpi_config"]:
         raise ValueError("policy server is missing openpi_config")
     if backend == "rlinf-sft":
+        _require_sha256(identity.get("norm_provenance_sha256"), "server norm provenance")
+        _require_sha256(identity.get("training_manifest_sha256"), "server training manifest")
+        _require_sha256(identity.get("dataset_info_sha256"), "server dataset info")
+        _require_sha256(identity.get("dataset_sidecar_sha256"), "server dataset sidecar")
+    if backend == "rlinf-sft" or identity.get("rtc_guidance") is not None:
         _validate_rtc_guidance_metadata(identity.get("rtc_guidance"))
     return identity
 
@@ -469,14 +520,20 @@ def _prepare_remote_observation(observation: dict[str, np.ndarray]) -> dict[str,
             f"extra={sorted(set(observation) - required)}"
         )
     state = np.asarray(observation["observation.state"], dtype=np.float32)
-    if state.shape != (1, POLICY_ACTION_DIM) or not np.isfinite(state).all():
-        raise ValueError("observation.state must be finite float32[1, 14]")
+    if (
+        state.ndim != 2
+        or state.shape[0] < 1
+        or state.shape[1] != POLICY_ACTION_DIM
+        or not np.isfinite(state).all()
+    ):
+        raise ValueError("observation.state must be finite float32[batch, 14]")
+    batch_size = int(state.shape[0])
 
     def prepare(name: str) -> tuple[str, np.ndarray]:
         key = f"observation.images.{name}"
         image = np.asarray(observation[key])
-        if image.ndim != 4 or image.shape[0] != 1 or image.shape[-1] != 3:
-            raise ValueError(f"{key} must have shape (1, H, W, 3)")
+        if image.ndim != 4 or image.shape[0] != batch_size or image.shape[-1] != 3:
+            raise ValueError(f"{key} must have shape (batch, H, W, 3)")
         resized = image_tools.resize_with_pad(image, *TRANSPORT_IMAGE_SIZE)
         converted = image_tools.convert_to_uint8(resized)
         if converted.dtype != np.uint8:
@@ -495,24 +552,32 @@ def _validate_rtc_request(value: Any) -> dict[str, Any] | None:
         "previous_model_actions",
         "previous_state",
         "executed_horizon",
-        "delay_steps",
-        "chunk_id",
     }
     if not isinstance(value, dict) or set(value) != required:
         raise ValueError("clothdojo.rtc has invalid fields")
     previous = _finite_actions(value["previous_model_actions"], None, "previous_model_actions")
     previous_state = np.asarray(value["previous_state"], dtype=np.float32)
-    if previous_state.shape != (1, POLICY_ACTION_DIM) or not np.isfinite(previous_state).all():
-        raise ValueError("clothdojo.rtc.previous_state must be finite float32[1, 14]")
+    if (
+        previous_state.shape != (previous.shape[0], POLICY_ACTION_DIM)
+        or not np.isfinite(previous_state).all()
+    ):
+        raise ValueError(
+            "clothdojo.rtc.previous_state must be finite float32[batch, 14]"
+        )
     result = {
         "previous_model_actions": previous,
         "previous_state": np.ascontiguousarray(previous_state),
     }
-    for name in ("executed_horizon", "delay_steps", "chunk_id"):
-        item = value[name]
-        if isinstance(item, bool) or not isinstance(item, int) or item < 0:
-            raise ValueError(f"clothdojo.rtc.{name} must be a non-negative integer")
-        result[name] = item
+    executed_horizon = value["executed_horizon"]
+    if (
+        isinstance(executed_horizon, bool)
+        or not isinstance(executed_horizon, int)
+        or not 1 <= executed_horizon < previous.shape[1]
+    ):
+        raise ValueError(
+            "clothdojo.rtc.executed_horizon must be in [1, previous horizon)"
+        )
+    result["executed_horizon"] = executed_horizon
     return result
 
 
@@ -546,18 +611,19 @@ def _rebase_delta_model_actions(
     previous = np.asarray(previous_state, dtype=np.float32)
     current = np.asarray(current_state, dtype=np.float32)
     scale = np.asarray(action_scale, dtype=np.float32)
-    if actions.ndim != 3 or actions.shape[0] != 1 or actions.shape[2] < POLICY_ACTION_DIM:
-        raise ValueError("previous model actions must have shape (1, horizon, >=14)")
-    if previous.shape != (1, POLICY_ACTION_DIM) or current.shape != previous.shape:
-        raise ValueError("previous and current policy states must have shape (1, 14)")
+    if actions.ndim != 3 or actions.shape[0] < 1 or actions.shape[2] < POLICY_ACTION_DIM:
+        raise ValueError("previous model actions must have shape (batch, horizon, >=14)")
+    expected_state = (actions.shape[0], POLICY_ACTION_DIM)
+    if previous.shape != expected_state or current.shape != previous.shape:
+        raise ValueError("previous and current policy states must have shape (batch, 14)")
     if scale.shape != (POLICY_ACTION_DIM,) or np.any(scale <= 0.0):
         raise ValueError("action scale must be positive with shape (14,)")
-    shift = np.zeros((POLICY_ACTION_DIM,), dtype=np.float32)
-    shift[DELTA_ACTION_MASK] = (
-        (previous[0] - current[0])[DELTA_ACTION_MASK] / scale[DELTA_ACTION_MASK]
-    )
+    shift = np.zeros_like(previous)
+    shift[:, DELTA_ACTION_MASK] = (
+        previous[:, DELTA_ACTION_MASK] - current[:, DELTA_ACTION_MASK]
+    ) / scale[DELTA_ACTION_MASK]
     result = actions.copy()
-    result[..., :POLICY_ACTION_DIM] += shift
+    result[..., :POLICY_ACTION_DIM] += shift[:, None, :]
     return np.ascontiguousarray(result)
 
 
@@ -565,13 +631,13 @@ def _finite_actions(value: Any, action_dim: int | None, name: str) -> np.ndarray
     result = np.asarray(value, dtype=np.float32)
     if (
         result.ndim != 3
-        or result.shape[0] != 1
+        or result.shape[0] < 1
         or result.shape[1] < 1
         or (action_dim is not None and result.shape[2] != action_dim)
         or not np.isfinite(result).all()
     ):
         suffix = "" if action_dim is None else f" with action_dim={action_dim}"
-        raise ValueError(f"{name} must be finite with shape (1, horizon, dim){suffix}")
+        raise ValueError(f"{name} must be finite with shape (batch, horizon, dim){suffix}")
     return np.ascontiguousarray(result)
 
 
@@ -593,19 +659,6 @@ def _validate_serve_arguments(
         raise ValueError("openpi_config must be non-empty")
     if min(action_horizon, num_steps, port) < 1:
         raise ValueError("action_horizon, num_steps and port must be positive")
-
-
-def _path_sha256(path: Path) -> str:
-    source = path / "norm_stats.json" if path.is_dir() else path
-    return _file_sha256(source)
-
-
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def _require_sha256(value: Any, name: str) -> None:

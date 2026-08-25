@@ -178,11 +178,7 @@ def export_rollout_collection(
     from clothdojo.rollout.newton import pack_policy_state
     from clothdojo.rollout.render import ShirtFlattenCameraObservation
     from clothdojo.sim.runtime import ShirtFlattenRuntime
-    from clothdojo.sim.scene import (
-        ShirtFlattenSpec,
-        build_shirt_flatten,
-        build_shirt_flatten_render_scene,
-    )
+    from clothdojo.sim.scene import ShirtFlattenSpec, build_shirt_flatten
     from clothdojo.trajectory import TrajectoryReader
 
     root = Path(source).expanduser().resolve()
@@ -204,25 +200,27 @@ def export_rollout_collection(
     )
     try:
         active_asset = None
-        physics_scene = None
+        scene = None
         runtime = None
         camera = None
         for episode in trajectories:
             if episode["asset_id"] != active_asset:
                 active_asset = episode["asset_id"]
                 spec = ShirtFlattenSpec(garment_id=active_asset, world_count=1)
-                physics_scene = build_shirt_flatten(assets_root, spec=spec, device=device)
-                runtime = ShirtFlattenRuntime(physics_scene)
-                render_scene = build_shirt_flatten_render_scene(
-                    assets_root, spec=spec, device=device
+                scene = build_shirt_flatten(
+                    assets_root,
+                    spec=spec,
+                    device=device,
+                    visuals=True,
                 )
-                camera = ShirtFlattenCameraObservation(physics_scene, render_scene)
+                runtime = ShirtFlattenRuntime(scene)
+                camera = ShirtFlattenCameraObservation(scene)
             reader = TrajectoryReader(root / episode["path"])
             if reader.manifest.control_fps != first_reader.manifest.control_fps:
                 raise ValueError("rollout trajectories use different control rates")
             for sample in reader.iter_samples():
                 _restore_render_state(runtime, sample.state)
-                arm_q = physics_scene.arms.get_attribute("joint_q", runtime.state_0).numpy()[:, 0]
+                arm_q = scene.arms.get_attribute("joint_q", runtime.state_0).numpy()[:, 0]
                 observation = {
                     "observation.state": pack_policy_state(
                         arm_q,

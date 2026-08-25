@@ -99,41 +99,17 @@ def build_shirt_flatten(
     *,
     spec: ShirtFlattenSpec | None = None,
     device: str = "cuda:0",
+    visuals: bool = False,
+    robot_cloth_collision: bool = True,
 ) -> ShirtFlattenScene:
-    """Build the physics-only scene used by simulation."""
+    """Build one simulation model, optionally including render-only visuals.
 
-    return _build_shirt_flatten(
-        assets_root,
-        spec=spec,
-        device=device,
-        load_visual_shapes=False,
-    )
-
-
-def build_shirt_flatten_render_scene(
-    assets_root: str | Path,
-    *,
-    spec: ShirtFlattenSpec | None = None,
-    device: str = "cuda:0",
-) -> ShirtFlattenScene:
-    """Build a separate visual model with topology matching the physics scene."""
-
-    return _build_shirt_flatten(
-        assets_root,
-        spec=spec,
-        device=device,
-        load_visual_shapes=True,
-    )
-
-
-def _build_shirt_flatten(
-    assets_root: str | Path,
-    *,
-    spec: ShirtFlattenSpec | None,
-    device: str,
-    load_visual_shapes: bool,
-) -> ShirtFlattenScene:
-    """Build the scene once, then replicate it into colocated independent worlds."""
+    Visual shapes use Newton 1.5 collision flags and therefore remain in the
+    same model without participating in rigid or particle contact.  Callers
+    that never render can leave ``visuals`` disabled to avoid loading them.
+    Template generation can disable ``robot_cloth_collision`` while retaining
+    the table-particle and rigid-shape collision paths.
+    """
 
     import newton
     import warp as wp
@@ -154,7 +130,8 @@ def _build_shirt_flatten(
         template,
         robot_path,
         spec,
-        load_visual_shapes=load_visual_shapes,
+        load_visual_shapes=visuals,
+        robot_cloth_collision=robot_cloth_collision,
     )
     arm_joints, gripper_joints, arm_coords = _configure_robot(
         newton, template, spec, robot_body_count
@@ -163,19 +140,29 @@ def _build_shirt_flatten(
     _add_table(newton, wp, template, spec)
     garment_mesh = load_garment_mesh(garment_path)
     particle_range = add_style3d_garment(template, garment_path, spec, mesh=garment_mesh)
-    if load_visual_shapes:
-        _add_smooth_garment_visual(
-            newton,
-            wp,
-            template,
-            particle_range,
-            garment_mesh[0],
-        )
-
     builder = newton.ModelBuilder(gravity=spec.gravity)
     _register_solver_attributes(newton, builder)
-    # Newton 1.5 recommends viewer offsets instead of physical world spacing.
-    builder.replicate(template, spec.world_count)
+    if visuals:
+        # The NOCS proxy deforms independently in each world. Build one public
+        # ModelBuilder world per proxy so Newton owns distinct Mesh buffers;
+        # the physics path below still takes 1.5's optimized replicate path.
+        for world_index in range(spec.world_count):
+            world = newton.ModelBuilder(gravity=spec.gravity)
+            _register_solver_attributes(newton, world)
+            world.add_builder(template)
+            _add_smooth_garment_visual(
+                newton,
+                wp,
+                world,
+                particle_range,
+                garment_mesh[0],
+                mesh_identity=world_index,
+            )
+            builder.add_world(world)
+    else:
+        # Newton 1.5 recommends colocated worlds and merges all replicated
+        # copies in one pass instead of composing them one at a time.
+        builder.replicate(template, spec.world_count)
     model = builder.finalize(device=device, requires_grad=False)
     model.soft_contact_ke = spec.soft_contact_ke
     model.soft_contact_kd = spec.soft_contact_kd
@@ -216,6 +203,7 @@ def _add_robot(
     spec: ShirtFlattenSpec,
     *,
     load_visual_shapes: bool,
+    robot_cloth_collision: bool = True,
 ) -> int:
     body_start = int(builder.body_count)
     shape_start = int(builder.shape_count)
@@ -235,6 +223,7 @@ def _add_robot(
         body_start=body_start,
         body_end=body_end,
         shape_start=shape_start,
+        robot_cloth_collision=robot_cloth_collision,
     )
     for shape in collision_shapes:
         builder.shape_material_mu[shape] = spec.robot_friction
@@ -256,6 +245,7 @@ def _configure_piper_collision_geometry(
     body_start: int,
     body_end: int,
     shape_start: int,
+    robot_cloth_collision: bool,
 ) -> tuple[int, ...]:
     """Select the expert-data contact envelope and reproduce its proxy filters."""
 
@@ -288,9 +278,10 @@ def _configure_piper_collision_geometry(
             builder.shape_flags[shape] &= ~collision_bits
             builder.shape_collision_group[shape] = 0
     for shape in contact_shapes:
+        contact_bits = shape_bit | (particle_bit if robot_cloth_collision else 0)
         builder.shape_flags[shape] = (
             int(builder.shape_flags[shape]) & ~collision_bits
-        ) | collision_bits
+        ) | contact_bits
         builder.shape_collision_group[shape] = 1
     for shape in proxy_shapes:
         builder.shape_flags[shape] = (int(builder.shape_flags[shape]) & ~collision_bits) | shape_bit
@@ -452,6 +443,8 @@ def _add_smooth_garment_visual(
     builder,
     particle_range: tuple[int, int],
     rest_vertices: np.ndarray,
+    *,
+    mesh_identity: int = 0,
 ) -> None:
     """Add a smooth render-only mesh with the expert-data NOCS appearance."""
 
@@ -468,6 +461,13 @@ def _add_smooth_garment_visual(
         local_indices,
         rest_vertices,
     )
+    if mesh_identity:
+        # Model finalization deduplicates byte-identical meshes. Each NOCS
+        # proxy needs its own Warp BVH because its vertices deform per world;
+        # one temporary ULP marker gives it a distinct public Mesh identity
+        # and is overwritten from particle state before the first render.
+        for _ in range(mesh_identity):
+            visual_vertices[0, 0] = np.nextafter(visual_vertices[0, 0], np.float32(np.inf))
     mesh = newton.Mesh(
         vertices=visual_vertices,
         indices=visual_indices,

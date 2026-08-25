@@ -16,6 +16,7 @@ from clothdojo.sim.scene import (
     GRIPPER_JOINTS,
     ShirtFlattenSpec,
     _add_robot,
+    _add_table,
     _body_indices,
     _configure_robot,
     _joint_dofs,
@@ -23,6 +24,7 @@ from clothdojo.sim.scene import (
     _nocs_visual_mesh,
     _register_solver_attributes,
     _vertex_normals,
+    build_shirt_flatten,
     rest_vertices_to_nocs,
 )
 
@@ -182,7 +184,8 @@ def test_piper_collision_layer_preserves_expert_geometry_provenance() -> None:
     assert metadata["sourceNewtonVersion"] == "1.4.0"
 
 
-def test_piper_import_selects_only_expert_collision_envelope() -> None:
+@pytest.mark.parametrize("load_visual_shapes", [False, True])
+def test_piper_import_selects_only_expert_collision_envelope(load_visual_shapes: bool) -> None:
     import newton
     import warp as wp
 
@@ -196,7 +199,7 @@ def test_piper_import_selects_only_expert_collision_envelope() -> None:
         builder,
         root / "piper.usda",
         ShirtFlattenSpec(),
-        load_visual_shapes=False,
+        load_visual_shapes=load_visual_shapes,
     )
 
     labels = tuple(str(label) for label in builder.shape_label)
@@ -222,6 +225,44 @@ def test_piper_import_selects_only_expert_collision_envelope() -> None:
         int(builder.shape_flags[index]) & (shape_bit | particle_bit) == shape_bit for index in proxy
     )
     assert all(not int(builder.shape_flags[index]) & shape_bit for index in original)
+    assert sum(bool(int(flags) & shape_bit) for flags in builder.shape_flags) == 126
+    assert sum(bool(int(flags) & particle_bit) for flags in builder.shape_flags) == 99
+
+
+def test_robot_cloth_ghost_mode_preserves_table_particle_collision() -> None:
+    import newton
+    import warp as wp
+
+    root = Path(__file__).parents[1] / "assets" / "robots" / "piper"
+    builder = newton.ModelBuilder()
+    _register_solver_attributes(newton, builder)
+    _add_robot(
+        newton,
+        wp,
+        builder,
+        root / "piper.usda",
+        ShirtFlattenSpec(),
+        load_visual_shapes=False,
+        robot_cloth_collision=False,
+    )
+    _add_table(newton, wp, builder, ShirtFlattenSpec())
+
+    labels = tuple(str(label) for label in builder.shape_label)
+    robot_shapes = [
+        index
+        for index, label in enumerate(labels)
+        if "/ClothDojoLegacyCollision/" in label
+    ]
+    table_shapes = [index for index, label in enumerate(labels) if label == "table"]
+    shape_bit = int(newton.ShapeFlags.COLLIDE_SHAPES)
+    particle_bit = int(newton.ShapeFlags.COLLIDE_PARTICLES)
+
+    assert len(robot_shapes) == 126
+    assert len(table_shapes) == 1
+    assert sum(bool(int(flags) & shape_bit) for flags in builder.shape_flags) == 127
+    assert sum(bool(int(flags) & particle_bit) for flags in builder.shape_flags) == 1
+    assert all(not int(builder.shape_flags[index]) & particle_bit for index in robot_shapes)
+    assert int(builder.shape_flags[table_shapes[0]]) & particle_bit
 
 
 def test_joint_selection_resolves_named_one_dof_joints() -> None:
@@ -290,6 +331,35 @@ def test_piper_control_matches_legacy_limits_and_gripper_mimics() -> None:
 def test_scene_requires_at_least_one_world() -> None:
     with pytest.raises(ValueError, match="world_count"):
         ShirtFlattenSpec(world_count=0)
+
+
+def test_visual_scene_uses_one_noncolliding_model_for_every_world() -> None:
+    root = Path(__file__).parents[1] / "assets"
+    garment = root / "garments" / "converted" / ShirtFlattenSpec().garment_id
+    if not garment.is_dir():
+        pytest.skip("project-local converted garments are installed separately from Git")
+
+    import newton
+
+    scene = build_shirt_flatten(
+        root,
+        spec=ShirtFlattenSpec(world_count=2),
+        device="cpu",
+        visuals=True,
+    )
+    visual_shapes = [
+        index
+        for index, label in enumerate(scene.model.shape_label)
+        if str(label).endswith("garment_visual")
+    ]
+    collision_bits = int(newton.ShapeFlags.COLLIDE_SHAPES) | int(
+        newton.ShapeFlags.COLLIDE_PARTICLES
+    )
+    flags = scene.model.shape_flags.numpy()
+
+    assert scene.model.world_count == 2
+    assert len(visual_shapes) == 2
+    assert all(not int(flags[index]) & collision_bits for index in visual_shapes)
 
 
 def test_gripper_openness_uses_one_leader_joint_per_side() -> None:

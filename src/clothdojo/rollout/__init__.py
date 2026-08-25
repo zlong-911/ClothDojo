@@ -1,20 +1,16 @@
 """Policy rollout boundaries."""
 
 from clothdojo.rollout.engine import (
-    PolicyOutput,
+    ExecutionMode,
     RolloutReport,
-    RTCContext,
-    run_chunk_episode,
-    run_rtc_episode,
+    run_episode,
 )
 from clothdojo.rollout.scenario import RolloutScenario, load_rollout_scenario
 
 __all__ = [
-    "PolicyOutput",
-    "RTCContext",
+    "ExecutionMode",
     "RolloutReport",
     "RolloutScenario",
     "load_rollout_scenario",
-    "run_chunk_episode",
-    "run_rtc_episode",
+    "run_episode",
 ]

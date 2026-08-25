@@ -8,6 +8,7 @@ import pytest
 
 from clothdojo.rollout.collection import (
     _policy_endpoints_for_workers,
+    _policy_seed_for_batch,
     _select_assets,
     _validate_policy_identities,
     load_rollout_collection,
@@ -137,3 +138,49 @@ def test_rtc_rollout_requires_matching_server_execution_horizon() -> None:
     assert _validate_policy_identities((identity,), execution="rtc", exec_horizon=10) is identity
     with pytest.raises(ValueError, match="execution horizon differs"):
         _validate_policy_identities((identity,), execution="rtc", exec_horizon=5)
+
+
+def test_rtc_rollout_accepts_capable_openpi_server() -> None:
+    identity = {
+        "backend": "openpi",
+        "rtc_guidance": {"execution_horizon": 10},
+    }
+
+    assert _validate_policy_identities((identity,), execution="rtc", exec_horizon=10) is identity
+
+
+def test_rtc_rollout_rejects_openpi_without_rtc_capability() -> None:
+    with pytest.raises(ValueError, match="RTC-capable policy server"):
+        _validate_policy_identities(
+            ({"backend": "openpi"},),
+            execution="rtc",
+            exec_horizon=10,
+        )
+
+
+def test_parallel_rollout_requires_server_batch_capability() -> None:
+    identity = {"backend": "openpi", "batched_inference": True}
+
+    assert (
+        _validate_policy_identities(
+            (identity,),
+            execution="chunk",
+            exec_horizon=10,
+            worlds_per_batch=8,
+        )
+        is identity
+    )
+    with pytest.raises(ValueError, match="batched-inference"):
+        _validate_policy_identities(
+            ({"backend": "openpi"},),
+            execution="chunk",
+            exec_horizon=10,
+            worlds_per_batch=2,
+        )
+
+
+def test_policy_batch_seed_is_stable_and_preserves_single_world_seed() -> None:
+    assert _policy_seed_for_batch(np.asarray([17], dtype=np.int32)) == 17
+    first = _policy_seed_for_batch(np.asarray([17, 23, 41], dtype=np.int32))
+    assert first == _policy_seed_for_batch(np.asarray([17, 23, 41], dtype=np.int32))
+    assert first != _policy_seed_for_batch(np.asarray([41, 23, 17], dtype=np.int32))

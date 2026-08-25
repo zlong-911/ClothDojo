@@ -696,23 +696,21 @@ def generate_initial_states(
         )
         runtime.restore_particles(q, np.zeros_like(q))
         static_patch.configure(patches, runtime.state_0.particle_q)
-        cloth_step_graph = _advance_cloth(
-            runtime,
+        cloth_step_graph = runtime.advance_cloth(
             round(INITIALIZATION_HOLD_SECONDS * spec.control_fps),
-            cloth_step_graph,
-            static_patch,
+            graph=cloth_step_graph,
+            static_patch=static_patch,
         )
         static_patch.disable()
         runtime.cloth.rebuild_bvh(runtime.state_0)
-        cloth_step_graph = _advance_cloth(
-            runtime,
+        cloth_step_graph = runtime.advance_cloth(
             round(drop_seconds * spec.control_fps),
-            cloth_step_graph,
-            static_patch,
+            graph=cloth_step_graph,
+            static_patch=static_patch,
         )
 
         final_q, final_qd = _capture_particles(runtime, ranges)
-        table_contacts, robot_contacts = _cloth_contact_counts(runtime)
+        table_contacts, robot_contacts = runtime.cloth_contact_counts()
         validation = validate_initial_states(
             final_q,
             final_qd,
@@ -816,27 +814,6 @@ def _hang_candidates(runtime, ranges, seeds, *, table_top: float):
     return np.ascontiguousarray(np.stack(q), dtype=np.float32), patches, attachments
 
 
-def _cloth_contact_counts(runtime) -> tuple[np.ndarray, np.ndarray]:
-    runtime.collision.collide(runtime.state_0, runtime.contacts)
-    count = int(runtime.contacts.soft_contact_count.numpy()[0])
-    count = min(count, len(runtime.contacts.soft_contact_particle))
-    particles = runtime.contacts.soft_contact_particle.numpy()[:count]
-    shapes = runtime.contacts.soft_contact_shape.numpy()[:count]
-    shape_bodies = runtime.model.shape_body.numpy()
-    particle_world = runtime.model.particle_world.numpy()
-    table = np.zeros(runtime.model.world_count, dtype=np.int32)
-    robot = np.zeros(runtime.model.world_count, dtype=np.int32)
-    for particle, shape in zip(particles, shapes, strict=True):
-        particle = int(particle)
-        shape = int(shape)
-        if particle < 0 or shape < 0:
-            continue
-        world = int(particle_world[particle])
-        target = table if int(shape_bodies[shape]) < 0 else robot
-        target[world] += 1
-    return table, robot
-
-
 def _haar_rotation(generator: np.random.Generator) -> np.ndarray:
     quaternion = generator.normal(size=4)
     quaternion /= np.linalg.norm(quaternion)
@@ -858,33 +835,6 @@ def _capture_particles(runtime, ranges):
         np.ascontiguousarray(np.stack([q[start:end] for start, end in ranges]), dtype=np.float32),
         np.ascontiguousarray(np.stack([qd[start:end] for start, end in ranges]), dtype=np.float32),
     )
-
-
-def _advance_cloth(runtime, steps: int, graph, static_patch):
-    import warp as wp
-
-    if steps < 1:
-        return graph
-    return _advance_with_graph(runtime, steps, graph, static_patch, wp)
-
-
-def _advance_with_graph(runtime, steps: int, graph, static_patch, wp):
-    if steps < 1:
-        return graph
-    if graph is None:
-        # Compile every lazy kernel once before capture. The captured control
-        # step has an even number of state swaps, so it retains the same bound
-        # state arrays on every replay.
-        runtime.step_cloth(static_patch=static_patch)
-        steps -= 1
-        if steps:
-            with wp.ScopedCapture(device=runtime.model.device) as capture:
-                runtime.step_cloth(static_patch=static_patch)
-            graph = capture.graph
-            steps -= 1
-    for _ in range(steps):
-        wp.capture_launch(graph)
-    return graph
 
 
 def _unique_seeds(generator, count: int, excluded: set[int]) -> np.ndarray:

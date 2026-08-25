@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-import multiprocessing as mp
 import os
-import queue
 import shutil
 import uuid
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 from clothdojo.rollout.initial_states import (
     InitialStatePool,
@@ -21,6 +21,14 @@ from clothdojo.rollout.initial_states import (
 from clothdojo.rollout.policy import RemoteSFTPolicy
 from clothdojo.rollout.render import CAMERA_NAMES
 from clothdojo.rollout.scenario import load_rollout_scenario
+from clothdojo.rollout.scheduling import (
+    policy_endpoints_for_workers as _policy_endpoints_for_workers,
+)
+from clothdojo.rollout.scheduling import run_policy_asset_workers
+from clothdojo.rollout.scheduling import select_assets as _select_assets
+from clothdojo.rollout.scheduling import (
+    validate_policy_identities as _validate_policy_identities,
+)
 from clothdojo.trajectory import TrajectoryReader
 
 ROLLOUT_COLLECTION_SCHEMA = "clothdojo_rollout"
@@ -83,6 +91,7 @@ def run_rollout_collection(
     unseen_assets: int | None = None,
     execution: str = "chunk",
     exec_horizon: int = 10,
+    batch_size: int = 4,
 ) -> dict[str, Any]:
     """Run every selected asset on a dynamic local GPU worker queue."""
 
@@ -92,6 +101,8 @@ def run_rollout_collection(
         raise ValueError("at least one simulation GPU is required")
     if execution not in {"chunk", "rtc"}:
         raise ValueError("execution must be 'chunk' or 'rtc'")
+    if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
+        raise ValueError("batch_size must be a positive integer")
     scenario = load_rollout_scenario(scenario_path)
     if not 1 <= exec_horizon <= scenario.action_horizon:
         raise ValueError("exec_horizon must be in [1, action_horizon]")
@@ -136,6 +147,7 @@ def run_rollout_collection(
         identities,
         execution=execution,
         exec_horizon=exec_horizon,
+        worlds_per_batch=batch_size,
     )
 
     requested = {
@@ -154,6 +166,12 @@ def run_rollout_collection(
             "asset_ids": [item["asset_id"] for item in selected_assets],
         },
         "execution": _execution_settings(execution, exec_horizon),
+        "parallelism": {
+            "worlds_per_batch": batch_size,
+            "simulation": "newton-worlds",
+            "rendering": "sensor-tiled-camera",
+            "policy": "single-batch-request",
+        },
         "expected_trajectories": expected,
     }
     meta_path = destination / "meta.json"
@@ -192,6 +210,7 @@ def run_rollout_collection(
             output=destination,
             execution=execution,
             exec_horizon=exec_horizon,
+            batch_size=batch_size,
         )
         trajectories = _collect_trajectories(destination, asset_jobs)
     except Exception as exc:
@@ -208,71 +227,6 @@ def run_rollout_collection(
     return _rollout_summary(destination, meta, gpus)
 
 
-def _select_assets(
-    assets: list[dict[str, Any]],
-    *,
-    seen_assets: int | None,
-    unseen_assets: int | None,
-) -> list[dict[str, Any]]:
-    if (seen_assets is None) != (unseen_assets is None):
-        raise ValueError("seen_assets and unseen_assets must be provided together")
-    if seen_assets is None:
-        return list(assets)
-
-    counts = {"seen": seen_assets, "unseen": unseen_assets}
-    for split, count in counts.items():
-        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
-            raise ValueError(f"{split}_assets must be a non-negative integer")
-    if seen_assets + unseen_assets < 1:
-        raise ValueError("at least one rollout asset must be selected")
-
-    selected = []
-    for split, count in counts.items():
-        candidates = [item for item in assets if item.get("split") == split]
-        if count > len(candidates):
-            raise ValueError(
-                f"requested {count} {split} assets, but the state pool contains {len(candidates)}"
-            )
-        selected.extend(candidates[:count])
-    return selected
-
-
-def _policy_endpoints_for_workers(
-    policy_endpoints: tuple[str, ...], worker_count: int
-) -> tuple[str, ...]:
-    if worker_count < 1:
-        raise ValueError("rollout requires at least one active worker")
-    if len(policy_endpoints) < worker_count:
-        raise ValueError(
-            "reproducible multi-GPU rollout requires one unique policy endpoint "
-            f"per active worker: workers={worker_count}, endpoints={len(policy_endpoints)}"
-        )
-    active = policy_endpoints[:worker_count]
-    if len(set(active)) != len(active):
-        raise ValueError("each active rollout worker requires a unique policy endpoint")
-    return active
-
-
-def _validate_policy_identities(
-    identities: tuple[dict[str, Any], ...], *, execution: str, exec_horizon: int
-) -> dict[str, Any]:
-    if not identities:
-        raise ValueError("rollout requires at least one policy identity")
-    first = identities[0]
-    if any(identity != first for identity in identities[1:]):
-        raise ValueError("policy endpoints do not serve the same checkpoint and configuration")
-    if execution == "rtc":
-        if first.get("backend") != "rlinf-sft":
-            raise ValueError("RTC rollout requires an RLINF SFT policy server")
-        server_horizon = first.get("rtc_guidance", {}).get("execution_horizon")
-        if server_horizon != exec_horizon:
-            raise ValueError(
-                "RTC execution horizon differs between rollout and policy server: "
-                f"{exec_horizon} != {server_horizon}"
-            )
-    return first
-
-
 def _run_rollout_workers(
     jobs: list[dict[str, Any]],
     *,
@@ -284,60 +238,25 @@ def _run_rollout_workers(
     output: Path,
     execution: str,
     exec_horizon: int,
+    batch_size: int,
 ) -> None:
-    context = mp.get_context("spawn")
-    job_queue = context.Queue()
-    result_queue = context.Queue()
-    for job in jobs:
-        job_queue.put(job)
     worker_count = min(len(gpus), len(jobs))
-    for _ in range(worker_count):
-        job_queue.put(None)
-    workers = []
-    for index, gpu in enumerate(gpus[:worker_count]):
-        endpoint = policy_endpoints[index]
-        worker = context.Process(
-            target=_rollout_worker,
-            args=(
-                job_queue,
-                result_queue,
-                gpu,
-                endpoint,
-                expected_checkpoint_sha256,
-                str(scenario_path),
-                str(assets_root),
-                str(output),
-                execution,
-                exec_horizon,
-            ),
-            name=f"clothdojo-rollout-gpu-{gpu}",
-        )
-        workers.append(worker)
-    for worker in workers:
-        worker.start()
-    completed = 0
-    try:
-        while completed < len(jobs):
-            try:
-                result = result_queue.get(timeout=1.0)
-            except queue.Empty:
-                failures = [worker for worker in workers if worker.exitcode not in (None, 0)]
-                if failures:
-                    raise RuntimeError(
-                        f"rollout worker exited with code {failures[0].exitcode}"
-                    ) from None
-                continue
-            if result["status"] == "error":
-                raise RuntimeError(
-                    f"rollout failed for {result['asset_id']} on GPU {result['gpu']}: "
-                    f"{result['error']}"
-                )
-            completed += 1
-    finally:
-        for worker in workers:
-            if worker.is_alive() and completed < len(jobs):
-                worker.terminate()
-            worker.join()
+    run_policy_asset_workers(
+        jobs,
+        gpus=gpus[:worker_count],
+        policy_endpoints=policy_endpoints,
+        worker_target=_rollout_worker,
+        common_args=(
+            expected_checkpoint_sha256,
+            str(scenario_path),
+            str(assets_root),
+            str(output),
+            execution,
+            exec_horizon,
+            batch_size,
+        ),
+        process_kind="rollout",
+    )
 
 
 def _rollout_worker(
@@ -351,6 +270,7 @@ def _rollout_worker(
     output: str,
     execution: str,
     exec_horizon: int,
+    batch_size: int,
 ) -> None:
     if gpu != "cpu":
         os.environ["CUDA_VISIBLE_DEVICES"] = gpu
@@ -370,6 +290,7 @@ def _rollout_worker(
                 device=device,
                 execution=execution,
                 exec_horizon=exec_horizon,
+                batch_size=batch_size,
             )
         except Exception as exc:
             result_queue.put(
@@ -395,16 +316,16 @@ def _run_asset_rollouts(
     device: str,
     execution: str,
     exec_horizon: int,
+    batch_size: int,
 ) -> None:
     from clothdojo.assets import GarmentLibrary
-    from clothdojo.rollout.engine import run_chunk_episode, run_rtc_episode
+    from clothdojo.rollout.engine import run_episode
     from clothdojo.rollout.newton import NewtonTrajectoryEpisode
     from clothdojo.rollout.render import ShirtFlattenCameraObservation
     from clothdojo.sim.runtime import ShirtFlattenRuntime
     from clothdojo.sim.scene import (
         ShirtFlattenSpec,
         build_shirt_flatten,
-        build_shirt_flatten_render_scene,
     )
 
     asset_id = job["asset_id"]
@@ -419,8 +340,9 @@ def _run_asset_rollouts(
         expected_checkpoint_sha256=expected_checkpoint_sha256,
         action_horizon=scenario.action_horizon,
     )
-    spec = ShirtFlattenSpec(garment_id=asset_id, world_count=1)
-    scene = build_shirt_flatten(assets, spec=spec, device=device)
+    world_count = min(batch_size, job["state_count"])
+    spec = ShirtFlattenSpec(garment_id=asset_id, world_count=world_count)
+    scene = build_shirt_flatten(assets, spec=spec, device=device, visuals=True)
     runtime = ShirtFlattenRuntime(scene)
     validate_pool_compatibility(
         pool,
@@ -428,71 +350,116 @@ def _run_asset_rollouts(
         particle_count=runtime.grasp.particle_ranges()[0][1]
         - runtime.grasp.particle_ranges()[0][0],
     )
-    render_scene = build_shirt_flatten_render_scene(assets, spec=spec, device=device)
-    camera = ShirtFlattenCameraObservation(scene, render_scene)
-    for index in range(job["state_count"]):
-        name = f"{asset_id}_{index:06d}"
-        target = trajectories_root / name
-        if target.is_dir():
-            _validate_existing_trajectory(
-                target,
-                asset_id=asset_id,
-                initial_state_index=index,
-                pool_sha256=job["pool_sha256"],
-                checkpoint_sha256=policy.identity["checkpoint_sha256"],
-            )
+    camera = ShirtFlattenCameraObservation(scene)
+    for batch_start in range(0, job["state_count"], world_count):
+        active_indices = list(
+            range(batch_start, min(batch_start + world_count, job["state_count"]))
+        )
+        world_indices = active_indices + [active_indices[-1]] * (
+            world_count - len(active_indices)
+        )
+        targets = [
+            trajectories_root / f"{asset_id}_{index:06d}" for index in active_indices
+        ]
+        missing = []
+        for index, target in zip(active_indices, targets, strict=True):
+            if target.is_dir():
+                _validate_existing_trajectory(
+                    target,
+                    asset_id=asset_id,
+                    initial_state_index=index,
+                    pool_sha256=job["pool_sha256"],
+                    checkpoint_sha256=policy.identity["checkpoint_sha256"],
+                )
+            else:
+                missing.append(index)
+        if not missing:
             continue
-        staging = trajectories_root / f".{name}.{uuid.uuid4().hex}.tmp"
+
+        staging_by_index = {
+            index: trajectories_root
+            / f".{asset_id}_{index:06d}.{uuid.uuid4().hex}.tmp"
+            for index in missing
+        }
+        policy_seed = _policy_seed_for_batch(
+            np.asarray(pool.seeds[world_indices], dtype=np.int32)
+        )
         runtime.reset()
         runtime.restore_particles(
-            pool.particle_q[index : index + 1],
-            pool.particle_qd[index : index + 1],
+            np.ascontiguousarray(pool.particle_q[world_indices]),
+            np.ascontiguousarray(pool.particle_qd[world_indices]),
         )
-        episode_scenario = replace(scenario, seed=int(pool.seeds[index]))
+        episode_scenarios = tuple(
+            replace(scenario, seed=int(pool.seeds[index])) for index in world_indices
+        )
+        outputs = tuple(
+            staging_by_index.get(index) if world < len(active_indices) else None
+            for world, index in enumerate(world_indices)
+        )
+        metadata = tuple(
+            {
+                "producer": "clothdojo_rollout",
+                "asset_id": asset_id,
+                "policy_kind": policy.identity["backend"],
+                "policy": policy.identity,
+                "cloth_visual": "nocs",
+                "execution": _execution_settings(execution, exec_horizon),
+                "parallelism": {
+                    "worlds": world_count,
+                    "active_worlds": len(active_indices),
+                    "batch_start": batch_start,
+                    "policy_seed": policy_seed,
+                },
+                "initial_state": {
+                    "pool_sha256": job["pool_sha256"],
+                    "index": index,
+                    "seed": int(pool.seeds[index]),
+                },
+                "training_eligible": True,
+            }
+            for index in world_indices
+        )
         try:
             with NewtonTrajectoryEpisode(
                 runtime,
-                staging,
-                episode_scenario,
+                outputs,
+                episode_scenarios,
                 assets_root=assets,
                 observation_provider=camera,
-                trajectory_metadata={
-                    "producer": "clothdojo_rollout",
-                    "asset_id": asset_id,
-                    "policy_kind": policy.identity["backend"],
-                    "policy": policy.identity,
-                    "cloth_visual": "nocs",
-                    "execution": _execution_settings(execution, exec_horizon),
-                    "initial_state": {
-                        "pool_sha256": job["pool_sha256"],
-                        "index": index,
-                        "seed": int(pool.seeds[index]),
-                    },
-                    "training_eligible": True,
-                },
+                trajectory_metadata=metadata,
             ) as episode:
-                report = (
-                    run_chunk_episode(
-                        episode,
-                        policy,
-                        episode_scenario,
-                        exec_horizon=exec_horizon,
-                    )
-                    if execution == "chunk"
-                    else run_rtc_episode(
-                        episode,
-                        policy,
-                        episode_scenario,
-                        exec_horizon=exec_horizon,
-                    )
+                report = run_episode(
+                    episode,
+                    policy,
+                    scenario,
+                    mode=execution,
+                    exec_horizon=exec_horizon,
+                    policy_seed=policy_seed,
                 )
-            manifest_path = staging / "manifest.json"
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            manifest["metadata"]["execution_report"] = report.to_json_dict()
-            _atomic_write_json(manifest_path, manifest)
-            os.replace(staging, target)
+            for index, target in zip(active_indices, targets, strict=True):
+                staging = staging_by_index.get(index)
+                if staging is None:
+                    continue
+                manifest_path = staging / "manifest.json"
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest["metadata"]["execution_report"] = report.to_json_dict()
+                _atomic_write_json(manifest_path, manifest)
+                os.replace(staging, target)
         finally:
-            shutil.rmtree(staging, ignore_errors=True)
+            for staging in staging_by_index.values():
+                shutil.rmtree(staging, ignore_errors=True)
+
+
+def _policy_seed_for_batch(seeds: np.ndarray) -> int:
+    """Derive one stable Torch seed without making results depend on Python hashing."""
+
+    values = np.asarray(seeds, dtype=np.int32)
+    if values.ndim != 1 or not len(values) or np.any(values < 0):
+        raise ValueError("batch seeds must be a non-empty non-negative int32 vector")
+    if len(values) == 1:
+        return int(values[0])
+    digest = hashlib.sha256(values.astype("<i4", copy=False).tobytes()).digest()
+    return int.from_bytes(digest[:8], "little") & ((1 << 63) - 1)
 
 
 def _validate_existing_trajectory(
