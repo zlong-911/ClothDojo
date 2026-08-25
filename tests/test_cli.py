@@ -69,6 +69,32 @@ def test_cli_import_does_not_load_heavy_runtime_dependencies() -> None:
     subprocess.run([sys.executable, "-c", script], check=True)
 
 
+def test_jax_sft_check_uses_separate_backend(monkeypatch, capsys) -> None:
+    spec = object()
+    monkeypatch.setattr(
+        "clothdojo.training.jax_sft.compose_jax_sft_spec",
+        lambda path, overrides: spec,
+    )
+    monkeypatch.setattr(
+        "clothdojo.training.jax_sft.inspect_jax_sft",
+        lambda value: {"compatible": value is spec},
+    )
+
+    cli.main(["train", "pi05-jax", "--config", "jax.yaml", "--check"])
+
+    assert json.loads(capsys.readouterr().out) == {"compatible": True}
+
+
+def test_jax_sft_run_requires_explicit_gate(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "clothdojo.training.jax_sft.compose_jax_sft_spec",
+        lambda path, overrides: object(),
+    )
+
+    with pytest.raises(SystemExit, match="2"):
+        cli.main(["train", "pi05-jax", "--config", "jax.yaml"])
+
+
 def test_simulation_check_calls_acceptance_entry(monkeypatch, capsys) -> None:
     call = {}
     monkeypatch.setattr(
@@ -164,6 +190,8 @@ def test_rollout_run_calls_collection_workflow(monkeypatch, capsys) -> None:
             "/data/assets",
             "--gpus",
             "3,4",
+            "--batch-size",
+            "8",
             "--limit-per-asset",
             "2",
             "--seen-assets",
@@ -188,6 +216,7 @@ def test_rollout_run_calls_collection_workflow(monkeypatch, capsys) -> None:
             "expected_checkpoint_sha256": "ab" * 32,
             "assets_root": "/data/assets",
             "gpus": ("3", "4"),
+            "batch_size": 8,
             "limit_per_asset": 2,
             "seen_assets": 5,
             "unseen_assets": 5,

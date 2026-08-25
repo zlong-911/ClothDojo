@@ -26,6 +26,68 @@ def main(argv: Sequence[str] | None = None) -> None:
             raise SystemExit(1)
         return
     if args.command == "train":
+        if args.advantages_config is not None and args.training_kind != "cfg":
+            parser.error("--advantages-config is only valid for CFG training")
+        if args.training_kind == "cfg" and args.advantages_config is not None:
+            if args.gate is not None:
+                parser.error("--gate is only valid for pi05-jax training")
+            from clothdojo.training.cfg_pipeline import (
+                inspect_cfg_pipeline,
+                run_cfg_pipeline,
+            )
+
+            result = (
+                inspect_cfg_pipeline(
+                    advantage_config=args.advantages_config,
+                    cfg_config=args.config,
+                    cfg_overrides=passthrough,
+                )
+                if args.check
+                else run_cfg_pipeline(
+                    advantage_config=args.advantages_config,
+                    cfg_config=args.config,
+                    cfg_overrides=passthrough,
+                )
+            )
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return
+        if args.training_kind == "pi05-jax-matrix":
+            if passthrough:
+                parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+            if args.gate is not None:
+                parser.error("pi05-jax-matrix does not accept --gate")
+            from clothdojo.training.matrix import (
+                compose_jax_sft_matrix,
+                inspect_jax_sft_matrix,
+                run_jax_sft_matrix,
+            )
+
+            matrix = compose_jax_sft_matrix(args.config)
+            result = (
+                inspect_jax_sft_matrix(matrix, inspect_artifacts=True)
+                if args.check
+                else run_jax_sft_matrix(matrix)
+            )
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return
+        if args.training_kind == "pi05-jax":
+            from clothdojo.training.jax_sft import (
+                compose_jax_sft_spec,
+                inspect_jax_sft,
+                run_jax_sft,
+            )
+
+            spec = compose_jax_sft_spec(args.config, passthrough)
+            if args.check:
+                print(json.dumps(inspect_jax_sft(spec), indent=2, sort_keys=True))
+                return
+            if args.gate is None:
+                parser.error("pi05-jax training requires --gate")
+            result = run_jax_sft(spec, args.gate)
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return
+        if args.gate is not None:
+            parser.error("--gate is only valid for pi05-jax training")
         if args.check:
             from clothdojo.training.rlinf import check as check_rlinf_training
 
@@ -181,6 +243,19 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
         print(json.dumps(result.to_json_dict(), indent=2, sort_keys=True))
         return
+    if args.command == "data" and args.data_command == "migrate-v3-indexed-view":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.data.v3_indexed_view import (
+            compose_indexed_view_spec,
+            inspect_indexed_view,
+            publish_indexed_view,
+        )
+
+        spec = compose_indexed_view_spec(args.config)
+        result = inspect_indexed_view(spec) if args.check else publish_indexed_view(spec)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return
     if args.command == "data" and args.data_command == "compute-norm-stats":
         if passthrough:
             parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
@@ -206,6 +281,71 @@ def main(argv: Sequence[str] | None = None) -> None:
         from clothdojo.collection.web import serve
 
         serve(args.config)
+        return
+    if args.command == "benchmark" and args.benchmark_command == "check-protocol":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.evaluation.protocol import load_evaluation_protocol
+
+        protocol = load_evaluation_protocol(args.protocol)
+        result = protocol.to_json_dict()
+        result.update(
+            {
+                "fingerprint": protocol.fingerprint,
+                "horizon_steps": protocol.horizon_steps,
+                "metric_stride": protocol.metric_stride,
+                "stable_samples": protocol.stable_samples,
+            }
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return
+    if args.command == "benchmark" and args.benchmark_command == "run":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.evaluation.collection import run_evaluation_condition
+
+        result = run_evaluation_condition(
+            args.scenario,
+            args.protocol,
+            args.states,
+            args.templates,
+            _comma_separated(args.policy, "policy"),
+            args.output,
+            condition_id=args.condition_id,
+            expected_checkpoint_sha256=args.expected_checkpoint_sha256,
+            assets_root=args.assets,
+            gpus=_comma_separated(args.gpus, "gpus"),
+            limit_per_asset=args.limit_per_asset,
+            seen_assets=args.seen_assets,
+            unseen_assets=args.unseen_assets,
+            execution=args.execution,
+            exec_horizon=args.exec_horizon,
+            batch_size=args.batch_size,
+            replicates=args.replicates,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return
+    if args.command == "benchmark" and args.benchmark_command == "make-templates":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.evaluation.templates import generate_template_collection
+
+        result = generate_template_collection(
+            args.states,
+            args.protocol,
+            args.output,
+            assets_root=args.assets,
+            gpus=_comma_separated(args.gpus, "gpus"),
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return
+    if args.command == "benchmark" and args.benchmark_command == "summarize":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.evaluation.results import summarize_paired_conditions
+
+        result = summarize_paired_conditions(args.condition)
+        print(json.dumps(result, indent=2, sort_keys=True))
         return
     if passthrough:
         parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
@@ -243,6 +383,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             unseen_assets=args.unseen_assets,
             execution=args.execution,
             exec_horizon=args.exec_horizon,
+            batch_size=args.batch_size,
         )
         print(json.dumps(report, indent=2, sort_keys=True))
         return
@@ -326,6 +467,12 @@ def _parser() -> argparse.ArgumentParser:
     run_rollout.add_argument("--output", required=True)
     run_rollout.add_argument("--assets", default="assets")
     run_rollout.add_argument("--gpus", default="0", help="comma-separated simulation GPU ids")
+    run_rollout.add_argument(
+        "--batch-size",
+        type=int,
+        default=4,
+        help="Newton worlds rendered and inferred together per GPU (default: 4)",
+    )
     run_rollout.add_argument("--limit-per-asset", type=int)
     run_rollout.add_argument("--seen-assets", type=int)
     run_rollout.add_argument("--unseen-assets", type=int)
@@ -369,13 +516,77 @@ def _parser() -> argparse.ArgumentParser:
     serve_sft.add_argument("--host", default="127.0.0.1")
     serve_sft.add_argument("--port", type=int, default=8080)
 
-    train = commands.add_parser("train", help="run a ClothDojo config through RLINF")
-    train.add_argument("training_kind", choices=("pi05", "steam", "cfg"))
+    benchmark = commands.add_parser(
+        "benchmark", help="validate protocols and summarize paired evaluations"
+    )
+    benchmark_commands = benchmark.add_subparsers(dest="benchmark_command")
+    benchmark_check = benchmark_commands.add_parser(
+        "check-protocol", help="validate and fingerprint one evaluation protocol"
+    )
+    benchmark_check.add_argument("--protocol", required=True)
+    benchmark_template = benchmark_commands.add_parser(
+        "make-templates",
+        help="free-settle one canonical target for every initial-state asset",
+    )
+    benchmark_template.add_argument("--states", required=True)
+    benchmark_template.add_argument("--protocol", required=True)
+    benchmark_template.add_argument("--output", required=True)
+    benchmark_template.add_argument("--assets", default="assets")
+    benchmark_template.add_argument("--gpus", default="0")
+    benchmark_run = benchmark_commands.add_parser(
+        "run", help="evaluate one checkpoint/execution condition"
+    )
+    benchmark_run.add_argument("--condition-id", required=True)
+    benchmark_run.add_argument("--scenario", required=True)
+    benchmark_run.add_argument("--protocol", required=True)
+    benchmark_run.add_argument("--states", required=True)
+    benchmark_run.add_argument("--templates", required=True)
+    benchmark_run.add_argument(
+        "--policy",
+        default="ws://127.0.0.1:8080",
+        help="one endpoint or a comma-separated endpoint pool",
+    )
+    benchmark_run.add_argument("--expected-checkpoint-sha256")
+    benchmark_run.add_argument("--output", required=True)
+    benchmark_run.add_argument("--assets", default="assets")
+    benchmark_run.add_argument("--gpus", default="0")
+    benchmark_run.add_argument("--batch-size", type=int, default=4)
+    benchmark_run.add_argument("--replicates", type=int, default=1)
+    benchmark_run.add_argument("--limit-per-asset", type=int)
+    benchmark_run.add_argument("--seen-assets", type=int)
+    benchmark_run.add_argument("--unseen-assets", type=int)
+    benchmark_run.add_argument(
+        "--execution", choices=("chunk", "rtc"), default="chunk"
+    )
+    benchmark_run.add_argument("--exec-horizon", type=int, default=10)
+    benchmark_summary = benchmark_commands.add_parser(
+        "summarize", help="compare completed conditions over identical cases"
+    )
+    benchmark_summary.add_argument(
+        "--condition",
+        action="append",
+        required=True,
+        help="completed condition directory; repeat in baseline-first order",
+    )
+
+    train = commands.add_parser("train", help="run a guarded ClothDojo training workflow")
+    train.add_argument(
+        "training_kind", choices=("pi05-jax", "pi05-jax-matrix", "pi05", "steam", "cfg")
+    )
     train.add_argument("--config", required=True, help="path to the root Hydra YAML config")
     train.add_argument(
         "--check",
         action="store_true",
         help="compose and validate the config without launching workers",
+    )
+    train.add_argument(
+        "--gate",
+        choices=("initialize", "overfit", "pilot", "parity", "full"),
+        help="guarded OpenPI/JAX stage; full requires all four acceptance gates",
+    )
+    train.add_argument(
+        "--advantages-config",
+        help="project-owned STEAM labeling config to run before CFG",
     )
 
     data = commands.add_parser("data", help="inspect and export offline datasets")
@@ -422,6 +633,12 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="migrate only canonical trajectories and annotations",
     )
+    indexed_view = data_commands.add_parser(
+        "migrate-v3-indexed-view",
+        help="publish immutable v3 media as a project-owned LeRobot v2.1 indexed view",
+    )
+    indexed_view.add_argument("--config", required=True)
+    indexed_view.add_argument("--check", action="store_true")
     norm_stats = data_commands.add_parser(
         "compute-norm-stats",
         help="compute OpenPI stats using the ALOHA transforms used by training",
