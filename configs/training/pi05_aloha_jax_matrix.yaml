@@ -1,0 +1,44 @@
+schema: clothdojo_pi05_jax_matrix
+format_version: 1
+name: pi05_aloha_reviewed_good_lr_matrix_20260825
+base_config: pi05_aloha_jax.yaml
+status_dir: ${oc.env:CLOTHDOJO_JAX_MATRIX_DIR}
+continue_on_error: true
+
+# Every trial starts from the exact same released Pi0.5 base, reviewed-good v2
+# dataset, normalization statistics and seed. The first two isolate LR scale;
+# the third preserves the same total samples, warmup samples, logging samples
+# and checkpoint samples while testing a larger global batch.
+stages: [initialize, overfit, pilot, parity, full]
+trials:
+  - name: decay40k_lr1x
+    overrides:
+      - experiment.profile=decay_40k_lr_1x
+      - optimizer.decay_steps=40000
+      - gates.pilot_steps=3000
+      - logging.run_name=shirt_flatten_reviewed_good_pi05_jax_decay40k_lr1x
+      - logging.wandb_group=pi05_sft_lr_matrix
+
+  - name: decay40k_lr2x
+    overrides:
+      - experiment.profile=decay_40k_lr_2x
+      - optimizer.peak_lr=5.0e-5
+      - optimizer.decay_steps=40000
+      - optimizer.decay_lr=5.0e-6
+      - gates.pilot_steps=3000
+      - logging.run_name=shirt_flatten_reviewed_good_pi05_jax_decay40k_lr2x
+      - logging.wandb_group=pi05_sft_lr_matrix
+
+  - name: batch128_sample_equivalent
+    overrides:
+      - experiment.profile=batch_128_sample_equivalent
+      - training.batch_size=128
+      - training.num_train_steps=20000
+      - training.log_interval=50
+      - training.save_interval=5000
+      - training.keep_period=5000
+      - optimizer.warmup_steps=500
+      - optimizer.decay_steps=20000
+      - gates.pilot_steps=3000
+      - logging.run_name=shirt_flatten_reviewed_good_pi05_jax_batch128_sample_equiv
+      - logging.wandb_group=pi05_sft_lr_matrix
