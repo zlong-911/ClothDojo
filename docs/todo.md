@@ -78,6 +78,19 @@ publishing the first benchmark, decide whether immutability alone is sufficient
 or whether trajectory manifests should record the converted file hash. Do not add
 an asset-set or revision system before that concrete need exists.
 
+## Benchmark protocol calibration
+
+`configs/evaluation/shirt_flatten.yaml` is intentionally marked
+`stage: calibration`. Canonical targets are now generated independently for the
+full seen/unseen asset set by deterministic default-pose free settling; they do
+not depend on trajectories or candidate checkpoints. Before changing the
+protocol to `frozen`, use human/reference rollouts—not candidate checkpoints—to
+select the deformable threshold, cloth speed threshold, dwell window and hard
+horizon. Run sensitivity tables around each chosen value and verify that timeout
+failures are not dominated by a single garment topology. Once any candidate
+checkpoint has been scored, do not tune the protocol on that result; publish a
+new protocol ID for every later change.
+
 ## OpenPI OpenCV package ownership
 
 The released `rlinf-openpi` dependency chain requires `opencv-python`, while
@@ -88,3 +101,20 @@ The distributions still overlap file ownership. Before relying on OpenCV in a
 long-lived service environment, request that upstream OpenPI and LeRobot agree
 on one distribution and then remove the redundant package; do not solve this
 with a local shim package or fork.
+
+## RLINF FSDP tied-weight export
+
+The current Pi0.5 10k and 20k FSDP full-state checkpoints store the logically
+shared PaliGemma token embedding and language head as independent tensors. At
+20k, 4,965 of 526,647,296 BF16 elements differ, with a maximum absolute
+difference of 0.007171630859375. The legacy RLINF loader silently lets the
+later language-head key win. ClothDojo's serving boundary now records the
+divergence, canonicalizes both aliases to that same legacy value, and performs
+a strict final load.
+
+Before the next Pi0.5 SFT run, reproduce this with a minimal pinned-RLINF FSDP
+save/load test. PyTorch documents only limited shared-parameter support and
+requires shared parameters to remain in one FSDP instance. Verify the actual
+wrap tree and compare `use_orig_params=false` with `true`; change the training
+configuration or report an upstream issue only when that experiment proves
+which layer breaks the alias.

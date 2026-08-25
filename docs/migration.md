@@ -47,6 +47,10 @@ implementation that satisfies a migrated acceptance test.
 - [x] Reviewed `000004` trajectories and v3 review exports resynchronized;
   bad-complement planning, v3 read-only adaptation, pinned LeRobot v2.1 writing,
   explicit episode extent metadata and atomic publication implemented.
+- [x] CFG's accepted 375-episode expert set and 264-episode rollout pool cross
+  an atomic v3 indexed-media boundary into project-owned v2.1 datasets. Camera
+  clocks, source hashes and the 242-episode rollout train split are explicit;
+  no old-project path is needed at runtime.
 - [x] Full 1,288,298-frame reviewed LeRobot v1 export published and reloaded
   through pinned LeRobot; the active SFT run uses this immutable artifact.
 - [x] Published the v2 reviewed export with the 65-frame temporal floor: 719
@@ -123,10 +127,20 @@ implementation that satisfies a migrated acceptance test.
   delay. On the same checkpoint and initial state, guided RTC reduced command
   step p95 from 0.640 to 0.308 and state jerk p95 from 0.0171 to 0.0098 versus
   independent chunk-5, while retaining the cloth grasp for 342/400 frames.
+- [x] Benchmark evaluation is a separate no-trajectory workflow with a strict
+  protocol, asset-hashed canonical targets, device-batched deformable/rigid
+  metrics, release/speed/dwell success, compact per-asset publication and exact
+  checkpoint/mode pairing. The old evaluation launchers are evidence only;
+  their schemas and fixed asset lists were not copied.
 - [ ] Connect the newly trained accepted SFT checkpoint and publish the first
   real policy collection with `training_eligible: true`.
-- [ ] Owned STEAM value and advantage-labeling configs produce the tagged
-  metadata consumed by the CFG preflight.
+- [x] Owned STEAM advantage labeling produces atomic tagged labels and
+  provenance consumed by the CFG preflight without importing the old repo.
+- [ ] Owned STEAM value-training config reproduces the accepted evaluator.
 - [ ] π0.5 training acceptance test passed.
+- [x] Guarded OpenPI/JAX Pi0.5 SFT entry implemented with exact reviewed-v2
+  artifact checks, mandatory Orbax initialization, FP32 update/EMA validation,
+  fixed-batch overfit and shuffled pilot gates. Formal 40k acceptance remains
+  pending the parity gate and completed run.
 - [ ] STEAM acceptance test passed.
 - [ ] Benchmark generation acceptance test passed.
