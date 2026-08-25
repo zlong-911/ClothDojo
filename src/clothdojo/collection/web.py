@@ -15,22 +15,58 @@ from clothdojo.collection.review import AnnotationConflictError, ReviewCatalog
 from clothdojo.collection.supervisor import NoAvailableSlotError, TeleopSupervisor
 from clothdojo.collection.workspace import CollectionWorkspace
 
+VRDevice = Literal["pico4ultra", "quest3", "quest3s", "quest2"]
 
-def build_cloudxr_client_url(endpoint: str) -> str:
-    """Build the validated Pico 4 Ultra client URL for a teleoperation slot."""
+_VR_STREAM_BASE = {
+    "codec": "h264",
+    "immersiveMode": "vr",
+    "deviceFrameRate": "72",
+    "maxStreamingBitrateMbps": "80",
+    "perEyeWidth": "1280",
+    "perEyeHeight": "1152",
+    "enablePoseSmoothing": "true",
+    "posePredictionFactor": "1",
+    "panelHiddenAtStart": "true",
+    "cloudxrAutoRefreshMode": "any",
+}
+_VR_DEVICE_PARAMS = {
+    "pico4ultra": {
+        **_VR_STREAM_BASE,
+        "deviceProfile": "pico4ultra",
+        "enableTexSubImage2D": "false",
+        "useQuestColorWorkaround": "false",
+    },
+    "quest3": {
+        **_VR_STREAM_BASE,
+        "deviceProfile": "quest3",
+        "enableTexSubImage2D": "true",
+        "useQuestColorWorkaround": "true",
+    },
+    "quest3s": {
+        **_VR_STREAM_BASE,
+        "deviceProfile": "quest3s",
+        "enableTexSubImage2D": "true",
+        "useQuestColorWorkaround": "true",
+    },
+    "quest2": {
+        **_VR_STREAM_BASE,
+        "deviceProfile": "quest2",
+        "enableTexSubImage2D": "true",
+        "useQuestColorWorkaround": "false",
+    },
+}
+
+
+def build_cloudxr_client_url(
+    endpoint: str, device: VRDevice = "pico4ultra"
+) -> str:
+    """Build a validated device-specific CloudXR client URL."""
     host, port = endpoint.rsplit(":", 1)
     query = urlencode(
         {
             "serverIP": host,
             "port": port,
-            "codec": "h264",
-            "immersiveMode": "vr",
-            "deviceFrameRate": "72",
-            "maxStreamingBitrateMbps": "80",
-            "panelHiddenAtStart": "true",
-            "deviceProfile": "pico4ultra",
-            "useQuestColorWorkaround": "false",
-            "cloudxrAutoRefreshMode": "any",
+            **_VR_DEVICE_PARAMS[device],
         }
     )
     return f"https://{host}:{port}/client/?{query}"
@@ -353,7 +389,9 @@ def create_app(config_path: str | Path):
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/sessions/{session_id}/qr")
-    async def workspace_session_qr(session_id: str):
+    async def workspace_session_qr(
+        session_id: str, device: VRDevice = "pico4ultra"
+    ):
         try:
             import qrcode
             from qrcode.image.svg import SvgPathImage
@@ -363,7 +401,7 @@ def create_app(config_path: str | Path):
             session = supervisor.session(session_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        client_url = build_cloudxr_client_url(str(session["endpoint"]))
+        client_url = build_cloudxr_client_url(str(session["endpoint"]), device)
         image = qrcode.make(client_url, image_factory=SvgPathImage)
         return Response(content=image.to_string(), media_type="image/svg+xml")
 

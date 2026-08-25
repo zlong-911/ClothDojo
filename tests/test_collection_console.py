@@ -275,15 +275,27 @@ def test_collection_console_preserves_old_workspace_design() -> None:
     script = (static / "app.js").read_text(encoding="utf-8")
     styles = (static / "styles.css").read_text(encoding="utf-8")
 
-    for element_id in ("slots", "episodes", "hil", "assets", "qr-modal"):
+    for element_id in (
+        "slots",
+        "episodes",
+        "hil",
+        "assets",
+        "qr-modal",
+        "vr-device-select",
+    ):
         assert f'id="{element_id}"' in index
     assert "function renderSlot" in script
     assert "'<strong>${t(\"service_offline\")}</strong>'" not in script
     assert "expected_revision" in script
     assert 'deviceProfile:"pico4ultra"' in script
+    assert 'deviceProfile:"quest3"' in script
+    assert 'deviceProfile:"quest3s"' in script
+    assert 'deviceProfile:"quest2"' in script
     assert 'useQuestColorWorkaround:"false"' in script
     assert 'cloudxrAutoRefreshMode:"any"' in script
+    assert 'localStorage.setItem("clothdojo-vr-device"' in script
     assert ".runtime{" in styles
+    assert ".review-pane-actions button{flex:0 0 auto;white-space:nowrap}" in styles
 
 
 def test_cloudxr_client_url_uses_validated_pico_profile() -> None:
@@ -299,6 +311,28 @@ def test_cloudxr_client_url_uses_validated_pico_profile() -> None:
     assert query["deviceProfile"] == ["pico4ultra"]
     assert query["useQuestColorWorkaround"] == ["false"]
     assert query["cloudxrAutoRefreshMode"] == ["any"]
+
+
+@pytest.mark.parametrize(
+    ("device", "tex_sub_image", "color_workaround"),
+    [
+        ("quest3", "true", "true"),
+        ("quest3s", "true", "true"),
+        ("quest2", "true", "false"),
+    ],
+)
+def test_cloudxr_client_url_uses_selected_quest_profile(
+    device: str, tex_sub_image: str, color_workaround: str
+) -> None:
+    query = parse_qs(
+        urlparse(build_cloudxr_client_url("33.229.154.175:44401", device)).query
+    )
+
+    assert query["deviceProfile"] == [device]
+    assert query["enableTexSubImage2D"] == [tex_sub_image]
+    assert query["useQuestColorWorkaround"] == [color_workaround]
+    assert query["perEyeWidth"] == ["1280"]
+    assert query["enablePoseSmoothing"] == ["true"]
 
 
 def test_collection_frontend_and_teleop_experience_are_packaged() -> None:

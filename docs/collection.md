@@ -3,7 +3,7 @@
 ClothDojo preserves the validated teleoperation path from `newton-cloth-rl`:
 
 ```text
-Pico 4 Ultra / NVIDIA Isaac Teleop web client
+Pico 4 Ultra or Quest 2/3/3S / NVIDIA Isaac Teleop web client
   ↕ CloudXR WSS, media and OpenXR input
 Isaac Teleop + Isaac Kit RTX
   ↕ same-process render bridge
@@ -99,6 +99,11 @@ The console is one local FastAPI service and preserves the old browser
 workspace's DOM, CSS, theme, bilingual labels, keyboard review controls and
 four-panel layout. The 80 KB inline source is mechanically separated into
 HTML, CSS and JavaScript; this changes code ownership, not the design.
+
+The console exposes device-specific CloudXR client profiles for Pico 4 Ultra
+and Quest 2/3/3S in both direct links and QR codes. This is configuration
+support, not a claim of completed headset acceptance; real-device input and
+concurrent-session checks remain hardware acceptance gates.
 
 The old FastAPI/cluster implementation is not copied. A dedicated workspace
 view-model translates ClothDojo's canonical catalogs into the stable browser

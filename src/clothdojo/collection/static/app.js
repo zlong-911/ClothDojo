@@ -1,9 +1,17 @@
   const initialSessionId=new URLSearchParams(location.search).get("session");
-  const state={activePane:"task",snapshot:null,taskId:null,assetId:null,dataAsset:"all",selectedEpisode:null,logType:initialSessionId?"session":null,logId:initialSessionId,toastTimer:null,timeSort:"desc",assetPickerMode:"session",annotationIndex:null,annotationIndexTask:null,annotationSaveChain:Promise.resolve(),reviewPane:null,reviewCamera:"cam_high",reviewRate:1,markStart:null,annotation:null,lang:localStorage.getItem("clothdojo-lang")||"zh",theme:localStorage.getItem("clothdojo-theme")||"dark"};
+  const VR_STREAM_BASE={codec:"h264",immersiveMode:"vr",deviceFrameRate:"72",maxStreamingBitrateMbps:"80",perEyeWidth:"1280",perEyeHeight:"1152",enablePoseSmoothing:"true",posePredictionFactor:"1",panelHiddenAtStart:"true",cloudxrAutoRefreshMode:"any"};
+  const VR_DEVICES={
+    pico4ultra:{label:"Pico 4 Ultra",params:{...VR_STREAM_BASE,deviceProfile:"pico4ultra",enableTexSubImage2D:"false",useQuestColorWorkaround:"false"}},
+    quest3:{label:"Meta Quest 3",params:{...VR_STREAM_BASE,deviceProfile:"quest3",enableTexSubImage2D:"true",useQuestColorWorkaround:"true"}},
+    quest3s:{label:"Meta Quest 3S",params:{...VR_STREAM_BASE,deviceProfile:"quest3s",enableTexSubImage2D:"true",useQuestColorWorkaround:"true"}},
+    quest2:{label:"Meta Quest 2",params:{...VR_STREAM_BASE,deviceProfile:"quest2",enableTexSubImage2D:"true",useQuestColorWorkaround:"false"}},
+  };
+  const savedVrDevice=localStorage.getItem("clothdojo-vr-device");
+  const state={activePane:"task",snapshot:null,taskId:null,assetId:null,dataAsset:"all",selectedEpisode:null,logType:initialSessionId?"session":null,logId:initialSessionId,toastTimer:null,timeSort:"desc",assetPickerMode:"session",annotationIndex:null,annotationIndexTask:null,annotationSaveChain:Promise.resolve(),reviewPane:null,reviewCamera:"cam_high",reviewRate:1,markStart:null,annotation:null,vrDevice:VR_DEVICES[savedVrDevice]?savedVrDevice:"pico4ultra",lang:localStorage.getItem("clothdojo-lang")||"zh",theme:localStorage.getItem("clothdojo-theme")||"dark"};
   const I18N={
     zh:{
       title:"数据控制台",
-      instances:"采集实例",task:"任务",pick_asset:"选择衣服",col_instance:"实例",col_status:"状态",col_task:"任务",col_actions:"操作",
+      instances:"采集实例",vr_device:"VR 设备",task:"任务",pick_asset:"选择衣服",col_instance:"实例",col_status:"状态",col_task:"任务",col_actions:"操作",
       log:"日志",log_empty:"启动实例后显示日志",log_select:"选择工作实例后显示日志",
       task_data:"采集数据",asset_filter:"资产筛选",sort_time:"采集时间",sort_flatten:"展平时间",
       stat_count:"条数据",stat_frames:"总帧数",stat_duration:"总时长",stat_annotations:"标注",
@@ -21,7 +29,7 @@
       review_export:"审核导出",
       service_offline:"采集服务未启动",batch_done:"本批已完成 · 关闭后重新启动下一批",recording:"录制中",batch_remaining:"当前批次剩余",
       no_pending:"当前衣服没有待采展平终态",asset_prefix:"衣服",
-      qr_title:"Quest 连接",qr_alt:"Quest 连接二维码",qr_help:"首次显示 Certificate Accepted 时返回并再次扫码，然后点击 CONNECT",
+      qr_title:"VR 连接",qr_alt:"VR 连接二维码",qr_help:"首次显示 Certificate Accepted 时返回并再次扫码，然后点击 CONNECT",
       delete:"删除",delete_confirm_perm:"永久删除",delete_confirm_fold:"删除",
       log_waiting:"进程已启动，等待日志…",session_starting:"正在启动",
       data_deleted:"数据已删除",fold_deleted:"折叠轨迹已删除，已恢复待采集",undo:"撤销",
@@ -31,7 +39,7 @@
     },
     en:{
       title:"Data Console",
-      instances:"Teleop Instances",task:"Task",pick_asset:"Pick asset",col_instance:"Instance",col_status:"Status",col_task:"Task",col_actions:"Actions",
+      instances:"Teleop Instances",vr_device:"VR device",task:"Task",pick_asset:"Pick asset",col_instance:"Instance",col_status:"Status",col_task:"Task",col_actions:"Actions",
       log:"Log",log_empty:"Start an instance to see logs",log_select:"Select a worker to see logs",
       task_data:"Collected Data",asset_filter:"Asset filter",sort_time:"Collect time",sort_flatten:"Flatten time",
       stat_count:"episodes",stat_frames:"total frames",stat_duration:"total duration",stat_annotations:"annotations",
@@ -49,7 +57,7 @@
       review_export:"Review export",
       service_offline:"Collection service offline",batch_done:"Batch done · close and restart for next batch",recording:"Recording",batch_remaining:"Batch remaining",
       no_pending:"No pending flatten states for this asset",asset_prefix:"Asset",
-      qr_title:"Quest connect",qr_alt:"Quest connect QR",qr_help:"When Certificate Accepted shows, go back and scan again, then CONNECT",
+      qr_title:"VR connect",qr_alt:"VR connect QR",qr_help:"When Certificate Accepted shows, go back and scan again, then CONNECT",
       delete:"Delete",delete_confirm_perm:"Permanently delete",delete_confirm_fold:"Delete",
       log_waiting:"Process started, waiting for logs…",session_starting:"Starting",
       data_deleted:"Data deleted",fold_deleted:"Fold deleted, restored to pending",undo:"Undo",
@@ -220,7 +228,7 @@
     const good=ann.review_status==="complete"&&count===0;
     const cameras=state.reviewPane?.cameras||[];
     const cameraOptions=cameras.map(camera=>`<option value="${esc(camera)}" ${camera===state.reviewCamera?"selected":""}>${esc(camera)}</option>`).join("");
-    actions.innerHTML=`<select class="speed-select" aria-label="审核视角" title="审核视角" onchange="setReviewCamera(this.value)">${cameraOptions}</select><select class="speed-select" aria-label="播放倍速" title="播放倍速" onchange="setPaneRate(this.value)">${reviewRateOptions()}</select><button class="${marking?"danger":""}" ${ready?"":"disabled"} onclick="toggleMark()">${marking?t("end_mark"):t("mark_bad")}</button><button ${count===0?"disabled":""} onclick="undoSegment()">${t("undo")}</button><button class="${good?"good-btn on":"good-btn"}" ${count||!ready?"disabled":""} title="${t("good_title")}" onclick="toggleGood()">${good?"✓ ":""}${t("good_btn")}</button>`;
+    actions.innerHTML=`<select class="speed-select camera-select" aria-label="审核视角" title="审核视角" onchange="setReviewCamera(this.value)">${cameraOptions}</select><select class="speed-select rate-select" aria-label="播放倍速" title="播放倍速" onchange="setPaneRate(this.value)">${reviewRateOptions()}</select><button class="${marking?"danger":""}" ${ready?"":"disabled"} onclick="toggleMark()">${marking?t("end_mark"):t("mark_bad")}</button><button ${count===0?"disabled":""} onclick="undoSegment()">${t("undo")}</button><button class="${good?"good-btn on":"good-btn"}" ${count||!ready?"disabled":""} title="${t("good_title")}" onclick="toggleGood()">${good?"✓ ":""}${t("good_btn")}</button>`;
   }
   function setReviewCamera(camera){
     const info=state.reviewPane;if(!info||!info.cameras.includes(camera)||camera===info.camera)return;
@@ -381,7 +389,7 @@
   function selectLog(type,id){state.logType=type;state.logId=id;render(state.snapshot)}
   async function startSession(event,slotId){event.stopPropagation();try{const session=await request("/api/sessions",{method:"POST",body:JSON.stringify({slot_id:slotId,profile_id:state.taskId,asset_id:state.assetId})});state.logType="session";state.logId=session.id;toast(`${session.worker_id||slotId} ${t("session_starting")}`);await refresh()}catch(error){toast(error.message,true)}}
   async function stopSession(event,id){event.stopPropagation();if(!confirm(t("stop_session")))return;try{await request(`/api/sessions/${encodeURIComponent(id)}/stop`,{method:"POST"});toast(t("stopping_session"));await refresh()}catch(error){toast(error.message,true)}}
-  function connectionUrl(slotId){const slot=state.snapshot.slots.find(item=>item.id===slotId),origin=new URL(`https://${slot.endpoint}`);return `${origin.origin}/client/?${new URLSearchParams({serverIP:origin.hostname,port:String(slot.proxy_port),codec:"h264",immersiveMode:"vr",deviceFrameRate:"72",maxStreamingBitrateMbps:"80",panelHiddenAtStart:"true",deviceProfile:"pico4ultra",useQuestColorWorkaround:"false",cloudxrAutoRefreshMode:"any"})}`}
+  function connectionUrl(slotId){const slot=state.snapshot.slots.find(item=>item.id===slotId),origin=new URL(`https://${slot.endpoint}`);return `${origin.origin}/client/?${new URLSearchParams({serverIP:origin.hostname,port:String(slot.proxy_port),...VR_DEVICES[state.vrDevice].params})}`}
   function openConnect(event,slotId){event.stopPropagation();location.href=connectionUrl(slotId)}
   async function deleteEpisode(taskId,id,sourceId=null){const message=sourceId?`删除 ${episodeTime(sourceId)} 对应的折叠轨迹？\\n原展平轨迹会恢复为“待采集”。`:`永久删除 ${episodeTime(id)} 的采集数据？\\n此操作无法撤销。`;if(!confirm(message))return;try{await request(`/api/tasks/${encodeURIComponent(taskId)}/episodes/${encodeURIComponent(id)}`,{method:"DELETE"});toast(sourceId?t("fold_deleted"):t("data_deleted"));await refresh()}catch(error){toast(error.message,true)}}
   async function updateLog(){
@@ -392,10 +400,12 @@
     const url=type==="export"?`/api/exports/${encodeURIComponent(id)}/log`:`/api/sessions/${encodeURIComponent(id)}/log`;
     try{const payload=await request(url);const old=$("log-text"),atBottom=!old||old.scrollHeight-old.scrollTop-old.clientHeight<28;setHtml($("log"),`<pre class="log" id="log-text">${esc(payload.log||t("log_waiting"))}</pre>`);if(atBottom&&$("log-text"))$("log-text").scrollTop=$("log-text").scrollHeight}catch(error){setHtml($("log"),`<div class="log-empty">${esc(error.message)}</div>`)}
   }
-  function showQr(event,id,workerId,endpoint){event.stopPropagation();$("qr-title").textContent=`${workerId} · ${t("qr_title")}`;$("qr-endpoint").textContent=endpoint;$("qr-image").src=`/api/sessions/${encodeURIComponent(id)}/qr`;$("qr-modal").classList.add("open")}
+  function showQr(event,id,workerId,endpoint){event.stopPropagation();$("qr-title").textContent=`${workerId} · ${VR_DEVICES[state.vrDevice].label} · ${t("qr_title")}`;$("qr-endpoint").textContent=endpoint;$("qr-image").src=`/api/sessions/${encodeURIComponent(id)}/qr?device=${encodeURIComponent(state.vrDevice)}`;$("qr-modal").classList.add("open")}
   function closeQr(){$("qr-modal").classList.remove("open");$("qr-image").removeAttribute("src")}
   async function refresh(){try{render(await request("/api/snapshot"))}catch(error){toast(error.message,true)}}
   $("task-select").onchange=event=>{state.taskId=event.target.value;state.assetId=null;state.dataAsset="all";render(state.snapshot)};
+  $("vr-device-select").value=state.vrDevice;
+  $("vr-device-select").onchange=event=>{if(VR_DEVICES[event.target.value]){state.vrDevice=event.target.value;localStorage.setItem("clothdojo-vr-device",state.vrDevice)}};
   $("asset-pick").onclick=()=>openAssetPicker("session");
   $("data-asset-pick").onclick=()=>openAssetPicker("filter");
   $("time-sort").onclick=()=>{state.timeSort=state.timeSort==="desc"?"asc":"desc";renderData(selectedTask())};
@@ -565,7 +575,7 @@
     }catch(e){toast(e.message,true)}
   }
 
-  function hilShowQr(){if(!hilState.session)return;$("qr-title").textContent=`HIL · ${t("qr_title")}`;$("qr-endpoint").textContent="";$("qr-image").src=`/api/sessions/${encodeURIComponent(hilState.session.id)}/qr`;$("qr-modal").classList.add("open")}
+  function hilShowQr(){if(!hilState.session)return;$("qr-title").textContent=`HIL · ${VR_DEVICES[state.vrDevice].label} · ${t("qr_title")}`;$("qr-endpoint").textContent="";$("qr-image").src=`/api/sessions/${encodeURIComponent(hilState.session.id)}/qr?device=${encodeURIComponent(state.vrDevice)}`;$("qr-modal").classList.add("open")}
   function hilRenderSession(){
     const active=hilInterventionSlots(),slot=active.find(x=>x.session?.id===hilState.session?.id);
     const start=$("hil-start");

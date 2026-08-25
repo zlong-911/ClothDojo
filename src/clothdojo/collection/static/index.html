@@ -19,7 +19,7 @@
     </div>
     <section class="runtime">
       <article class="panel">
-        <div class="panel-head"><h2 data-i18n="instances">采集实例</h2><div class="task-picker"><label><span data-i18n="task">任务</span> <select id="task-select"></select></label><button id="asset-pick" class="asset-pick">选择衣服</button></div></div>
+        <div class="panel-head"><h2 data-i18n="instances">采集实例</h2><div class="task-picker"><label><span data-i18n="vr_device">VR 设备</span> <select id="vr-device-select" class="vr-device"><option value="pico4ultra">Pico 4 Ultra</option><option value="quest3">Meta Quest 3</option><option value="quest3s">Meta Quest 3S</option><option value="quest2">Meta Quest 2</option></select></label><label><span data-i18n="task">任务</span> <select id="task-select"></select></label><button id="asset-pick" class="asset-pick">选择衣服</button></div></div>
         <div class="slot-columns"><span data-i18n="col_instance">实例</span><span data-i18n="col_status">状态</span><span data-i18n="col_task">任务</span><span data-i18n="col_actions">操作</span></div>
         <div class="slots" id="slots"></div>
       </article>
@@ -104,8 +104,8 @@
 <div class="toast" id="toast"></div>
 <div class="modal" id="qr-modal" onclick="if(event.target===this)closeQr()">
   <div class="qr-card">
-    <div class="qr-head"><strong id="qr-title">Quest 连接</strong><button onclick="closeQr()">×</button></div>
-    <img class="qr-image" id="qr-image" alt="Quest 连接二维码">
+    <div class="qr-head"><strong id="qr-title">VR 连接</strong><button onclick="closeQr()">×</button></div>
+    <img class="qr-image" id="qr-image" alt="VR 连接二维码">
     <div class="qr-endpoint" id="qr-endpoint"></div>
     <div class="qr-help">首次显示 Certificate Accepted 时返回并再次扫码，然后点击 CONNECT</div>
   </div>
