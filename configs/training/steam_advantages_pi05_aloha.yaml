@@ -1,0 +1,36 @@
+schema: clothdojo_steam_advantages
+format_version: 1
+
+# This is the saved global_step_20000 artifact corresponding to the evaluator
+# trained through zero-based step 19999.
+checkpoint: ${oc.env:CLOTHDOJO_STEAM_CHECKPOINT}
+checkpoint_step: 20000
+tag: ${oc.env:CLOTHDOJO_CFG_ADVANTAGE_TAG}
+prompt: flatten the shirt
+stride: 64
+camera_keys:
+  - observation.images.cam_high
+  - observation.images.cam_third_person
+
+# Match the evaluator's actual per-forward training micro-batch. Its effective
+# per-rank batch of 64 came from two accumulated micro-batches and is not a
+# single-forward batch-size contract.
+batch_size: 32
+num_workers: 1
+num_processes: 8
+master_port: 29531
+work_dir: ${oc.env:CLOTHDOJO_STEAM_OUTPUT}
+
+datasets:
+  # The project-owned indexed view contains both STEAM cameras and the three
+  # OpenPI cameras, so scoring and training share one exact frame table.
+  - role: sft
+    source_path: ${oc.env:CLOTHDOJO_CFG_EXPERT_DATASET}
+    target_path: ${oc.env:CLOTHDOJO_CFG_EXPERT_DATASET}
+    positive_fraction: 0.80
+
+  - role: rollout
+    source_path: ${oc.env:CLOTHDOJO_CFG_ROLLOUT_DATASET}
+    target_path: ${oc.env:CLOTHDOJO_CFG_ROLLOUT_DATASET}
+    episodes_path: ${oc.env:CLOTHDOJO_CFG_ROLLOUT_EPISODES}
+    positive_fraction: 0.30

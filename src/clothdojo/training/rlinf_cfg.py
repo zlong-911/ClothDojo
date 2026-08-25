@@ -20,6 +20,20 @@ from typing import Any
 MODEL_TYPE = "clothdojo_cfg_model"
 EXTENSION_MODULE = "clothdojo.training.rlinf_cfg"
 _REGISTERED = False
+_PROJECT_OPENPI_CACHE = Path(__file__).resolve().parents[3] / "data/caches/openpi"
+
+
+def _configure_project_openpi_cache() -> Path:
+    """Bind OpenPI downloads to ClothDojo's checked local asset cache."""
+
+    tokenizer = _PROJECT_OPENPI_CACHE / "big_vision/paligemma_tokenizer.model"
+    if not tokenizer.is_file():
+        raise FileNotFoundError(
+            "CFG requires the project-owned OpenPI tokenizer cache: "
+            f"{tokenizer}"
+        )
+    os.environ["OPENPI_DATA_HOME"] = str(_PROJECT_OPENPI_CACHE)
+    return _PROJECT_OPENPI_CACHE
 
 
 def register() -> None:
@@ -37,6 +51,7 @@ def register() -> None:
 def enable() -> None:
     """Enable the extension in the driver and future RLINF workers."""
 
+    _configure_project_openpi_cache()
     configured = os.environ.get("RLINF_EXT_MODULE")
     if configured not in {None, EXTENSION_MODULE}:
         raise RuntimeError(
@@ -160,6 +175,9 @@ def _worker_type() -> type:
             from rlinf.data.storage.lerobot import resolve_lerobot_dataset_root
             from rlinf.models.embodiment.openpi.dataconfig import get_openpi_config
 
+            from clothdojo.data.indexed_lerobot import open_lerobot_dataset
+            from clothdojo.training.cfg import resolve_cfg_episode_selection
+
             data_cfg = self.cfg.get("data", {})
             datasets_config = data_cfg.get("train_data_paths", [])
             if not datasets_config:
@@ -182,10 +200,15 @@ def _worker_type() -> type:
             for dataset_entry in datasets_config:
                 data_path = dataset_entry["dataset_path"]
                 dataset_root = resolve_lerobot_dataset_root(data_path)
-                episodes = dataset_entry.get("episodes")
                 weight = dataset_entry.get("weight", 1.0)
                 dataset_meta = lerobot_dataset.LeRobotDatasetMetadata(data_path, root=dataset_root)
-                base_dataset = lerobot_dataset.LeRobotDataset(
+                episodes_array = resolve_cfg_episode_selection(
+                    episodes=dataset_entry.get("episodes"),
+                    episodes_path=dataset_entry.get("episodes_path"),
+                    total_episodes=int(dataset_meta.total_episodes),
+                )
+                episodes = [int(value) for value in episodes_array]
+                base_dataset = open_lerobot_dataset(
                     data_path,
                     root=dataset_root,
                     episodes=episodes,

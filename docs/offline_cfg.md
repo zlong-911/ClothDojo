@@ -30,6 +30,29 @@ replacement accepts an explicit scenario and two external output roots, writes
 through the ClothDojo trajectory boundary, and passes one real-GPU acceptance
 case before any pool launcher is added. See `docs/rtc_rollout.md`.
 
+## One-way v3 migration
+
+The accepted historical expert and rollout artifacts are LeRobot v3 rather
+than the pinned v2.1 training format. They enter ClothDojo once through
+`data migrate-v3-indexed-view` and never remain runtime paths. The migration:
+
+- splits the numeric table into the pinned per-episode Parquet layout;
+- maps policy cameras to ClothDojo's `cam_*` feature names;
+- copies each immutable v3 video chunk exactly once into the new dataset;
+- records a per-episode, per-camera timestamp offset, because v3 chunks each
+  camera independently; and
+- publishes the v2.1 metadata, media index and source hashes atomically.
+
+Both the CFG worker and the owned STEAM labeler use
+`src/clothdojo/data/indexed_lerobot.py` to interpret that index. Ordinary v2.1
+datasets continue through the unmodified pinned LeRobot reader. This is a data
+boundary, not an old-project or patched-RLINF runtime dependency.
+
+The exact contracts are
+`configs/migration/cfg_expert_v3_indexed_view.yaml` and
+`configs/migration/cfg_rollout_v3_indexed_view.yaml`. Run each with `--check`
+before publication.
+
 ## CFG input contract
 
 `configs/training/cfg_pi05_aloha.yaml` consumes exactly two datasets:
@@ -48,12 +71,15 @@ rather than length-adjusted weights. Both datasets must have:
 - `cam_high`, `cam_left_wrist` and `cam_right_wrist` video features;
 - one boolean row for every selected episode/frame in
   `meta/advantages_<tag>.parquet`.
+- one matching `meta/advantages_<tag>.json` provenance record identifying the
+  STEAM checkpoint, target dataset revision, episode selection, stride,
+  threshold and label counts.
 
 The same advantage tag is used for both sources. Expert data must also be
 labeled by the value model; it must not be declared positive wholesale. The
-historical `rollout q30 / expert q80` rule is experiment evidence, not a default
-embedded in the CFG trainer. The future advantage-labeling workflow owns and
-records that decision.
+project-owned advantage config records the selected `rollout q30 / expert q80`
+rule. It is not embedded in the CFG worker: changing the experiment requires a
+new tag and a newly published pair of label artifacts.
 
 The CFG policy is initialized from the accepted SFT checkpoint. It reuses the
 normalization statistics computed from the expert dataset. The preflight checks
@@ -69,17 +95,22 @@ artifacts, set:
 ```bash
 export CLOTHDOJO_CFG_EXPERT_DATASET=/path/to/expert_lerobot_v21
 export CLOTHDOJO_CFG_ROLLOUT_DATASET=/path/to/rtc_rollout_lerobot_v21
-export CLOTHDOJO_CFG_ADVANTAGE_TAG=steam_value_v1
+export CLOTHDOJO_CFG_ADVANTAGE_TAG=steam_shirt_flatten
 export CLOTHDOJO_CFG_INIT_CHECKPOINT=/path/to/accepted_sft_checkpoint
 export CLOTHDOJO_PI05_NORM_STATS=/path/to/expert_norm_stats
 export CLOTHDOJO_TRAIN_OUTPUT=/path/to/cfg_runs
+export CLOTHDOJO_STEAM_CHECKPOINT=/path/to/steam_checkpoint
+export CLOTHDOJO_CFG_ROLLOUT_EPISODES=/path/to/rollout_train_episodes.json
+export CLOTHDOJO_STEAM_OUTPUT=/path/to/clothdojo/outputs/steam
 ```
 
 Run the data gate before invoking RLINF:
 
 ```bash
-.venv/bin/clothdojo data check-cfg \
-  --config configs/training/cfg_pi05_aloha.yaml
+.venv/bin/clothdojo train cfg \
+  --config configs/training/cfg_pi05_aloha.yaml \
+  --advantages-config configs/training/steam_advantages_pi05_aloha.yaml \
+  --check
 ```
 
 The report resolves both roots, checks the dataset schemas and exact advantage
@@ -90,7 +121,7 @@ on the training host:
 ```bash
 .venv/bin/clothdojo train cfg \
   --config configs/training/cfg_pi05_aloha.yaml \
-  --check
+  --advantages-config configs/training/steam_advantages_pi05_aloha.yaml
 ```
 
 The initial config is a 400-update acceptance gate with checkpoints every 50
@@ -100,10 +131,12 @@ editing the old launcher or by copying its long episode list into this config.
 
 ## Current readiness
 
-The CFG config, data preflight and narrow RLINF extension are implemented and
-tested. The extension only passes `model_path` and `openpi_data` consistently to
-RLINF's OpenPI config builder, which is required for `adapt_to_pi=false` and the
-external norm statistics.
+The CFG config, project-owned STEAM advantage labeler, exact data/provenance
+preflight, recoverable pipeline and narrow RLINF extension are implemented and
+tested. The labeler imports the pinned RLINF model and pair-dataset APIs as a
+package dependency; it never imports or executes the old repository. The
+migrated expert publication contains both policy and STEAM views over one exact
+frame table, so labels never cross between independently mutable roots.
 
 The user-facing RTC execution loop, real Newton three-camera observations, trajectory
 recording and transactional LeRobot v2.1 publication are implemented and have
@@ -112,7 +145,8 @@ policy and stamps both outputs `training_eligible: false`; the CFG preflight
 rejects them by design.
 
 The next rollout slice connects the remotely accepted SFT checkpoint to the
-plain policy interface, records its immutable identity, and only then permits
-`training_eligible: true`. STEAM value training and advantage labeling also do
-not yet have owned ClothDojo configs. Until both land, `data check-cfg` remains
-the final executable training gate.
+plain policy interface and records its immutable identity. STEAM value-model
+training still needs an owned ClothDojo experiment config; the already accepted
+evaluator crosses the checkpoint boundary through the owned advantage config.
+The CFG pipeline refuses checkpoints, formal datasets or scoring views outside
+the ClothDojo `data/` root.

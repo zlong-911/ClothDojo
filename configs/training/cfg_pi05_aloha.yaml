@@ -1,6 +1,6 @@
 # ClothDojo's first guarded offline CFG gate.
-# Both datasets are external, LeRobot v2.1, and carry the same tagged boolean
-# advantage parquet. Run `clothdojo data check-cfg` before launching workers.
+# Both datasets are project-owned LeRobot v2.1 publications and carry the same
+# tagged boolean advantage parquet. Run the CFG pipeline preflight first.
 hydra:
   run:
     dir: .
@@ -16,7 +16,7 @@ runner:
   logger:
     log_path: ${oc.env:CLOTHDOJO_TRAIN_OUTPUT}
     project_name: clothdojo
-    experiment_name: shirt_flatten_cfg_pi05_aloha_gate_v1
+    experiment_name: shirt_flatten_cfg_pi05_aloha_acceptance_gate
     logger_backends: [tensorboard]
   max_epochs: -1
   # This is an acceptance gate. Evaluate checkpoints 50 and 100 before
@@ -39,6 +39,7 @@ data:
     - dataset_path: ${oc.env:CLOTHDOJO_CFG_ROLLOUT_DATASET}
       type: rollout
       weight: 0.25
+      episodes_path: ${oc.env:CLOTHDOJO_CFG_ROLLOUT_EPISODES}
 
 algorithm:
   adv_type: gae
@@ -46,8 +47,11 @@ algorithm:
 actor:
   group_name: ActorGroup
   training_backend: fsdp
-  micro_batch_size: 8
-  global_batch_size: 64
+  # Match the established STEAM CFG optimization batch: each of the eight
+  # ranks processes micro-batches of 32 and accumulates twice, giving an
+  # effective per-rank batch of 64 and a global batch of 512.
+  micro_batch_size: 32
+  global_batch_size: 512
   seed: 42
   model:
     # The project model is upstream CFG plus exact OpenPI data-argument

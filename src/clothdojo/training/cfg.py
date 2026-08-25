@@ -29,8 +29,13 @@ class CfgDatasetReport:
     frames: int
     fps: int
     advantage_path: str
+    advantage_manifest_path: str
     positive_frames: int
     negative_frames: int
+    steam_checkpoint_step: int
+    steam_checkpoint_config_sha256: str
+    steam_checkpoint_weights_sha256: str
+    steam_stride: int
 
     def to_json_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -82,6 +87,7 @@ def inspect_cfg_training(
             weight=float(entry.get("weight", 1.0)),
             advantage_tag=tag,
             episodes=entry.get("episodes"),
+            episodes_path=entry.get("episodes_path"),
         )
         for entry in entries
     ]
@@ -122,6 +128,7 @@ def inspect_cfg_dataset(
     weight: float,
     advantage_tag: str | None,
     episodes: Any = None,
+    episodes_path: Any = None,
 ) -> CfgDatasetReport:
     """Validate one pinned-LeRobot dataset and exact advantage coverage."""
 
@@ -139,11 +146,25 @@ def inspect_cfg_dataset(
     _validate_features(info.get("features"), root)
     _validate_sidecar(root)
     lengths = _episode_lengths(root, total_episodes, total_frames)
-    selected = _selected_episodes(episodes, total_episodes)
+    selected = resolve_cfg_episode_selection(
+        episodes=episodes,
+        episodes_path=episodes_path,
+        total_episodes=total_episodes,
+    )
 
     filename = f"advantages_{advantage_tag}.parquet" if advantage_tag else "advantages.parquet"
     advantage_path = root / "meta" / filename
     positive, negative, selected_frames = _validate_advantages(advantage_path, lengths, selected)
+    manifest_path = advantage_path.with_suffix(".json")
+    manifest = _validate_advantage_manifest(
+        manifest_path,
+        root=root,
+        tag=advantage_tag,
+        selected=selected,
+        rows=selected_frames,
+        positive=positive,
+        negative=negative,
+    )
     return CfgDatasetReport(
         role=role,
         dataset_path=str(root),
@@ -152,9 +173,66 @@ def inspect_cfg_dataset(
         frames=selected_frames,
         fps=fps,
         advantage_path=str(advantage_path),
+        advantage_manifest_path=str(manifest_path),
         positive_frames=positive,
         negative_frames=negative,
+        steam_checkpoint_step=_nonnegative_int(
+            manifest.get("checkpoint_step"), "STEAM checkpoint_step"
+        ),
+        steam_checkpoint_config_sha256=_require_sha256(
+            manifest.get("checkpoint_config_sha256"), "STEAM checkpoint config"
+        ),
+        steam_checkpoint_weights_sha256=_require_sha256(
+            manifest.get("checkpoint_weights_sha256"), "STEAM checkpoint weights"
+        ),
+        steam_stride=_positive_int(manifest.get("stride"), "STEAM stride"),
     )
+
+
+def resolve_cfg_episode_selection(
+    *,
+    episodes: Any,
+    episodes_path: Any,
+    total_episodes: int,
+) -> np.ndarray:
+    """Resolve an inline or file-backed CFG episode selection."""
+
+    if episodes is not None and episodes_path is not None:
+        raise ValueError("CFG dataset may set only one of episodes or episodes_path")
+    if episodes_path is not None:
+        from clothdojo.training.episode_selection import read_episode_selection
+
+        return np.asarray(
+            read_episode_selection(episodes_path, total_episodes=total_episodes),
+            dtype=np.int64,
+        )
+    return _selected_episodes(episodes, total_episodes)
+
+
+def _validate_advantage_manifest(
+    path: Path,
+    *,
+    root: Path,
+    tag: str | None,
+    selected: np.ndarray,
+    rows: int,
+    positive: int,
+    negative: int,
+) -> dict[str, Any]:
+    manifest = _read_object(path, "STEAM advantage provenance")
+    if manifest.get("schema") != "clothdojo_steam_advantages":
+        raise ValueError(f"unsupported STEAM advantage provenance: {path}")
+    if manifest.get("format_version") != 1 or manifest.get("tag") != tag:
+        raise ValueError(f"STEAM advantage provenance does not match its tag: {path}")
+    if manifest.get("target_info_sha256") != _sha256(root / "meta" / "info.json"):
+        raise ValueError(f"STEAM advantages target a different dataset revision: {path}")
+    if tuple(manifest.get("episodes", ())) != tuple(int(value) for value in selected):
+        raise ValueError(f"STEAM advantage episode selection differs from CFG: {path}")
+    expected_counts = {"rows": rows, "positive": positive, "negative": negative}
+    for key, expected in expected_counts.items():
+        if manifest.get(key) != expected:
+            raise ValueError(f"STEAM advantage {key} provenance differs: {path}")
+    return manifest
 
 
 def _validate_advantages(
@@ -281,6 +359,15 @@ def _require_compatible_datasets(reports: list[CfgDatasetReport]) -> None:
         for field in ("dtype", "shape", "names"):
             if left.get(field) != right.get(field):
                 raise ValueError(f"CFG dataset feature differs: {key}.{field}")
+    identity_fields = (
+        "steam_checkpoint_step",
+        "steam_checkpoint_config_sha256",
+        "steam_checkpoint_weights_sha256",
+        "steam_stride",
+    )
+    for field in identity_fields:
+        if getattr(reports[0], field) != getattr(reports[1], field):
+            raise ValueError(f"CFG datasets were labeled by different STEAM {field}")
 
 
 def _read_object(path: Path, context: str) -> dict[str, Any]:
@@ -296,6 +383,24 @@ def _read_object(path: Path, context: str) -> dict[str, Any]:
 def _positive_int(value: Any, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise ValueError(f"{field} must be a positive integer, got {value!r}")
+    return value
+
+
+def _nonnegative_int(value: Any, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{field} must be a non-negative integer, got {value!r}")
+    return value
+
+
+def _require_sha256(value: Any, field: str) -> str:
+    if not isinstance(value, str) or len(value) != 64:
+        raise ValueError(f"{field} SHA-256 must contain 64 hexadecimal characters")
+    try:
+        int(value, 16)
+    except ValueError as exc:
+        raise ValueError(
+            f"{field} SHA-256 must contain 64 hexadecimal characters"
+        ) from exc
     return value
 
 
