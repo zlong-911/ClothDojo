@@ -9,6 +9,7 @@ from clothdojo.data.lerobot import (
     _encode_episode_videos,
     _writer_features,
     load_episode_indices,
+    load_single_task_prompt,
     open_lerobot_dataset,
 )
 
@@ -58,6 +59,17 @@ def test_regular_v21_reader_rejects_other_versions(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match=r"standard LeRobot v2\.1"):
         open_lerobot_dataset("local/test", root=tmp_path)
+
+
+def test_single_task_prompt_uses_standard_lerobot_metadata(tmp_path: Path) -> None:
+    meta = tmp_path / "meta"
+    meta.mkdir()
+    (meta / "tasks.jsonl").write_text(
+        json.dumps({"task_index": 0, "task": "Flatten the shirt."}) + "\n",
+        encoding="utf-8",
+    )
+
+    assert load_single_task_prompt(tmp_path) == "Flatten the shirt."
 
 
 def test_writer_features_convert_json_shapes_to_tuples() -> None:

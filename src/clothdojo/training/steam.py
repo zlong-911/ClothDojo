@@ -11,6 +11,8 @@ from typing import Any
 import numpy as np
 import pyarrow.parquet as pq
 
+from clothdojo.data.lerobot import load_single_task_prompt
+
 MEMBER_INDICES = (0, 1, 2)
 EXPECTED_FPS = 50
 EXPECTED_STATE_DIM = 14
@@ -220,10 +222,7 @@ def inspect_steam_dataset(value: Any, *, cfg: Any) -> dict[str, Any]:
     for camera in EXPECTED_CAMERAS:
         if features.get(camera, {}).get("dtype") != "video":
             raise ValueError(f"STEAM camera is absent or not video: {camera}")
-    tasks = _read_tasks(root)
-    if len(tasks) != 1 or not tasks[0].strip():
-        raise ValueError("STEAM dataset must contain exactly one non-empty prompt")
-    prompt = tasks[0].strip()
+    prompt = load_single_task_prompt(root)
 
     episodes = provenance.get("episodes")
     if not isinstance(episodes, list) or len(episodes) != total_episodes:
@@ -363,20 +362,6 @@ def _select(value: dict[str, Any], dotted_key: str) -> Any:
             raise ValueError(f"STEAM config is missing {dotted_key}")
         current = current[part]
     return current
-
-
-def _read_tasks(root: Path) -> list[str]:
-    parquet = root / "meta" / "tasks.parquet"
-    if parquet.is_file():
-        return [str(value) for value in pq.read_table(parquet)["task"].to_pylist()]
-    jsonl = root / "meta" / "tasks.jsonl"
-    if jsonl.is_file():
-        return [
-            str(json.loads(line)["task"])
-            for line in jsonl.read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        ]
-    raise FileNotFoundError(f"STEAM task metadata is absent: {root}")
 
 
 def _as_list_column(column: Any, width: int) -> np.ndarray:

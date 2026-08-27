@@ -36,6 +36,38 @@ def open_lerobot_dataset(repo_id: str, *, root: str | Path, **kwargs: Any) -> An
     return LeRobotDataset(repo_id, root=dataset_root, **kwargs)
 
 
+def load_single_task_prompt(dataset_root: str | Path) -> str:
+    """Read the one task prompt owned by a standard LeRobot v2.1 dataset."""
+
+    meta = Path(dataset_root).expanduser().resolve() / "meta"
+    parquet = meta / "tasks.parquet"
+    jsonl = meta / "tasks.jsonl"
+    if parquet.is_file():
+        import pyarrow.parquet as pq
+
+        values = pq.read_table(parquet, columns=["task"])["task"].to_pylist()
+        source = parquet
+    else:
+        try:
+            rows = [
+                json.loads(line)
+                for line in jsonl.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"cannot read LeRobot task metadata: {jsonl}: {exc}") from exc
+        values = [
+            row.get("task")
+            for row in rows
+            if isinstance(row, dict) and isinstance(row.get("task"), str)
+        ]
+        source = jsonl
+    prompts = {str(value).strip() for value in values if str(value).strip()}
+    if len(prompts) != 1:
+        raise ValueError(f"LeRobot dataset must contain one non-empty task prompt: {source}")
+    return prompts.pop()
+
+
 class _Writer(Protocol):
     def add_frame(self, frame: dict[str, Any]) -> None: ...
 
