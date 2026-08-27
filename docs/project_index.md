@@ -4,7 +4,8 @@
 - `pyproject.toml`: package metadata, CLI registration and tool configuration.
 - `src/clothdojo/cli.py`: the only user-facing command dispatcher.
 - `src/clothdojo/diagnostics.py`: installation and runtime compatibility check.
-- `src/clothdojo/training/rlinf.py`: thin π0.5, STEAM and CFG SFT adapter.
+- `src/clothdojo/training/rlinf.py`: `openpi-rlinf`, STEAM and CFG training adapter.
+- `src/clothdojo/training/openpi_rlinf_sft.py`: current RLINF OpenPI worker boundary.
 - `src/clothdojo/training/steam.py`: STEAM critic data/hyperparameter gates,
   launch manifest and three-member checkpoint merge.
 - `src/clothdojo/training/rlinf_steam.py`: deterministic RLINF STEAM loader,
@@ -25,8 +26,8 @@
   split shared by labeling and CFG sampling.
 - `src/clothdojo/training/openpi.py`: exact ALOHA normalization statistics
   using the same transforms as RLINF training.
-- `src/clothdojo/training/jax_sft.py`: guarded OpenPI/JAX SFT reference,
-  strict Orbax initialization, short-run gates and EMA/online checkpoint roles.
+- `src/clothdojo/training/jax_sft.py`: `openpi-jax` SFT entry, strict Orbax
+  initialization, short-run gates and EMA/online checkpoint roles.
 - `src/clothdojo/training/matrix.py`: durable sequential JAX SFT parameter
   matrix that records per-gate state and continues with the next reviewed trial
   after a failed trial.

@@ -9,6 +9,19 @@ from collections.abc import Sequence
 from pathlib import Path
 
 
+def _training_config_schema(path: str | Path) -> str:
+    import yaml
+
+    source = Path(path).expanduser().resolve()
+    try:
+        value = yaml.safe_load(source.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise RuntimeError(f"cannot read training config {source}: {exc}") from exc
+    if not isinstance(value, dict) or not isinstance(value.get("schema"), str):
+        return ""
+    return value["schema"]
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     parser = _parser()
     args, passthrough = parser.parse_known_args(argv)
@@ -46,7 +59,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             parser.error("--advantages-config is only valid for CFG training")
         if args.training_kind == "cfg" and args.advantages_config is not None:
             if args.gate is not None:
-                parser.error("--gate is only valid for pi05-jax training")
+                parser.error("--gate is only valid for openpi-jax training")
             from clothdojo.training.cfg_pipeline import (
                 inspect_cfg_pipeline,
                 run_cfg_pipeline,
@@ -67,26 +80,26 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
             print(json.dumps(result, indent=2, sort_keys=True))
             return
-        if args.training_kind == "pi05-jax-matrix":
-            if passthrough:
-                parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
-            if args.gate is not None:
-                parser.error("pi05-jax-matrix does not accept --gate")
-            from clothdojo.training.matrix import (
-                compose_jax_sft_matrix,
-                inspect_jax_sft_matrix,
-                run_jax_sft_matrix,
-            )
+        if args.training_kind == "openpi-jax":
+            if _training_config_schema(args.config) == "clothdojo_pi05_jax_matrix":
+                if passthrough:
+                    parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+                if args.gate is not None:
+                    parser.error("an OpenPI/JAX matrix does not accept --gate")
+                from clothdojo.training.matrix import (
+                    compose_jax_sft_matrix,
+                    inspect_jax_sft_matrix,
+                    run_jax_sft_matrix,
+                )
 
-            matrix = compose_jax_sft_matrix(args.config)
-            result = (
-                inspect_jax_sft_matrix(matrix, inspect_artifacts=True)
-                if args.check
-                else run_jax_sft_matrix(matrix)
-            )
-            print(json.dumps(result, indent=2, sort_keys=True))
-            return
-        if args.training_kind == "pi05-jax":
+                matrix = compose_jax_sft_matrix(args.config)
+                result = (
+                    inspect_jax_sft_matrix(matrix, inspect_artifacts=True)
+                    if args.check
+                    else run_jax_sft_matrix(matrix)
+                )
+                print(json.dumps(result, indent=2, sort_keys=True))
+                return
             from clothdojo.training.jax_sft import (
                 compose_jax_sft_spec,
                 inspect_jax_sft,
@@ -98,12 +111,12 @@ def main(argv: Sequence[str] | None = None) -> None:
                 print(json.dumps(inspect_jax_sft(spec), indent=2, sort_keys=True))
                 return
             if args.gate is None:
-                parser.error("pi05-jax training requires --gate")
+                parser.error("openpi-jax training requires --gate")
             result = run_jax_sft(spec, args.gate)
             print(json.dumps(result, indent=2, sort_keys=True))
             return
         if args.gate is not None:
-            parser.error("--gate is only valid for pi05-jax training")
+            parser.error("--gate is only valid for openpi-jax training")
         if args.check:
             from clothdojo.training.rlinf import check as check_rlinf_training
 
@@ -589,7 +602,7 @@ def _parser() -> argparse.ArgumentParser:
 
     train = commands.add_parser("train", help="run a guarded ClothDojo training workflow")
     train.add_argument(
-        "training_kind", choices=("pi05-jax", "pi05-jax-matrix", "pi05", "steam", "cfg")
+        "training_kind", choices=("openpi-jax", "openpi-rlinf", "steam", "cfg")
     )
     train.add_argument("--config", required=True, help="path to the root Hydra YAML config")
     train.add_argument(

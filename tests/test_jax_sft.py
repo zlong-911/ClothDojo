@@ -211,11 +211,11 @@ def test_preflight_identity_covers_gate_settings_and_pytorch_weights(
     weights.write_bytes(b"first weights")
 
     monkeypatch.setattr(
-        "clothdojo.training.pi05_preflight.inspect_pi05_dataset",
-        lambda _path: {"dataset": "checked"},
+        "clothdojo.training.openpi_artifacts.inspect_openpi_dataset",
+        lambda _path, **_kwargs: {"dataset": "checked"},
     )
     monkeypatch.setattr(
-        "clothdojo.training.pi05_preflight.inspect_pi05_norm_stats",
+        "clothdojo.training.openpi_artifacts.inspect_openpi_norm_stats",
         lambda *_args, **_kwargs: {"norm": "checked"},
     )
     monkeypatch.setattr(

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-TrainingKind = Literal["pi05", "steam", "cfg"]
+TrainingKind = Literal["openpi-rlinf", "steam", "cfg"]
 
 
 @dataclass(frozen=True)
@@ -51,10 +51,8 @@ def check(
     """Compose and validate a config without launching training workers."""
 
     cfg = compose_config(config_path, overrides)
-    if kind == "pi05":
-        from clothdojo.training.pi05_preflight import inspect_pi05_training
-
-        return inspect_pi05_training(cfg)
+    if kind == "openpi-rlinf":
+        return inspect_openpi_rlinf_sft(cfg)
     if kind == "steam":
         if steam_member_index is None:
             raise ValueError("STEAM training requires a member index")
@@ -84,6 +82,28 @@ def compose_config(config_path: str | Path, overrides: Sequence[str] = ()) -> An
         return compose(config_name=path.stem, overrides=list(overrides))
 
 
+def inspect_openpi_rlinf_sft(cfg: Any) -> dict[str, Any]:
+    """Validate the current RLINF OpenPI model without importing its worker."""
+
+    from omegaconf import OmegaConf
+
+    model_type = str(cfg.actor.model.model_type)
+    if model_type != "openpi_rlinf":
+        raise ValueError(
+            "OpenPI/RLinf training requires "
+            f"actor.model.model_type=openpi_rlinf, got {model_type!r}"
+        )
+    resolved = OmegaConf.to_container(cfg, resolve=True)
+    if not isinstance(resolved, dict):
+        raise TypeError("resolved OpenPI/RLinf config must be a mapping")
+    return {
+        "schema": "clothdojo_openpi_rlinf_sft_preflight",
+        "compatible": True,
+        "model_type": model_type,
+        "resolved_config": resolved,
+    }
+
+
 def run_config(
     *,
     kind: TrainingKind,
@@ -96,15 +116,9 @@ def run_config(
     if data_root:
         os.environ["HF_LEROBOT_HOME"] = str(data_root)
 
-    if kind == "pi05":
-        from clothdojo.training.pi05_preflight import (
-            inspect_pi05_training,
-            write_pi05_launch_manifest,
-        )
-
-        manifest = inspect_pi05_training(cfg)
-        manifest_path = write_pi05_launch_manifest(cfg, manifest)
-        logging.info("Pi0.5 launch manifest: %s", manifest_path)
+    if kind == "openpi-rlinf":
+        manifest = inspect_openpi_rlinf_sft(cfg)
+        logging.info("OpenPI/RLinf preflight:\n%s", json.dumps(manifest, indent=2))
     elif kind == "steam":
         if steam_member_index is None:
             raise ValueError("STEAM training requires a member index")
@@ -157,10 +171,10 @@ def _load_runtime(kind: TrainingKind) -> _Runtime:
     from rlinf.scheduler import Cluster
     from rlinf.utils.placement import HybridComponentPlacement
 
-    if kind == "pi05":
-        from clothdojo.training.rlinf_pi05 import ClothDojoPi05SftWorker
+    if kind == "openpi-rlinf":
+        from clothdojo.training.openpi_rlinf_sft import OpenPiRlinfSftWorker
 
-        worker_type = ClothDojoPi05SftWorker
+        worker_type = OpenPiRlinfSftWorker
     elif kind == "steam":
         from clothdojo.training.rlinf_steam import ClothDojoSteamSftWorker
 

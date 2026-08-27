@@ -72,6 +72,11 @@ def test_cli_import_does_not_load_heavy_runtime_dependencies() -> None:
 def test_jax_sft_check_uses_separate_backend(monkeypatch, capsys) -> None:
     spec = object()
     monkeypatch.setattr(
+        cli,
+        "_training_config_schema",
+        lambda path: "clothdojo_pi05_jax_sft",
+    )
+    monkeypatch.setattr(
         "clothdojo.training.jax_sft.compose_jax_sft_spec",
         lambda path, overrides: spec,
     )
@@ -80,19 +85,57 @@ def test_jax_sft_check_uses_separate_backend(monkeypatch, capsys) -> None:
         lambda value: {"compatible": value is spec},
     )
 
-    cli.main(["train", "pi05-jax", "--config", "jax.yaml", "--check"])
+    cli.main(["train", "openpi-jax", "--config", "jax.yaml", "--check"])
 
     assert json.loads(capsys.readouterr().out) == {"compatible": True}
 
 
 def test_jax_sft_run_requires_explicit_gate(monkeypatch) -> None:
     monkeypatch.setattr(
+        cli,
+        "_training_config_schema",
+        lambda path: "clothdojo_pi05_jax_sft",
+    )
+    monkeypatch.setattr(
         "clothdojo.training.jax_sft.compose_jax_sft_spec",
         lambda path, overrides: object(),
     )
 
     with pytest.raises(SystemExit, match="2"):
-        cli.main(["train", "pi05-jax", "--config", "jax.yaml"])
+        cli.main(["train", "openpi-jax", "--config", "jax.yaml"])
+
+
+def test_jax_matrix_uses_the_same_training_entry(monkeypatch, capsys) -> None:
+    matrix = object()
+    monkeypatch.setattr(
+        cli,
+        "_training_config_schema",
+        lambda path: "clothdojo_pi05_jax_matrix",
+    )
+    monkeypatch.setattr(
+        "clothdojo.training.matrix.compose_jax_sft_matrix",
+        lambda path: matrix,
+    )
+    monkeypatch.setattr(
+        "clothdojo.training.matrix.inspect_jax_sft_matrix",
+        lambda value, **kwargs: {
+            "compatible": value is matrix,
+            "inspect_artifacts": kwargs["inspect_artifacts"],
+        },
+    )
+
+    cli.main(["train", "openpi-jax", "--config", "matrix.yaml", "--check"])
+
+    assert json.loads(capsys.readouterr().out) == {
+        "compatible": True,
+        "inspect_artifacts": True,
+    }
+
+
+@pytest.mark.parametrize("legacy_kind", ["pi05", "pi05-jax", "pi05-jax-matrix"])
+def test_training_rejects_removed_openpi_entries(legacy_kind: str) -> None:
+    with pytest.raises(SystemExit, match="2"):
+        cli.main(["train", legacy_kind, "--config", "unused.yaml", "--check"])
 
 
 def test_simulation_check_calls_acceptance_entry(monkeypatch, capsys) -> None:
@@ -368,17 +411,17 @@ def test_training_check_does_not_call_runner(monkeypatch, capsys) -> None:
     cli.main(
         [
             "train",
-            "pi05",
+            "openpi-rlinf",
             "--config",
-            "configs/training/pi05_aloha.yaml",
+            "configs/training/pi05_aloha_openpi_rlinf_lr2x_60k.yaml",
             "--check",
             "runner.max_steps=2",
         ]
     )
 
     assert call == {
-        "kind": "pi05",
-        "config_path": "configs/training/pi05_aloha.yaml",
+        "kind": "openpi-rlinf",
+        "config_path": "configs/training/pi05_aloha_openpi_rlinf_lr2x_60k.yaml",
         "overrides": ["runner.max_steps=2"],
         "steam_member_index": None,
     }

@@ -274,7 +274,7 @@ def _command(
         "-c",
         "from clothdojo.cli import main; main()",
         "train",
-        "pi05-jax",
+        "openpi-jax",
         "--config",
         str(base_config),
     ]

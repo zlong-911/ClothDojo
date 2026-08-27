@@ -229,18 +229,18 @@ def compose_jax_sft_spec(
 def inspect_jax_sft(spec: JaxSftSpec) -> dict[str, Any]:
     """Validate data, normalization, base checkpoint and numerical contract."""
 
-    from clothdojo.training.pi05_preflight import (
-        inspect_pi05_dataset,
-        inspect_pi05_norm_stats,
+    from clothdojo.training.openpi_artifacts import (
+        inspect_openpi_dataset,
+        inspect_openpi_norm_stats,
     )
 
-    dataset = inspect_pi05_dataset(spec.dataset)
+    dataset = inspect_openpi_dataset(spec.dataset)
     data_kwargs = {
         "adapt_to_pi": False,
         "extra_delta_transform": True,
         "default_prompt": "Flatten the shirt.",
     }
-    norm = inspect_pi05_norm_stats(
+    norm = inspect_openpi_norm_stats(
         spec.norm_stats,
         dataset=dataset,
         config_name=spec.openpi_config,

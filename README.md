@@ -176,9 +176,11 @@ value-head seed、run seed 和 Ray actor 名称。正式配置固定使用 revie
 ```
 
 ```bash
-# SFT 预检与启动
-.venv/bin/clothdojo train pi05 --config configs/training/pi05_aloha.yaml --check
-.venv/bin/clothdojo train pi05 --config configs/training/pi05_aloha.yaml
+# OpenPI SFT 只保留两个入口；JAX 矩阵配置也使用 openpi-jax
+.venv/bin/clothdojo train openpi-jax \
+  --config configs/training/pi05_aloha_jax.yaml --check
+.venv/bin/clothdojo train openpi-rlinf \
+  --config configs/training/pi05_aloha_openpi_rlinf_lr2x_60k.yaml --check
 
 # CFG 数据预检与启动
 .venv/bin/clothdojo data check-cfg --config configs/training/cfg_pi05_aloha.yaml

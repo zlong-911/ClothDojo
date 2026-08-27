@@ -1,0 +1,108 @@
+# Current OpenPI/RLinf Pi0.5 replication recipe.
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+
+cluster:
+  num_nodes: 1
+  component_placement:
+    actor: 0-7
+  tracer:
+    enable: false
+
+runner:
+  task_type: sft
+  logger:
+    log_path: ${oc.env:CLOTHDOJO_TRAIN_OUTPUT}
+    project_name: clothdojo
+    experiment_name: shirt_flatten_pi05_openpi_rlinf_lr2x_60k_seed42
+    logger_backends: [tensorboard]
+  max_epochs: -1
+  # Fixed training budget: there is no metric-based early stopping.
+  max_steps: 60000
+  val_check_interval: -1
+  save_interval: 10000
+  per_worker_log: false
+  per_worker_log_path: null
+
+data:
+  train_data_paths: ${oc.env:CLOTHDOJO_LEROBOT_DATASET}
+  # RLINF interprets this per rank, so 2 means 16 decoder workers on 8 ranks.
+  num_workers: 2
+
+actor:
+  group_name: ActorGroup
+  training_backend: fsdp
+  micro_batch_size: 8
+  global_batch_size: 64
+  seed: 42
+  model:
+    model_type: openpi_rlinf
+    model_path: ${oc.env:CLOTHDOJO_PI05_CHECKPOINT}
+    # Keep FP32 masters; FSDP casts parameter compute to BF16 below.
+    precision: fp32
+    pi05: true
+    num_action_chunks: 50
+    action_dim: 14
+    is_lora: false
+    lora_rank: 32
+    use_proprio: true
+    num_steps: 5
+    add_value_head: false
+    openpi:
+      task: sft
+      config_name: pi05_aloha_robotwin
+      num_images_in_input: 3
+      action_chunk: 50
+      action_env_dim: 14
+      model_action_dim: 32
+      paligemma_variant: gemma_2b
+      action_expert_variant: gemma_300m
+      discrete_state_input: true
+      max_token_len: 200
+      use_rlt: false
+    openpi_data:
+      adapt_to_pi: false
+      extra_delta_transform: true
+      default_prompt: Flatten the shirt.
+      norm_stats_path: ${oc.env:CLOTHDOJO_PI05_NORM_STATS}
+  optim:
+    # The 2x family was the strongest prior JAX result. Preserve global batch
+    # 64 and extend the cosine horizon so the floor is reached at step 60k.
+    lr: 5.0e-5
+    adam_beta1: 0.9
+    adam_beta2: 0.95
+    adam_eps: 1.0e-8
+    weight_decay: 1.0e-10
+    clip_grad: 1.0
+    total_training_steps: 60000
+    lr_warmup_steps: 1000
+    lr_scheduler: openpi_cosine
+    num_cycles: 0.5
+    min_lr: 5.0e-6
+  fsdp_config:
+    strategy: fsdp
+    sharding_strategy: full_shard
+    use_orig_params: true
+    gradient_checkpointing: true
+    gradient_checkpointing_use_reentrant: false
+    cpu_offload: false
+    offload_pin_memory: false
+    reshard_after_forward: true
+    enable_gradient_accumulation: true
+    forward_prefetch: false
+    limit_all_gathers: false
+    backward_prefetch: null
+    use_liger_kernel: false
+    mixed_precision:
+      param_dtype: bf16
+      reduce_dtype: fp32
+      buffer_dtype: fp32
+    amp_autocast:
+      enabled: false
+      precision: bf16
+    grad_scaler:
+      enabled: false
+      init_scale: null
+      growth_interval: null
