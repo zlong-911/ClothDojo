@@ -163,23 +163,8 @@ def create_app(config_path: str | Path):
             headers={"Cache-Control": "no-cache"},
         )
 
-    @app.get("/api/v1/bootstrap")
-    async def bootstrap():
-        return {
-            "profiles": [
-                {
-                    "id": profile.id,
-                    "display_name": profile.display_name,
-                    "scene": profile.scene,
-                }
-                for profile in config.profiles.values()
-            ],
-            "slots": supervisor.slots(),
-        }
-
-    # Stable routes used by the preserved newton-cloth-rl workspace.  The
-    # response translation is isolated in CollectionWorkspace; canonical data
-    # catalogs do not depend on browser-era schemas.
+    # Browser response translation stays in CollectionWorkspace so canonical
+    # data catalogs do not depend on presentation schemas.
     @app.get("/api/snapshot")
     async def workspace_snapshot():
         return workspace.snapshot()
@@ -404,132 +389,6 @@ def create_app(config_path: str | Path):
         client_url = build_cloudxr_client_url(str(session["endpoint"]), device)
         image = qrcode.make(client_url, image_factory=SvgPathImage)
         return Response(content=image.to_string(), media_type="image/svg+xml")
-
-    @app.get("/api/v1/assets")
-    async def asset_page(
-        status: AssetStatus = "pending",
-        query: str = "",
-        page: int = 1,
-        page_size: int = 48,
-    ):
-        try:
-            return assets.page(status=status, query=query, page=page, page_size=page_size)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    @app.get("/api/v1/assets/{asset_id}/preview/{view}")
-    async def asset_preview(asset_id: str, view: Literal["front", "back"]):
-        try:
-            path = assets.preview(asset_id, view)
-        except (FileNotFoundError, ValueError) as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        return FileResponse(
-            path,
-            media_type="image/png",
-            headers={"Cache-Control": "public, max-age=31536000, immutable"},
-        )
-
-    @app.put("/api/v1/assets/{asset_id}/decision")
-    async def decide_asset(asset_id: str, request: AssetDecisionRequest):
-        try:
-            return assets.decide(asset_id, request.decision)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    @app.get("/api/v1/profiles/{profile_id}/episodes")
-    async def episode_page(profile_id: str, page: int = 1, page_size: int = 50):
-        try:
-            return review_catalog(profile_id).episodes(page=page, page_size=page_size)
-        except (OSError, RuntimeError, ValueError) as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    @app.get("/api/v1/profiles/{profile_id}/episodes/{episode_id}/annotation")
-    async def annotation(profile_id: str, episode_id: str):
-        try:
-            return review_catalog(profile_id).annotation(episode_id)
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except (RuntimeError, ValueError) as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    @app.put("/api/v1/profiles/{profile_id}/episodes/{episode_id}/annotation")
-    async def save_annotation(
-        profile_id: str,
-        episode_id: str,
-        request: SaveAnnotationRequest,
-    ):
-        try:
-            return review_catalog(profile_id).save_annotation(
-                episode_id,
-                review_status=request.review_status,
-                segments=[segment.model_dump() for segment in request.segments],
-                expected_revision=request.expected_revision,
-            )
-        except AnnotationConflictError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except (RuntimeError, ValueError) as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    @app.get("/api/v1/profiles/{profile_id}/episodes/{episode_id}/videos/{camera}")
-    async def review_video(profile_id: str, episode_id: str, camera: str):
-        try:
-            path = review_catalog(profile_id).video(episode_id, camera)
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except (RuntimeError, ValueError) as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return FileResponse(path, media_type="video/mp4")
-
-    @app.get("/api/v1/profiles/{profile_id}/hil/runs")
-    async def hil_runs(profile_id: str):
-        return {"runs": hil_catalog(profile_id).runs()}
-
-    @app.get(
-        "/api/v1/profiles/{profile_id}/hil/runs/{run_id}/episodes/{episode_id}/videos/{camera}"
-    )
-    async def hil_video(
-        profile_id: str,
-        run_id: str,
-        episode_id: str,
-        camera: str,
-    ):
-        try:
-            path = hil_catalog(profile_id).video(run_id, episode_id, camera)
-        except (FileNotFoundError, KeyError) as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except (RuntimeError, ValueError) as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return FileResponse(path, media_type="video/mp4")
-
-    @app.put("/api/v1/profiles/{profile_id}/hil/runs/{run_id}/episodes/{episode_id}/good")
-    async def set_hil_good(
-        profile_id: str,
-        run_id: str,
-        episode_id: str,
-        request: SetGoodRequest,
-    ):
-        try:
-            return hil_catalog(profile_id).set_good(run_id, episode_id, good=request.good)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except (OSError, RuntimeError, ValueError) as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    @app.post("/api/v1/profiles/{profile_id}/hil/plans")
-    async def intervention_plan(profile_id: str, request: InterventionPlanRequest):
-        try:
-            return hil_catalog(profile_id).intervention_plan(
-                request.run_id,
-                [breakpoint.model_dump() for breakpoint in request.breakpoints],
-            )
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except (OSError, RuntimeError, ValueError) as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     app.state.collection_config = config
     app.state.asset_catalog = assets

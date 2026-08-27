@@ -379,6 +379,11 @@ profiles:
     )
 
     with TestClient(create_app(config_path)) as client:
+        api_routes = {
+            route.path for route in client.app.routes if route.path.startswith("/api/")
+        }
+        assert not any(path.startswith("/api/v1/") for path in api_routes)
+        assert {"/api/snapshot", "/api/assets", "/api/hil/snapshot"} <= api_routes
         assert client.get("/").status_code == 200
         assert "ClothDojo Collection" in client.get("/").text
         snapshot = client.get("/api/snapshot")
