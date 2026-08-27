@@ -94,7 +94,6 @@ def _spec(tmp_path: Path):
                 "schema: clothdojo_steam_advantages",
                 "format_version: 1",
                 f"checkpoint: {checkpoint}",
-                "tag: steam_test",
                 "stride: 64",
                 "camera_keys:",
                 "  - observation.images.primary",
@@ -127,7 +126,6 @@ def test_steam_advantage_spec_is_owned_and_explicit(tmp_path: Path) -> None:
 
     assert report["compatible"] is True
     assert report["prompt"] == "Flatten the shirt."
-    assert report["tag"] == "steam_test"
     assert report["camera_keys"] == [
         "observation.images.primary",
         "observation.images.third_person",
@@ -202,7 +200,6 @@ def test_existing_labels_are_bound_to_current_advantage_config(tmp_path: Path) -
     common = {
         "schema": "clothdojo_steam_advantages",
         "format_version": 1,
-        "tag": spec.tag,
         "prompt": spec.prompt,
         "checkpoint_config_sha256": report["checkpoint_config_sha256"],
         "checkpoint_weights_sha256": report["checkpoint_weights_sha256"],

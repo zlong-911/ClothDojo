@@ -193,7 +193,6 @@ def _worker_type() -> type:
             data_config = config.data.create(config.assets_dirs, config.model)
             model_transforms = self._build_model_transforms(data_config)
             norm_stats = data_config.norm_stats or {}
-            advantage_tag = data_cfg.get("advantage_tag")
 
             datasets_with_weights = []
             for dataset_entry in datasets_config:
@@ -237,7 +236,7 @@ def _worker_type() -> type:
                         *model_transforms,
                     ],
                 )
-                advantages = self._load_advantages_lookup(data_path, advantage_tag)
+                advantages = self._load_advantages_lookup(data_path)
                 final_dataset = AdvantagePreservingDataset(
                     base_dataset=base_dataset,
                     transformed_dataset=transformed_dataset,

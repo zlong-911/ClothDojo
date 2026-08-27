@@ -1,6 +1,6 @@
 # ClothDojo's first guarded offline CFG gate.
 # Both datasets are project-owned LeRobot v2.1 publications and carry the same
-# tagged boolean advantage parquet. Run the CFG pipeline preflight first.
+# checkpoint-bound boolean advantage parquet. Run the CFG pipeline preflight first.
 hydra:
   run:
     dir: .
@@ -27,7 +27,6 @@ runner:
 
 data:
   num_workers: 4
-  advantage_tag: ${oc.env:CLOTHDOJO_CFG_ADVANTAGE_TAG}
   # Keep this false: otherwise RLINF multiplies the explicit weights by each
   # dataset length and 0.75/0.25 no longer means 75% expert / 25% rollout.
   balance_dataset_weights: false

@@ -65,16 +65,15 @@ def _dataset(root: Path, labels: list[bool]) -> None:
                 "advantage": pa.array(labels, type=pa.bool_()),
             }
         ),
-        root / "meta" / "advantages_steam_v1.parquet",
+        root / "meta" / "advantages.parquet",
     )
     info_digest = hashlib.sha256((root / "meta" / "info.json").read_bytes()).hexdigest()
     positive = sum(labels)
-    (root / "meta" / "advantages_steam_v1.json").write_text(
+    (root / "meta" / "advantages.json").write_text(
         json.dumps(
             {
                 "schema": "clothdojo_steam_advantages",
                 "format_version": 1,
-                "tag": "steam_v1",
                 "checkpoint_config_sha256": "a" * 64,
                 "checkpoint_weights_sha256": "b" * 64,
                 "dataset_info_sha256": info_digest,
@@ -114,7 +113,6 @@ def _configure(monkeypatch, tmp_path: Path) -> tuple[Path, Path]:
     values = {
         "CLOTHDOJO_CFG_EXPERT_DATASET": expert,
         "CLOTHDOJO_CFG_ROLLOUT_DATASET": rollout,
-        "CLOTHDOJO_CFG_ADVANTAGE_TAG": "steam_v1",
         "CLOTHDOJO_CFG_INIT_CHECKPOINT": checkpoint.parents[1],
         "CLOTHDOJO_PI05_NORM_STATS": norm,
         "CLOTHDOJO_TRAIN_OUTPUT": tmp_path / "output",
@@ -154,10 +152,8 @@ def test_cfg_preflight_validates_exact_mixture(monkeypatch, tmp_path: Path) -> N
             "episodes": 2,
             "frames": 4,
             "fps": 50,
-            "advantage_path": str(expert / "meta/advantages_steam_v1.parquet"),
-            "advantage_manifest_path": str(
-                expert / "meta/advantages_steam_v1.json"
-            ),
+            "advantage_path": str(expert / "meta/advantages.parquet"),
+            "advantage_manifest_path": str(expert / "meta/advantages.json"),
             "positive_frames": 4,
             "negative_frames": 0,
             "steam_checkpoint_config_sha256": "a" * 64,
@@ -171,10 +167,8 @@ def test_cfg_preflight_validates_exact_mixture(monkeypatch, tmp_path: Path) -> N
             "episodes": 2,
             "frames": 4,
             "fps": 50,
-            "advantage_path": str(rollout / "meta/advantages_steam_v1.parquet"),
-            "advantage_manifest_path": str(
-                rollout / "meta/advantages_steam_v1.json"
-            ),
+            "advantage_path": str(rollout / "meta/advantages.parquet"),
+            "advantage_manifest_path": str(rollout / "meta/advantages.json"),
             "positive_frames": 1,
             "negative_frames": 3,
             "steam_checkpoint_config_sha256": "a" * 64,
@@ -244,7 +238,7 @@ def test_cfg_one_expected_epoch_run(monkeypatch, tmp_path: Path) -> None:
 
 def test_cfg_preflight_rejects_incomplete_advantages(monkeypatch, tmp_path: Path) -> None:
     _, rollout = _configure(monkeypatch, tmp_path)
-    path = rollout / "meta/advantages_steam_v1.parquet"
+    path = rollout / "meta/advantages.parquet"
     table = pq.read_table(path).slice(0, 3)
     pq.write_table(table, path)
     config = Path(__file__).resolve().parents[1] / "configs/training/cfg_pi05_aloha.yaml"
@@ -269,7 +263,7 @@ def test_cfg_preflight_rejects_invalid_checkpoint_weights_digest(
     monkeypatch, tmp_path: Path
 ) -> None:
     expert, _ = _configure(monkeypatch, tmp_path)
-    manifest = expert / "meta/advantages_steam_v1.json"
+    manifest = expert / "meta/advantages.json"
     payload = json.loads(manifest.read_text(encoding="utf-8"))
     payload["checkpoint_weights_sha256"] = "not-a-sha256"
     manifest.write_text(json.dumps(payload), encoding="utf-8")
@@ -283,7 +277,7 @@ def test_cfg_preflight_rejects_different_checkpoint_weights(
     monkeypatch, tmp_path: Path
 ) -> None:
     _, rollout = _configure(monkeypatch, tmp_path)
-    manifest = rollout / "meta/advantages_steam_v1.json"
+    manifest = rollout / "meta/advantages.json"
     payload = json.loads(manifest.read_text(encoding="utf-8"))
     payload["checkpoint_weights_sha256"] = "c" * 64
     manifest.write_text(json.dumps(payload), encoding="utf-8")

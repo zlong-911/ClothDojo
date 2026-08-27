@@ -6,7 +6,6 @@ import hashlib
 import json
 import logging
 import os
-import re
 import shutil
 import sys
 import time
@@ -21,8 +20,6 @@ from clothdojo.training.episode_selection import (
     read_episode_selection,
     validate_episode_selection,
 )
-
-_TAG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,7 +44,6 @@ class SteamAdvantageDataset:
 class SteamAdvantageSpec:
     config_path: Path
     checkpoint: Path
-    tag: str
     prompt: str
     stride: int
     camera_keys: tuple[str, ...]
@@ -83,9 +79,6 @@ def compose_steam_advantage_spec(config_path: str | Path) -> SteamAdvantageSpec:
 
     checkpoint = Path(str(raw.get("checkpoint", ""))).expanduser().resolve()
     _checkpoint_weights(checkpoint)
-    tag = str(raw.get("tag", ""))
-    if not _TAG.fullmatch(tag):
-        raise ValueError(f"invalid STEAM advantage tag: {tag!r}")
     stride = _positive_int(raw.get("stride"), "stride")
     camera_keys = tuple(str(value) for value in raw.get("camera_keys", ()))
     if not camera_keys or len(set(camera_keys)) != len(camera_keys):
@@ -104,7 +97,7 @@ def compose_steam_advantage_spec(config_path: str | Path) -> SteamAdvantageSpec:
     if not isinstance(entries, list) or len(entries) != 2:
         raise ValueError("STEAM labeling requires exactly one sft and one rollout dataset")
     datasets = tuple(
-        _compose_dataset(entry, tag=tag, camera_keys=camera_keys)
+        _compose_dataset(entry, camera_keys=camera_keys)
         for entry in entries
     )
     if sorted(dataset.role for dataset in datasets) != ["rollout", "sft"]:
@@ -117,7 +110,6 @@ def compose_steam_advantage_spec(config_path: str | Path) -> SteamAdvantageSpec:
     return SteamAdvantageSpec(
         config_path=path,
         checkpoint=checkpoint,
-        tag=tag,
         prompt=prompts.pop(),
         stride=stride,
         camera_keys=camera_keys,
@@ -142,7 +134,6 @@ def inspect_steam_advantages(spec: SteamAdvantageSpec) -> dict[str, Any]:
         "checkpoint_weights": str(weights),
         "checkpoint_config_sha256": _sha256(spec.checkpoint / "config.json"),
         "checkpoint_weights_sha256": _sha256(weights),
-        "tag": spec.tag,
         "prompt": spec.prompt,
         "stride": spec.stride,
         "camera_keys": list(spec.camera_keys),
@@ -187,7 +178,7 @@ def run_steam_advantages(spec: SteamAdvantageSpec) -> None:
     if world_size > 1:
         dist.init_process_group(backend="nccl", device_id=torch.device(device))
 
-    run_dir = spec.work_dir / f"steam_advantages_{spec.tag}.partial"
+    run_dir = spec.work_dir / "steam_advantages.partial"
     if rank == 0:
         if run_dir.exists():
             shutil.rmtree(run_dir)
@@ -347,7 +338,6 @@ def smoke_steam_advantages(spec: SteamAdvantageSpec) -> dict[str, Any]:
 def _compose_dataset(
     value: Any,
     *,
-    tag: str,
     camera_keys: tuple[str, ...],
 ) -> SteamAdvantageDataset:
     if not isinstance(value, dict):
@@ -384,7 +374,7 @@ def _compose_dataset(
         episodes=episodes,
         total_episodes=total_episodes,
         total_frames=_positive_int(info.get("total_frames"), "total_frames"),
-        output_path=dataset / "meta" / f"advantages_{tag}.parquet",
+        output_path=dataset / "meta" / "advantages.parquet",
     )
 
 
@@ -483,7 +473,6 @@ def _publish_dataset_labels(
     manifest = {
         "schema": "clothdojo_steam_advantages",
         "format_version": 1,
-        "tag": spec.tag,
         "role": entry.role,
         "prompt": spec.prompt,
         "checkpoint": str(spec.checkpoint),

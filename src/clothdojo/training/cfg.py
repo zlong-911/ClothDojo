@@ -82,14 +82,11 @@ def inspect_cfg_training(
     if sorted(roles) != sorted(CFG_ROLES):
         raise ValueError(f"CFG dataset types must be {CFG_ROLES}, got {roles}")
 
-    tag = data_cfg.get("advantage_tag")
-    tag = None if tag is None else str(tag)
     reports = [
         inspect_cfg_dataset(
             entry["dataset_path"],
             role=str(entry["type"]),
             weight=float(entry.get("weight", 1.0)),
-            advantage_tag=tag,
             episodes=entry.get("episodes"),
             episodes_path=entry.get("episodes_path"),
         )
@@ -136,7 +133,6 @@ def inspect_cfg_training(
             ),
             "unconditional_prob": float(model.openpi.unconditional_prob),
         },
-        "advantage_tag": tag,
         "balance_dataset_weights": False,
         "sampling_probabilities": {
             report.role: float(probability)
@@ -177,7 +173,6 @@ def inspect_cfg_dataset(
     *,
     role: str,
     weight: float,
-    advantage_tag: str | None,
     episodes: Any = None,
     episodes_path: Any = None,
 ) -> CfgDatasetReport:
@@ -203,14 +198,12 @@ def inspect_cfg_dataset(
         total_episodes=total_episodes,
     )
 
-    filename = f"advantages_{advantage_tag}.parquet" if advantage_tag else "advantages.parquet"
-    advantage_path = root / "meta" / filename
+    advantage_path = root / "meta" / "advantages.parquet"
     positive, negative, selected_frames = _validate_advantages(advantage_path, lengths, selected)
     manifest_path = advantage_path.with_suffix(".json")
     manifest = _validate_advantage_manifest(
         manifest_path,
         root=root,
-        tag=advantage_tag,
         selected=selected,
         rows=selected_frames,
         positive=positive,
@@ -261,7 +254,6 @@ def _validate_advantage_manifest(
     path: Path,
     *,
     root: Path,
-    tag: str | None,
     selected: np.ndarray,
     rows: int,
     positive: int,
@@ -270,8 +262,8 @@ def _validate_advantage_manifest(
     manifest = _read_object(path, "STEAM advantage provenance")
     if manifest.get("schema") != "clothdojo_steam_advantages":
         raise ValueError(f"unsupported STEAM advantage provenance: {path}")
-    if manifest.get("format_version") != 1 or manifest.get("tag") != tag:
-        raise ValueError(f"STEAM advantage provenance does not match its tag: {path}")
+    if manifest.get("format_version") != 1:
+        raise ValueError(f"unsupported STEAM advantage provenance: {path}")
     if manifest.get("dataset_info_sha256") != _sha256(root / "meta" / "info.json"):
         raise ValueError(f"STEAM advantages target a different dataset revision: {path}")
     if tuple(manifest.get("episodes", ())) != tuple(int(value) for value in selected):

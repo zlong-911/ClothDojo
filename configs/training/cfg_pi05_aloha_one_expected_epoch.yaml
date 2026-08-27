@@ -32,7 +32,6 @@ runner:
 
 data:
   num_workers: 4
-  advantage_tag: ${oc.env:CLOTHDOJO_CFG_ADVANTAGE_TAG}
   # Keep explicit weights as source probabilities instead of multiplying them
   # by dataset length.
   balance_dataset_weights: false

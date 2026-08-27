@@ -42,9 +42,6 @@ def inspect_cfg_pipeline(
         project_root / "data",
         "CFG initialization checkpoint",
     )
-    if str(cfg.data.advantage_tag) != spec.tag:
-        raise ValueError("STEAM and CFG configs use different advantage tags")
-
     cfg_entries = {str(entry.type): entry for entry in cfg.data.train_data_paths}
     if set(cfg_entries) != {"sft", "rollout"}:
         raise ValueError("CFG pipeline requires one sft and one rollout entry")
@@ -97,7 +94,6 @@ def _validate_existing_label_manifests(
     advantage: dict[str, Any],
 ) -> None:
     common = {
-        "tag": spec.tag,
         "prompt": spec.prompt,
         "checkpoint_config_sha256": advantage["checkpoint_config_sha256"],
         "checkpoint_weights_sha256": advantage["checkpoint_weights_sha256"],
@@ -141,9 +137,9 @@ def run_cfg_pipeline(
         cfg_overrides=cfg_overrides,
     )
     spec = compose_steam_advantage_spec(advantage_config)
-    status_path = spec.work_dir / f"cfg_pipeline_{spec.tag}.json"
-    plan_path = spec.work_dir / f"cfg_pipeline_{spec.tag}.plan.json"
-    lock_path = spec.work_dir / f"cfg_pipeline_{spec.tag}.lock"
+    status_path = spec.work_dir / "cfg_pipeline.json"
+    plan_path = spec.work_dir / "cfg_pipeline.plan.json"
+    lock_path = spec.work_dir / "cfg_pipeline.lock"
     spec.work_dir.mkdir(parents=True, exist_ok=True)
     with _exclusive_lock(lock_path):
         _write_json_atomic(plan_path, plan)
@@ -237,7 +233,6 @@ def _write_status(
         "stage": stage,
         "pid": os.getpid(),
         "updated_at": datetime.now(UTC).isoformat(),
-        "advantage_tag": spec.tag,
     }
     if error is not None:
         value["error"] = error
