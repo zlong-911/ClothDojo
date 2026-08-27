@@ -247,33 +247,6 @@ def main(argv: Sequence[str] | None = None) -> None:
             )
         print(json.dumps(result.to_json_dict(), indent=2, sort_keys=True))
         return
-    if args.command == "data" and args.data_command == "import-legacy-collection":
-        if passthrough:
-            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
-        from clothdojo.data.legacy_collection import import_legacy_collection
-
-        last_reported = -1
-
-        def report(files: int, total_files: int, copied: int, total_bytes: int) -> None:
-            nonlocal last_reported
-            gib = copied // (1024**3)
-            if gib != last_reported or files == total_files:
-                last_reported = gib
-                print(
-                    f"imported {files}/{total_files} files "
-                    f"({copied / 1024**3:.1f}/{total_bytes / 1024**3:.1f} GiB)",
-                    flush=True,
-                )
-
-        result = import_legacy_collection(
-            args.source,
-            args.output,
-            include_reviews=not args.without_reviews,
-            workers=args.workers,
-            progress=report,
-        )
-        print(json.dumps(result.to_json_dict(), indent=2, sort_keys=True))
-        return
     if args.command == "data" and args.data_command == "migrate-v3-indexed-view":
         if passthrough:
             parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
@@ -675,18 +648,6 @@ def _parser() -> argparse.ArgumentParser:
         "--plan-only",
         action="store_true",
         help="synchronize and validate inputs without decoding or writing data",
-    )
-    legacy_import = data_commands.add_parser(
-        "import-legacy-collection",
-        help="copy and normalize one validated pre-ClothDojo collection",
-    )
-    legacy_import.add_argument("--source", required=True, help="legacy dataset root")
-    legacy_import.add_argument("--output", required=True, help="new ClothDojo dataset root")
-    legacy_import.add_argument("--workers", type=int, default=8)
-    legacy_import.add_argument(
-        "--without-reviews",
-        action="store_true",
-        help="migrate only canonical trajectories and annotations",
     )
     indexed_view = data_commands.add_parser(
         "migrate-v3-indexed-view",

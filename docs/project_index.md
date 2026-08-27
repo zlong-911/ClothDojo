@@ -120,8 +120,6 @@
 - `docs/pi05_sft.md`: evidence-backed Pi0.5 SFT contract and launch preflight.
 - `docs/pi05_jax_sft.md`: authoritative JAX SFT contract, launch gates and
   conversion boundary into RLINF.
-- `src/clothdojo/data/legacy_collection.py`: one-way, resumable import and
-  manifest normalization for validated pre-ClothDojo collections.
 - `docs/newton_15_audit.md`: public API changes and physics acceptance gates.
 - `docs/rlinf_delta_audit.md`: disposition of all 19 old RLINF source changes.
 - `docs/rtc_rollout.md`: RTC execution, rendering and publication acceptance

@@ -2,8 +2,7 @@
 
 `clothdojo data export-lerobot` is the single offline path from a local
 ClothDojo reviewed trajectory collection to the LeRobot v2.1 format pinned by
-RLINF. The one-time `import-legacy-collection` command copies and normalizes a
-validated pre-ClothDojo collection first; export never reads the old repository.
+RLINF. Export reads only the current ClothDojo trajectory format.
 
 ## Selection rule
 

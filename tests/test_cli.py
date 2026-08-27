@@ -138,6 +138,15 @@ def test_training_rejects_removed_openpi_entries(legacy_kind: str) -> None:
         cli.main(["train", legacy_kind, "--config", "unused.yaml", "--check"])
 
 
+@pytest.mark.parametrize(
+    "removed_command",
+    ["import-legacy-collection", "append-legacy-collection"],
+)
+def test_data_rejects_removed_collection_migrations(removed_command: str) -> None:
+    with pytest.raises(SystemExit, match="2"):
+        cli.main(["data", removed_command, "--source", "unused"])
+
+
 def test_simulation_check_calls_acceptance_entry(monkeypatch, capsys) -> None:
     call = {}
     monkeypatch.setattr(
