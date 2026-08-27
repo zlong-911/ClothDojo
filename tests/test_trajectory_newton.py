@@ -90,6 +90,23 @@ def test_capture_states_splits_worlds_and_copies_simulator_arrays() -> None:
     assert np.all(states[0].particle_q >= 0)
 
 
+def test_capture_states_converts_physical_worlds_to_local_coordinates() -> None:
+    runtime = _runtime()
+    runtime.scene.world_offsets = ((0.0, 0.0, 0.0), (10.0, 20.0, 30.0))
+    particle_physical = runtime.state_0.particle_q.values
+    particle_physical[3:] += np.asarray([10.0, 20.0, 30.0], dtype=np.float32)
+    body_physical = runtime.scene.robot.attributes["body_q"].values
+    body_physical[1, 0, :, :3] += np.asarray([10.0, 20.0, 30.0], dtype=np.float32)
+
+    states = capture_states(runtime, 0)
+
+    np.testing.assert_array_equal(states[1].particle_q, np.arange(9, 18).reshape(3, 3))
+    np.testing.assert_array_equal(
+        states[1].body_q[:, :3],
+        np.arange(14, 28, dtype=np.float32).reshape(2, 7)[:, :3],
+    )
+
+
 def test_capture_actions_preserves_worlds_and_rejects_wrong_shapes() -> None:
     runtime = _runtime()
     arm = FakeArray(np.arange(24, dtype=np.float32).reshape(2, 12))

@@ -1,0 +1,57 @@
+# OpenPI/JAX Pi0.5 SFT on the migrated shirt-fold demonstrations.
+schema: clothdojo_pi05_jax_sft
+format_version: 1
+
+experiment:
+  profile: openpi_reference
+
+openpi:
+  config_name: pi05_aloha_robotwin
+  data:
+    task: fold the shirt
+    adapt_to_pi: false
+    extra_delta_transform: true
+    default_prompt: Fold the shirt.
+    video_backend: pyav
+
+paths:
+  dataset: ${oc.env:CLOTHDOJO_LEROBOT_DATASET}
+  norm_stats: ${oc.env:CLOTHDOJO_PI05_NORM_STATS}
+  base_params: ${oc.env:CLOTHDOJO_PI05_JAX_PARAMS}
+  pytorch_base: ${oc.env:CLOTHDOJO_PI05_PYTORCH_BASE}
+  openpi_data_home: ${oc.env:CLOTHDOJO_OPENPI_CACHE}
+  checkpoint_base_dir: ${oc.env:CLOTHDOJO_JAX_CHECKPOINT_BASE}
+  gate_dir: ${oc.env:CLOTHDOJO_JAX_GATE_DIR}
+
+training:
+  seed: 42
+  batch_size: 64
+  num_workers: 16
+  fsdp_devices: 8
+  num_train_steps: 40000
+  log_interval: 100
+  save_interval: 10000
+  keep_period: 10000
+
+optimizer:
+  warmup_steps: 1000
+  peak_lr: 2.5e-5
+  decay_steps: 30000
+  decay_lr: 2.5e-6
+  adam_b1: 0.9
+  adam_b2: 0.95
+  adam_eps: 1.0e-8
+  weight_decay: 1.0e-10
+  clip_gradient_norm: 1.0
+  ema_decay: 0.99
+
+gates:
+  overfit_steps: 200
+  pilot_steps: 1000
+  overfit_max_loss_ratio: 0.8
+
+logging:
+  project_name: clothdojo
+  run_name: shirt_fold_pi05_aloha_jax_40k_d_20260825_v1
+  wandb_group: pi05_sft_shirt_fold
+  wandb_enabled: true

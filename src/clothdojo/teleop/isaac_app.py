@@ -55,25 +55,10 @@ def main() -> None:
 
         isaac_root = Path(isaacsim.__file__).resolve().parent
         app = SimulationApp(
-            {
-                "headless": False,
-                "renderer": "RasterizationLighting",
-                "width": 1280,
-                "height": 720,
-                "multi_gpu": False,
-                "active_gpu": 0,
-                # SimulationApp otherwise overwrites PXR_WORK_THREAD_LIMIT
-                # with its 32-thread default before USDPhysics initializes.
-                "limit_cpu_threads": 1,
-                "extra_args": [
-                    "--/rtx/hydra/supportMultiTickRate=false",
-                    "--/rtx/rendering/perSensorTickTlas=false",
-                    "--ext-folder",
-                    str(isaac_root / "extscache"),
-                ],
-            },
+            _simulation_app_config(plan, isaac_root),
             experience=str(Path(__file__).with_name("teleop.kit")),
         )
+        status.write("starting", phase="building_newton", gpu_id=plan.gpu_id)
         runtime = _build_newton_runtime(plan)
         _run(app, runtime, plan, status, stop)
         status.write("stopped", phase="operator_stop" if stop.is_set() else "app_exit")
@@ -91,15 +76,48 @@ def main() -> None:
 def _build_newton_runtime(plan: SessionPlan):
     """Build physics after Kit startup but before any ClothDojo USD import."""
 
+    import warp as wp
+
+    device = wp.get_device()
+    if not device.is_cuda or device.ordinal != plan.gpu_id:
+        raise RuntimeError(
+            "Warp did not adopt Kit's active GPU context: "
+            f"expected cuda:{plan.gpu_id}, got {device}"
+        )
     from clothdojo.sim.runtime import ShirtFlattenRuntime
     from clothdojo.sim.scene import ShirtFlattenSpec, build_shirt_flatten
 
-    scene = build_shirt_flatten(
-        plan.assets_root,
-        spec=ShirtFlattenSpec(garment_id=plan.asset_id, world_count=1),
-        device="cuda:0",
-    )
-    return ShirtFlattenRuntime(scene)
+    with wp.ScopedDevice(device):
+        scene = build_shirt_flatten(
+            plan.assets_root,
+            spec=ShirtFlattenSpec(garment_id=plan.asset_id, world_count=1),
+            device=device,
+        )
+        return ShirtFlattenRuntime(scene)
+
+
+def _simulation_app_config(plan: SessionPlan, isaac_root: Path) -> dict:
+    return {
+        "headless": False,
+        "renderer": "RasterizationLighting",
+        "width": 1280,
+        "height": 720,
+        "multi_gpu": False,
+        "active_gpu": plan.gpu_id,
+        "physics_gpu": plan.gpu_id,
+        # A native startup failure must return control to the supervisor; the
+        # bundled crash reporter can otherwise symbolicate for many minutes.
+        "enable_crashreporter": False,
+        # SimulationApp otherwise overwrites PXR_WORK_THREAD_LIMIT with its
+        # 32-thread default before USDPhysics initializes.
+        "limit_cpu_threads": 1,
+        "extra_args": [
+            "--/rtx/hydra/supportMultiTickRate=false",
+            "--/rtx/rendering/perSensorTickTlas=false",
+            "--ext-folder",
+            str(isaac_root / "extscache"),
+        ],
+    }
 
 
 def _run(
@@ -143,7 +161,8 @@ def _run(
     stage = context.get_stage()
     if stage is None:
         raise RuntimeError("Isaac USD context has no render stage")
-    bridge = NewtonFabricBridge(runtime.model, context, device="cuda:0")
+    device = runtime.model.device
+    bridge = NewtonFabricBridge(runtime.model, context, device=device)
     anchor = configure_xr(
         app,
         stage,
@@ -173,7 +192,7 @@ def _run(
     right_return = HomeReturn()
     locomotion = XRLocomotion(move_speed_mps=0.5, turn_speed_degps=60.0, deadzone=0.18)
     arm_command = ik.solve()
-    gripper_command = wp.ones((1, 2), dtype=wp.float32, device="cuda:0")
+    gripper_command = wp.ones((1, 2), dtype=wp.float32, device=device)
     print(
         "CUDA Graph: "
         f"physics={'enabled' if runtime.cuda_graph_enabled else 'disabled'}, "
@@ -201,6 +220,7 @@ def _run(
     intervention_phase = "waiting" if plan.mode == "intervention" else None
     continuation_phase = "active" if plan.continuation_plan is not None else None
     continuation_consumed = False
+    continuation_advance_after_finalize = False
     current_origin = None
 
     def restore_next(*, requeue_current: bool = False) -> bool:
@@ -258,6 +278,21 @@ def _run(
         while app.is_running() and not stop.is_set():
             frame_started = time.perf_counter()
             now = time.monotonic()
+            had_finalization = recorder.is_finalizing
+            completed = recorder.poll_finalization()
+            if completed is not None:
+                print(f"  [REC] saved {completed}", flush=True)
+                if intervention_phase == "finalizing":
+                    intervention_phase = "locked"
+                if plan.continuation_plan is not None:
+                    continuation_consumed = True
+                    if continuation_advance_after_finalize:
+                        continuation_advance_after_finalize = False
+                        restore_next()
+            elif had_finalization and not recorder.is_finalizing:
+                # An abort completed.  It must never consume or advance a
+                # continuation source selected while cleanup was pending.
+                continuation_advance_after_finalize = False
             frame = backend.poll()
             graspable = grasp_probe.poll()
             if graspable is not None:
@@ -298,24 +333,31 @@ def _run(
                         frozen = True
                 elif intervention_phase == "recording" and record_pressed:
                     path = recorder.stop()
-                    intervention_phase = "locked"
                     backend.pulse_recording_stop()
-                    print(f"  [HIL] saved {path}; press X for next breakpoint", flush=True)
+                    if path is None:
+                        intervention_phase = "ready"
+                        print("  [HIL] discarded empty recording; ready to retry", flush=True)
+                    else:
+                        intervention_phase = "finalizing"
+                        print(f"  [HIL] finalizing {path}", flush=True)
                     frozen = True
                 elif intervention_phase == "locked":
                     if reset_pressed:
                         restore_next()
                     frozen = True
-                elif intervention_phase in {"aborted", "complete"}:
+                elif intervention_phase in {"finalizing", "aborted", "complete"}:
                     frozen = True
             else:
                 if record_pressed:
                     if recorder.is_recording:
                         path = recorder.stop()
-                        if path is not None and plan.continuation_plan is not None:
-                            continuation_consumed = True
                         backend.pulse_recording_stop()
-                        print(f"  [REC] saved {path}", flush=True)
+                        if path is None:
+                            print("  [REC] discarded empty recording", flush=True)
+                        else:
+                            print(f"  [REC] finalizing {path}", flush=True)
+                    elif recorder.is_finalizing:
+                        print("  [REC] waiting for trajectory finalization", flush=True)
                     elif continuation_phase != "exhausted" and not continuation_consumed:
                         path = recorder.start(origin=current_origin)
                         backend.pulse_recording_start()
@@ -338,13 +380,29 @@ def _run(
                     if plan.continuation_plan is not None:
                         if recorder.is_recording:
                             path = recorder.stop(reason="continuation_advance")
-                            continuation_consumed = path is not None
                             backend.pulse_recording_stop()
-                            print(f"  [CONTINUE] saved {path}", flush=True)
-                        restore_next(requeue_current=not continuation_consumed)
+                            if path is not None:
+                                continuation_advance_after_finalize = True
+                                print(
+                                    f"  [CONTINUE] finalizing {path}; "
+                                    "next source will load automatically",
+                                    flush=True,
+                                )
+                            else:
+                                restore_next(requeue_current=True)
+                        elif recorder.is_finalizing:
+                            continuation_advance_after_finalize = True
+                            print(
+                                "  [CONTINUE] waiting for finalization before advancing",
+                                flush=True,
+                            )
+                        else:
+                            restore_next(requeue_current=not continuation_consumed)
                     else:
                         if recorder.is_recording:
-                            recorder.stop(reason="operator_reset")
+                            path = recorder.stop(reason="operator_reset")
+                            if path is not None:
+                                print(f"  [REC] finalizing {path}", flush=True)
                         grasp_probe.discard()
                         backend.set_grasp_haptics(False, False)
                         runtime.reset()
@@ -384,6 +442,7 @@ def _run(
                         gpu_id=plan.gpu_id,
                         teleop_state="hold" if connected else "disconnected",
                         recording=recorder.is_recording,
+                        recording_finalizing=recorder.is_finalizing,
                         recording_frames=recorder.frame_count,
                         frame=frame_index,
                         intervention_phase=intervention_phase,
@@ -423,10 +482,8 @@ def _run(
             if reached_limit:
                 backend.pulse_recording_stop()
                 if intervention_phase == "recording":
-                    intervention_phase = "locked"
-                if plan.continuation_plan is not None:
-                    continuation_consumed = True
-                print("  [REC] maximum action count reached", flush=True)
+                    intervention_phase = "finalizing"
+                print("  [REC] maximum action count reached; finalizing", flush=True)
             grasp_probe.submit(runtime.state_0)
             fabric_started = time.perf_counter()
             bridge.update(runtime.state_0)
@@ -447,6 +504,7 @@ def _run(
                     gpu_id=plan.gpu_id,
                     teleop_state=targets.state.value,
                     recording=recorder.is_recording,
+                    recording_finalizing=recorder.is_finalizing,
                     recording_frames=recorder.frame_count,
                     frame=frame_index,
                     ik_status=ik.solution_status(),
@@ -473,14 +531,19 @@ def _run(
                 for name in report_seconds:
                     report_seconds[name] = 0.0
     finally:
-        if recorder.is_recording:
-            if intervention_phase == "recording":
-                recorder.abort("session_stop")
-            else:
-                recorder.stop(reason="session_stop")
-        backend.set_grasp_haptics(False, False)
-        backend.close()
-        anchor.close()
+        try:
+            if recorder.is_recording:
+                if intervention_phase == "recording":
+                    recorder.abort("session_stop")
+                else:
+                    recorder.stop(reason="session_stop")
+            completed = recorder.close()
+            if completed is not None:
+                print(f"  [REC] saved {completed}", flush=True)
+        finally:
+            backend.set_grasp_haptics(False, False)
+            backend.close()
+            anchor.close()
 
 
 def _button(hand, name: str) -> bool:

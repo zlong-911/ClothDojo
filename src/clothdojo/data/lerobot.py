@@ -55,6 +55,8 @@ class ExportResult:
     dropped_short_partial_segments: int
     dropped_short_source_trajectories: int
     full_trajectory_episodes: int
+    whole_trajectory_good_only: bool
+    skipped_not_whole_trajectory_good: int
     camera_names: tuple[str, ...]
 
     def to_json_dict(self) -> dict[str, Any]:
@@ -73,6 +75,10 @@ class ExportResult:
             "dropped_short_partial_segments": self.dropped_short_partial_segments,
             "dropped_short_source_trajectories": (self.dropped_short_source_trajectories),
             "full_trajectory_episodes": self.full_trajectory_episodes,
+            "whole_trajectory_good_only": self.whole_trajectory_good_only,
+            "skipped_not_whole_trajectory_good": (
+                self.skipped_not_whole_trajectory_good
+            ),
             "partial_trajectory_episodes": (
                 self.output_episodes - self.full_trajectory_episodes
             ),
@@ -87,6 +93,7 @@ def republish_review_dataset(
     *,
     repo_id: str | None = None,
     min_segment_frames: int = DEFAULT_MIN_SEGMENT_FRAMES,
+    whole_trajectory_good_only: bool = False,
 ) -> ExportResult:
     """Publish a stricter reviewed export without re-encoding unchanged media.
 
@@ -112,6 +119,7 @@ def republish_review_dataset(
     plan, sources = inspect_review_export(
         source_root,
         min_segment_frames=min_segment_frames,
+        whole_trajectory_good_only=whole_trajectory_good_only,
         require_review_payload=False,
     )
     reusable_sidecar = _read_json_object(reusable / "meta" / "clothdojo.json")
@@ -299,6 +307,8 @@ def republish_review_dataset(
         dropped_short_partial_segments=plan.dropped_short_partial_segments,
         dropped_short_source_trajectories=plan.dropped_short_source_trajectories,
         full_trajectory_episodes=plan.full_trajectory_episodes,
+        whole_trajectory_good_only=plan.whole_trajectory_good_only,
+        skipped_not_whole_trajectory_good=plan.skipped_not_whole_trajectory_good,
         camera_names=tuple(key.removeprefix("observation.images.") for key in reference.video_keys),
     )
 
@@ -307,6 +317,7 @@ def inspect_review_export(
     dataset_root: str | Path,
     *,
     min_segment_frames: int = DEFAULT_MIN_SEGMENT_FRAMES,
+    whole_trajectory_good_only: bool = False,
     require_review_payload: bool = True,
 ) -> tuple[ExportPlan, dict[str, ReviewSource]]:
     """Synchronize the trajectory/annotation/review indexes without writing output."""
@@ -314,6 +325,7 @@ def inspect_review_export(
     plan = build_good_segment_plan(
         dataset_root,
         min_segment_frames=min_segment_frames,
+        whole_trajectory_good_only=whole_trajectory_good_only,
     )
     sources = discover_review_sources(
         dataset_root,
@@ -343,6 +355,7 @@ def export_review_dataset(
     repo_id: str | None = None,
     image_writer_threads: int = 6,
     min_segment_frames: int = DEFAULT_MIN_SEGMENT_FRAMES,
+    whole_trajectory_good_only: bool = False,
     _writer_factory: Callable[..., _Writer] | None = None,
     _reader_factory: Callable[[ReviewSource], Any] = ReviewFrameReader,
 ) -> ExportResult:
@@ -364,6 +377,7 @@ def export_review_dataset(
     plan, sources = inspect_review_export(
         source_root,
         min_segment_frames=min_segment_frames,
+        whole_trajectory_good_only=whole_trajectory_good_only,
     )
     reference = sources[sorted(sources)[0]]
     target_repo_id = repo_id or f"local/{output.name}"
@@ -428,6 +442,8 @@ def export_review_dataset(
         dropped_short_partial_segments=plan.dropped_short_partial_segments,
         dropped_short_source_trajectories=plan.dropped_short_source_trajectories,
         full_trajectory_episodes=plan.full_trajectory_episodes,
+        whole_trajectory_good_only=plan.whole_trajectory_good_only,
+        skipped_not_whole_trajectory_good=plan.skipped_not_whole_trajectory_good,
         camera_names=tuple(key.removeprefix("observation.images.") for key in reference.video_keys),
     )
 
@@ -640,6 +656,7 @@ def _require_inputs_unchanged(
     current_plan, current_sources = inspect_review_export(
         source_root,
         min_segment_frames=plan.min_segment_frames,
+        whole_trajectory_good_only=plan.whole_trajectory_good_only,
         require_review_payload=require_review_payload,
     )
     if current_plan.to_json_dict() != plan.to_json_dict() or _source_identity(
@@ -691,11 +708,18 @@ def _write_sidecar(
         "format_version": EXPORT_FORMAT_VERSION,
         "export_status": "complete",
         "selection": {
-            "rule": "bad_complement_with_minimum_length",
+            "rule": (
+                "explicit_whole_trajectory_good"
+                if plan.whole_trajectory_good_only
+                else "bad_complement_with_minimum_length"
+            ),
             "bad_label": "bad",
             "annotation_endpoints": "inclusive_action_indices",
             "missing_annotation": "good",
-            "review_status_affects_selection": False,
+            "review_status_affects_selection": plan.whole_trajectory_good_only,
+            "required_review_status": (
+                "complete" if plan.whole_trajectory_good_only else None
+            ),
             "min_segment_frames": plan.min_segment_frames,
             "minimum_length_endpoint": "action_end_exclusive - action_start",
         },

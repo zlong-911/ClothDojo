@@ -32,5 +32,4 @@ datasets:
   - role: rollout
     source_path: ${oc.env:CLOTHDOJO_CFG_ROLLOUT_DATASET}
     target_path: ${oc.env:CLOTHDOJO_CFG_ROLLOUT_DATASET}
-    episodes_path: ${oc.env:CLOTHDOJO_CFG_ROLLOUT_EPISODES}
     positive_fraction: 0.30

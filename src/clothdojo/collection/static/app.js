@@ -7,7 +7,7 @@
     quest2:{label:"Meta Quest 2",params:{...VR_STREAM_BASE,deviceProfile:"quest2",enableTexSubImage2D:"true",useQuestColorWorkaround:"false"}},
   };
   const savedVrDevice=localStorage.getItem("clothdojo-vr-device");
-  const state={activePane:"task",snapshot:null,taskId:null,assetId:null,dataAsset:"all",selectedEpisode:null,logType:initialSessionId?"session":null,logId:initialSessionId,toastTimer:null,timeSort:"desc",assetPickerMode:"session",annotationIndex:null,annotationIndexTask:null,annotationSaveChain:Promise.resolve(),reviewPane:null,reviewCamera:"cam_high",reviewRate:1,markStart:null,annotation:null,vrDevice:VR_DEVICES[savedVrDevice]?savedVrDevice:"pico4ultra",lang:localStorage.getItem("clothdojo-lang")||"zh",theme:localStorage.getItem("clothdojo-theme")||"dark"};
+  const state={activePane:"task",snapshot:null,snapshotEtag:null,hilEtag:null,taskId:null,assetId:null,dataAsset:"all",selectedEpisode:null,logType:initialSessionId?"session":null,logId:initialSessionId,logCacheId:null,logCacheText:null,toastTimer:null,timeSort:"desc",assetPickerMode:"session",annotationIndex:null,annotationIndexTask:null,annotationSaveChain:Promise.resolve(),reviewPane:null,reviewCamera:"cam_high",reviewRate:1,markStart:null,annotation:null,vrDevice:VR_DEVICES[savedVrDevice]?savedVrDevice:"pico4ultra",lang:localStorage.getItem("clothdojo-lang")||"zh",theme:localStorage.getItem("clothdojo-theme")||"dark"};
   const I18N={
     zh:{
       title:"数据控制台",
@@ -27,7 +27,7 @@
       mark_start_toast:"已标记起点，再次点击结束标记",saved:"已保存标记",save_fail:"保存失败：",
       start_session:"启动",vr_connect:"VR 连接",qr:"二维码",close:"关闭",stop_session:"关闭这个遥操作实例？",stopping_session:"正在关闭实例",
       review_export:"审核导出",
-      service_offline:"采集服务未启动",batch_done:"本批已完成 · 关闭后重新启动下一批",recording:"录制中",batch_remaining:"当前批次剩余",
+      service_offline:"采集服务未启动",batch_done:"本批已完成 · 关闭后重新启动下一批",recording:"录制中",saving:"保存中",batch_remaining:"当前批次剩余",
       no_pending:"当前衣服没有待采展平终态",asset_prefix:"衣服",
       qr_title:"VR 连接",qr_alt:"VR 连接二维码",qr_help:"首次显示 Certificate Accepted 时返回并再次扫码，然后点击 CONNECT",
       delete:"删除",delete_confirm_perm:"永久删除",delete_confirm_fold:"删除",
@@ -55,7 +55,7 @@
       mark_start_toast:"Start marked, click again to end",saved:"Mark saved",save_fail:"Save failed: ",
       start_session:"Start",vr_connect:"VR connect",qr:"QR",close:"Close",stop_session:"Stop this teleop instance?",stopping_session:"Stopping instance",
       review_export:"Review export",
-      service_offline:"Collection service offline",batch_done:"Batch done · close and restart for next batch",recording:"Recording",batch_remaining:"Batch remaining",
+      service_offline:"Collection service offline",batch_done:"Batch done · close and restart for next batch",recording:"Recording",saving:"Saving",batch_remaining:"Batch remaining",
       no_pending:"No pending flatten states for this asset",asset_prefix:"Asset",
       qr_title:"VR connect",qr_alt:"VR connect QR",qr_help:"When Certificate Accepted shows, go back and scan again, then CONNECT",
       delete:"Delete",delete_confirm_perm:"Permanently delete",delete_confirm_fold:"Delete",
@@ -72,13 +72,16 @@
   function applyI18n(){document.querySelectorAll("[data-i18n]").forEach(el=>{el.textContent=t(el.getAttribute("data-i18n"))});$("lang-btn").textContent=state.lang==="zh"?"EN":"中";$("theme-btn").textContent=state.theme==="dark"?"☀":"🌙"}
   function toggleLang(){state.lang=state.lang==="zh"?"en":"zh";localStorage.setItem("clothdojo-lang",state.lang);applyI18n();if(state.snapshot)render(state.snapshot)}
   const $=id=>document.getElementById(id);
-  const esc=value=>{const node=document.createElement("span");node.textContent=value??"—";return node.innerHTML};
+  const ESCAPES={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"};
+  const esc=value=>String(value??"—").replace(/[&<>"']/g,char=>ESCAPES[char]);
   function errorMessage(detail,fallback){if(typeof detail==="string")return detail;if(Array.isArray(detail))return detail.map(item=>item.msg||JSON.stringify(item)).join("；");if(detail&&typeof detail==="object")return JSON.stringify(detail);return fallback}
   async function request(url,options={}){const response=await fetch(url,{...options,headers:{"Content-Type":"application/json",...(options.headers||{})}});if(!response.ok){let message=response.statusText;try{message=errorMessage((await response.json()).detail,message)}catch{}throw new Error(message)}return response.json()}
+  async function pollRequest(url,etag){const response=await fetch(url,{headers:{Accept:"application/json",...(etag?{"If-None-Match":etag}:{})}});if(response.status===304)return{data:null,etag};if(!response.ok){let message=response.statusText;try{message=errorMessage((await response.json()).detail,message)}catch{}throw new Error(message)}return{data:await response.json(),etag:response.headers.get("ETag")}}
   function toast(message,error=false){clearTimeout(state.toastTimer);$("toast").textContent=message;$("toast").className="toast show"+(error?" error":"");state.toastTimer=setTimeout(()=>$("toast").className="toast",2600)}
   function duration(seconds){if(seconds==null)return "—";const value=Math.max(0,Math.round(seconds));if(value<60)return value+" "+t("sec_unit");const minutes=Math.floor(value/60),rest=value%60;return `${minutes} ${t("min_unit")} ${String(rest).padStart(2,"0")} ${t("sec_unit")}`}
   function setHtml(el,html){if(el.__html!==html){el.__html=html;el.innerHTML=html}}
-  function episodeTime(id){const match=String(id).match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/);if(!match)return id;const date=new Date(`${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}Z`);return new Intl.DateTimeFormat("zh-CN",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false}).format(date)}
+  const episodeTimeFormatter=new Intl.DateTimeFormat("zh-CN",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false});
+  function episodeTime(id){const match=String(id).match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/);if(!match)return id;const date=new Date(`${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}Z`);return episodeTimeFormatter.format(date)}
   function selectedTask(){return state.snapshot?.tasks.find(task=>task.id===state.taskId)||state.snapshot?.tasks[0]}
   function pendingCount(task,assetId){return (task?.episodes||[]).filter(episode=>episode.asset_id===assetId&&episode.status==="pending").length}
   function sortedAssets(task){return [...(task?.assets||[])].sort((left,right)=>(right.default?1:0)-(left.default?1:0)||(task?.continuation?pendingCount(task,right.id)-pendingCount(task,left.id)||right.episode_count-left.episode_count||left.id.localeCompare(right.id):right.episode_count-left.episode_count||left.id.localeCompare(right.id)))}
@@ -106,7 +109,7 @@
     const task=selectedTask(),hasPending=!task?.continuation||pendingCount(task,state.assetId)>0;
     const statusClass=slot.status==="available"?"available":slot.status==="failed"||slot.status==="offline"||slot.status==="port_conflict"?"failed":slot.status==="stopping"?"stopping":"active";
     const detail=session
-      ? `<div class="slot-detail"><strong>${esc(taskName(session.profile_id))} · ${esc(session.asset_id)}</strong>${session.continuation_phase==="exhausted"?'<span style="color:#ffb3ad">${t("batch_done")}</span>':session.recording?`<span>${t("recording")} · ${(session.recording_frames||0).toLocaleString()} ${t("frames_unit")}</span>`:session.continuation_phase==="active"?`<span>${t("batch_remaining")} ${session.continuation_remaining??0} ${t("count_unit")}</span>`:""}</div>`
+      ? `<div class="slot-detail"><strong>${esc(taskName(session.profile_id))} · ${esc(session.asset_id)}</strong>${session.continuation_phase==="exhausted"?'<span style="color:#ffb3ad">${t("batch_done")}</span>':session.recording?`<span>${t("recording")} · ${(session.recording_frames||0).toLocaleString()} ${t("frames_unit")}</span>`:session.recording_finalizing?`<span>${t("saving")}…</span>`:session.continuation_phase==="active"?`<span>${t("batch_remaining")} ${session.continuation_remaining??0} ${t("count_unit")}</span>`:""}</div>`
       : job
       ? `<div class="slot-detail"><strong>${t("review_export")} · ${esc(episodeTime(job.episode_id))}</strong></div>`
       : `<div class="slot-detail">${slot.status==="offline"?`<strong>${t("service_offline")}</strong>`:slot.error?`<strong>${esc(slot.error)}</strong>`:""}</div>`;
@@ -394,15 +397,20 @@
   async function deleteEpisode(taskId,id,sourceId=null){const message=sourceId?`删除 ${episodeTime(sourceId)} 对应的折叠轨迹？\\n原展平轨迹会恢复为“待采集”。`:`永久删除 ${episodeTime(id)} 的采集数据？\\n此操作无法撤销。`;if(!confirm(message))return;try{await request(`/api/tasks/${encodeURIComponent(taskId)}/episodes/${encodeURIComponent(id)}`,{method:"DELETE"});toast(sourceId?t("fold_deleted"):t("data_deleted"));await refresh()}catch(error){toast(error.message,true)}}
   async function updateLog(){
     const {logType:type,logId:id}=state;
-    if(!id){$("log-session").textContent="";$("log").innerHTML=`<div class="log-empty">${t("log_select")}</div>`;return}
+    if(!id){state.logCacheId=state.logCacheText=null;$("log-session").textContent="";$("log").innerHTML=`<div class="log-empty">${t("log_select")}</div>`;return}
     const slot=state.snapshot?.slots.find(item=>(type==="session"?item.session:item.export)?.id===id);
     $("log-session").textContent=slot?(slot.worker_id?`${slot.worker_id} · GPU ${slot.gpu_id}`:`GPU ${slot.gpu_id}`):"";
     const url=type==="export"?`/api/exports/${encodeURIComponent(id)}/log`:`/api/sessions/${encodeURIComponent(id)}/log`;
-    try{const payload=await request(url);const old=$("log-text"),atBottom=!old||old.scrollHeight-old.scrollTop-old.clientHeight<28;setHtml($("log"),`<pre class="log" id="log-text">${esc(payload.log||t("log_waiting"))}</pre>`);if(atBottom&&$("log-text"))$("log-text").scrollTop=$("log-text").scrollHeight}catch(error){setHtml($("log"),`<div class="log-empty">${esc(error.message)}</div>`)}
+    try{const payload=await request(url),cacheId=`${type}:${id}`,text=payload.log||t("log_waiting");if(state.logCacheId===cacheId&&state.logCacheText===text)return;state.logCacheId=cacheId;state.logCacheText=text;const old=$("log-text"),atBottom=!old||old.scrollHeight-old.scrollTop-old.clientHeight<28;setHtml($("log"),`<pre class="log" id="log-text">${esc(text)}</pre>`);if(atBottom&&$("log-text"))$("log-text").scrollTop=$("log-text").scrollHeight}catch(error){setHtml($("log"),`<div class="log-empty">${esc(error.message)}</div>`)}
   }
   function showQr(event,id,workerId,endpoint){event.stopPropagation();$("qr-title").textContent=`${workerId} · ${VR_DEVICES[state.vrDevice].label} · ${t("qr_title")}`;$("qr-endpoint").textContent=endpoint;$("qr-image").src=`/api/sessions/${encodeURIComponent(id)}/qr?device=${encodeURIComponent(state.vrDevice)}`;$("qr-modal").classList.add("open")}
   function closeQr(){$("qr-modal").classList.remove("open");$("qr-image").removeAttribute("src")}
-  async function refresh(){try{render(await request("/api/snapshot"))}catch(error){toast(error.message,true)}}
+  let refreshPromise=null;
+  function refresh(){
+    if(refreshPromise)return refreshPromise;
+    refreshPromise=(async()=>{try{const result=await pollRequest("/api/snapshot",state.snapshotEtag);state.snapshotEtag=result.etag;if(result.data)render(result.data);else updateLog()}catch(error){toast(error.message,true)}})().finally(()=>{refreshPromise=null});
+    return refreshPromise;
+  }
   $("task-select").onchange=event=>{state.taskId=event.target.value;state.assetId=null;state.dataAsset="all";render(state.snapshot)};
   $("vr-device-select").value=state.vrDevice;
   $("vr-device-select").onchange=event=>{if(VR_DEVICES[event.target.value]){state.vrDevice=event.target.value;localStorage.setItem("clothdojo-vr-device",state.vrDevice)}};
@@ -607,17 +615,23 @@
     }catch(e){$("hil-status").textContent=e.message}
     finally{hilState.pending=false;hilRenderSession();if(hilState.episode)hilRenderPane()}
   }
-  async function hilRefresh(){
-    const runId=hilState.run?.id,episodeId=hilState.episode?.id;
-    hilState.data=await request("/api/hil/snapshot");
-    const active=hilInterventionSlots().sort((a,b)=>(b.session.created_at||"").localeCompare(a.session.created_at||""));
-    if(active.length&&!active.some(x=>x.session.id===hilState.session?.id))hilState.session=active[0].session;
-    if(!hilState.profile)hilState.profile=hilProfiles()[0]?.id;
-    if(runId){hilState.run=hilRuns().find(x=>x.id===runId)||null;hilState.episode=hilState.run?.episodes.find(x=>x.id===episodeId)||null}
-    hilRender();
+  let hilRefreshPromise=null;
+  function hilRefresh(){
+    if(hilRefreshPromise)return hilRefreshPromise;
+    hilRefreshPromise=(async()=>{
+      const result=await pollRequest("/api/hil/snapshot",state.hilEtag);state.hilEtag=result.etag;if(!result.data)return;const data=result.data;
+      const runId=hilState.run?.id,episodeId=hilState.episode?.id;
+      hilState.data=data;
+      const active=hilInterventionSlots().sort((a,b)=>(b.session.created_at||"").localeCompare(a.session.created_at||""));
+      if(active.length&&!active.some(x=>x.session.id===hilState.session?.id))hilState.session=active[0].session;
+      if(!hilState.profile)hilState.profile=hilProfiles()[0]?.id;
+      if(runId){hilState.run=hilRuns().find(x=>x.id===runId)||null;hilState.episode=hilState.run?.episodes.find(x=>x.id===episodeId)||null}
+      hilRender();
+    })().finally(()=>{hilRefreshPromise=null});
+    return hilRefreshPromise;
   }
   $("hil-profile").onchange=e=>{hilState.profile=e.target.value;hilState.asset="all";hilState.run=hilState.episode=null;hilState.points=[];hilRender()};
   $("hil-asset-pick").onclick=()=>openAssetPicker("hil");
   $("hil-start").onclick=hilStart;
-  hilRefresh();setInterval(hilRefresh,2000);
-  applyTheme();applyI18n();refresh();setInterval(refresh,2000);
+  hilRefresh();setInterval(()=>{if(!document.hidden)hilRefresh()},2000);
+  applyTheme();applyI18n();refresh();setInterval(()=>{if(!document.hidden&&state.activePane!=="hil")refresh()},5000);

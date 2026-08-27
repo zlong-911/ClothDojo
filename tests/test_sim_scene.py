@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from clothdojo.sim.check import _gripper_openness
-from clothdojo.sim.runtime import ShirtFlattenRuntime
+from clothdojo.sim.runtime import ShirtFlattenRuntime, _prune_static_soft_contact_pairs
 from clothdojo.sim.scene import (
     ARM_JOINTS,
     GRIPPER_JOINTS,
@@ -18,6 +18,7 @@ from clothdojo.sim.scene import (
     _add_robot,
     _add_table,
     _body_indices,
+    _centered_world_offsets,
     _configure_robot,
     _joint_dofs,
     _joint_indices,
@@ -114,6 +115,162 @@ def test_sim_runtime_enables_cuda_graph_by_default() -> None:
         runtime._capture_step_graph()
 
 
+def test_runtime_step_graph_keeps_bvh_rebuild_outside_substeps() -> None:
+    events = []
+    runtime = ShirtFlattenRuntime.__new__(ShirtFlattenRuntime)
+    runtime.state_0 = "current"
+    runtime.state_1 = "next"
+    runtime.model = SimpleNamespace(world_count=1)
+    runtime.spec = SimpleNamespace(sim_substeps=2, control_fps=50)
+    runtime.grasp = SimpleNamespace(
+        update=lambda particle, rigid: events.append(("grasp", particle, rigid))
+    )
+    runtime.cloth = SimpleNamespace(
+        rebuild_bvh=lambda state: events.append(("rebuild", state))
+    )
+    runtime.apply_action = lambda arm, gripper: events.append(("action", arm, gripper))
+    runtime._step_rigid = lambda dt: events.append(("rigid", dt))
+    runtime._step_cloth = lambda dt: events.append(("cloth", dt))
+
+    runtime._step_eager("arm", "gripper")
+
+    assert [event[0] for event in events] == [
+        "action",
+        "rigid",
+        "grasp",
+        "cloth",
+        "rigid",
+        "grasp",
+        "cloth",
+    ]
+
+    events.clear()
+    runtime._step_graph = None
+    runtime._control_steps_since_cloth_bvh_rebuild = 0
+    runtime._validate_action = lambda *args: None
+    runtime._step_eager = lambda arm, gripper: events.append(("step", arm, gripper))
+    runtime.step("arm-0", "gripper-0")
+    runtime.step("arm-1", "gripper-1")
+    assert [event[0] for event in events] == ["step", "step", "rebuild"]
+
+
+def test_runtime_preserves_previous_rigid_state_until_cloth_step() -> None:
+    events = []
+
+    class State:
+        def clear_forces(self):
+            events.append("clear")
+
+    runtime = ShirtFlattenRuntime.__new__(ShirtFlattenRuntime)
+    runtime.state_0 = State()
+    runtime.state_1 = State()
+    runtime.rigid_contacts = object()
+    runtime.control = object()
+    runtime.rigid_collision = SimpleNamespace(
+        collide=lambda state, contacts: events.append(("collide", state, contacts))
+    )
+    runtime.rigid = SimpleNamespace(
+        step=lambda state_in, state_out, control, contacts, dt: events.append(
+            ("step", state_in, state_out, control, contacts, dt)
+        )
+    )
+
+    state_0 = runtime.state_0
+    state_1 = runtime.state_1
+    runtime._step_rigid(0.01)
+
+    assert runtime.state_0 is state_0
+    assert runtime.state_1 is state_1
+    assert events[-1] == (
+        "step",
+        state_0,
+        state_1,
+        runtime.control,
+        runtime.rigid_contacts,
+        0.01,
+    )
+
+
+def test_cloth_collision_combines_current_particles_and_updated_rigid_state() -> None:
+    current_particles = object()
+    output_particles = object()
+    events = []
+
+    class State:
+        def __init__(self, particle_q):
+            self.particle_q = particle_q
+
+        def clear_forces(self):
+            pass
+
+    state_0 = State(current_particles)
+    state_1 = State(output_particles)
+    runtime = ShirtFlattenRuntime.__new__(ShirtFlattenRuntime)
+    runtime.state_0 = state_0
+    runtime.state_1 = state_1
+    runtime.contacts = object()
+    runtime.grasp = SimpleNamespace(enforce=lambda *args: events.append(("enforce", *args)))
+
+    def collide(state, contacts):
+        events.append(("collide", state, state.particle_q, contacts))
+
+    def cloth_step(state_in, state_out, control, contacts, dt):
+        events.append(
+            ("cloth", state_in, state_out, state_out.particle_q, control, contacts, dt)
+        )
+
+    runtime.collision = SimpleNamespace(collide=collide)
+    runtime.cloth = SimpleNamespace(step=cloth_step)
+
+    runtime._step_cloth(0.01)
+
+    assert events[1] == ("collide", state_1, current_particles, runtime.contacts)
+    assert events[2] == (
+        "cloth",
+        state_0,
+        state_1,
+        output_particles,
+        None,
+        runtime.contacts,
+        0.01,
+    )
+    assert runtime.state_0 is state_1
+    assert runtime.state_1 is state_0
+
+
+def test_runtime_prunes_shapes_with_static_particle_collision_flags() -> None:
+    import newton
+    import warp as wp
+
+    model = SimpleNamespace(
+        device="cpu",
+        shape_flags=wp.array(
+            [int(newton.ShapeFlags.COLLIDE_PARTICLES), 0],
+            dtype=wp.int32,
+            device="cpu",
+        ),
+    )
+    empty = wp.array(np.empty((0, 2), dtype=np.int32), dtype=wp.vec2i, device="cpu")
+    pipeline = SimpleNamespace(
+        soft_rigid_contact_pairs=wp.array(
+            [[0, 0], [0, 1]], dtype=wp.vec2i, device="cpu"
+        ),
+        soft_edge_rigid_pairs=empty,
+        soft_face_rigid_pairs=empty,
+        soft_contact_max=2,
+        _soft_rigid_contact_pair_count=2,
+        _soft_contact_max=2,
+    )
+
+    _prune_static_soft_contact_pairs(model, pipeline)
+
+    np.testing.assert_array_equal(
+        pipeline.soft_rigid_contact_pairs.numpy(), np.asarray([[0, 0]], dtype=np.int32)
+    )
+    assert pipeline._soft_rigid_contact_pair_count == 1
+    assert pipeline._soft_contact_max == 1
+
+
 def test_scene_self_contact_defaults_match_expert_data() -> None:
     spec = ShirtFlattenSpec()
 
@@ -128,6 +285,15 @@ def test_scene_self_contact_defaults_match_expert_data() -> None:
         ShirtFlattenSpec(self_contact_friction_mu=-0.1)
     with pytest.raises(ValueError, match="friction_epsilon"):
         ShirtFlattenSpec(self_contact_friction_epsilon=0.0)
+
+
+def test_parallel_physics_world_offsets_are_centered_and_isolated() -> None:
+    offsets = np.asarray(_centered_world_offsets(4), dtype=np.float32)
+
+    np.testing.assert_allclose(offsets.mean(axis=0), 0.0)
+    assert len(np.unique(offsets[:, :2], axis=0)) == 4
+    distances = np.linalg.norm(offsets[:, None, :2] - offsets[None, :, :2], axis=-1)
+    assert np.min(distances[distances > 0.0]) == pytest.approx(3.0)
 
 
 def test_piper_asset_is_a_small_self_contained_usd_closure() -> None:

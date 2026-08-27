@@ -28,10 +28,20 @@ class HILCatalog:
     def __init__(self, profile: CollectionProfile):
         self.profile = profile
         self._lock = threading.RLock()
+        self._runs_cache: tuple[tuple[tuple[str, int, int], ...], list[dict[str, Any]]] | None = (
+            None
+        )
 
     def runs(self) -> list[dict[str, Any]]:
+        roots = self._run_roots()
+        stamp = tuple(
+            (str(root), root.stat().st_mtime_ns, root.stat().st_size) for root in roots
+        )
+        with self._lock:
+            if self._runs_cache is not None and self._runs_cache[0] == stamp:
+                return self._runs_cache[1]
         result = []
-        for root in self._run_roots():
+        for root in roots:
             try:
                 metadata = self._metadata(root)
                 marks = self._marks(root)
@@ -69,6 +79,8 @@ class HILCatalog:
                 }
             )
         result.sort(key=lambda item: item["id"], reverse=True)
+        with self._lock:
+            self._runs_cache = (stamp, result)
         return result
 
     def interventions(self) -> dict[tuple[str, str], list[dict[str, Any]]]:
@@ -143,6 +155,7 @@ class HILCatalog:
                 root / "hil_review.json",
                 {"schema": HIL_REVIEW_SCHEMA, "marks": marks},
             )
+            self._runs_cache = None
         return {"episode_id": episode_id, "good": good}
 
     def intervention_plan(
@@ -253,6 +266,9 @@ class HILCatalog:
 
     @staticmethod
     def _video_path(root: Path, episode_index: int, camera: str) -> Path:
+        review = root / "review" / "videos" / camera / f"episode_{episode_index:06d}.mp4"
+        if review.is_file():
+            return review
         return (
             root
             / "lerobot"

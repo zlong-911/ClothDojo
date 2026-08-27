@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -32,14 +32,15 @@ def capture_states(
     gripper_open = gripper_openness(gripper_q, gripper_lower, gripper_upper)
     grasp = runtime.grasp.capture_all_states()
     ranges = runtime.grasp.particle_ranges()
+    world_offsets = _world_offsets(runtime)
     return tuple(
         TrajectoryState(
             sample_index=int(sample_index),
             joint_q=joint_q[world].copy(),
             joint_qd=joint_qd[world].copy(),
-            body_q=body_q[world].copy(),
+            body_q=_local_body_q(body_q[world], world_offsets[world]),
             body_qd=body_qd[world].copy(),
-            particle_q=particle_q[start:end].copy(),
+            particle_q=particle_q[start:end].copy() - world_offsets[world],
             particle_qd=particle_qd[start:end].copy(),
             gripper_open_state=gripper_open[world].copy(),
             **grasp[world],
@@ -83,3 +84,259 @@ def gripper_openness(q, lower, upper) -> np.ndarray:
         0.0,
         1.0,
     ).astype(np.float32, copy=False)
+
+
+class NewtonTrajectoryRecorder:
+    """Queue Newton state readback and publish it at an existing sync boundary.
+
+    Rollout execution already synchronizes once per policy execution window.  A
+    recorder must not add another synchronization at every control step: CUDA
+    copies are queued into pinned host buffers here and consumed only after the
+    caller has synchronized the runtime.
+    """
+
+    def __init__(self, runtime: ShirtFlattenRuntime, *, capacity: int) -> None:
+        if capacity < 1:
+            raise ValueError("trajectory recorder capacity must be positive")
+        self.runtime = runtime
+        self.capacity = int(capacity)
+        self.world_count = int(runtime.model.world_count)
+        self._ranges = runtime.grasp.particle_ranges()
+        self._gripper_lower = np.asarray(
+            runtime.scene.grippers.get_attribute(
+                "joint_limit_lower", runtime.model
+            ).numpy()[:, 0],
+            dtype=np.float32,
+        )
+        self._gripper_upper = np.asarray(
+            runtime.scene.grippers.get_attribute(
+                "joint_limit_upper", runtime.model
+            ).numpy()[:, 0],
+            dtype=np.float32,
+        )
+        sources = self._state_sources()
+        self._buffers = {
+            name: _PinnedWarpBuffer(source, capacity=self.capacity)
+            for name, source in sources.items()
+        }
+        self._state_indices: list[int] = []
+        self._action_indices: list[int] = []
+        self._arm_actions = np.empty(
+            (self.capacity, self.world_count, 12), dtype=np.float32
+        )
+        self._gripper_actions = np.empty(
+            (self.capacity, self.world_count, 2), dtype=np.float32
+        )
+        # Keep temporary articulation-view arrays alive until their queued
+        # device-to-host copies have completed.
+        self._source_references: list[tuple[Any, ...]] = []
+
+    def capture_state(self, sample_index: int) -> None:
+        slot = len(self._state_indices)
+        if slot >= self.capacity:
+            raise RuntimeError(
+                "trajectory recorder filled before the rollout synchronization boundary"
+            )
+        sources = self._state_sources()
+        for name, source in sources.items():
+            self._buffers[name].copy_from(source, slot=slot)
+        self._source_references.append(tuple(sources.values()))
+        self._state_indices.append(int(sample_index))
+
+    def capture_action(
+        self,
+        sample_index: int,
+        arm_target: np.ndarray,
+        gripper_open: np.ndarray,
+    ) -> None:
+        slot = len(self._action_indices)
+        if slot >= self.capacity:
+            raise RuntimeError(
+                "trajectory recorder filled before the rollout synchronization boundary"
+            )
+        expected_arm = (self.world_count, 12)
+        expected_gripper = (self.world_count, 2)
+        arms = np.asarray(arm_target, dtype=np.float32)
+        grippers = np.asarray(gripper_open, dtype=np.float32)
+        if arms.shape != expected_arm or grippers.shape != expected_gripper:
+            raise ValueError(
+                "trajectory action shape differs from the Newton world batch: "
+                f"{arms.shape}/{grippers.shape}"
+            )
+        self._arm_actions[slot] = arms
+        self._gripper_actions[slot] = grippers
+        self._action_indices.append(int(sample_index))
+
+    def drain(self, writers) -> None:
+        """Consume copies after the caller has synchronized Newton's device."""
+
+        action_slots = {
+            sample_index: slot for slot, sample_index in enumerate(self._action_indices)
+        }
+        if len(action_slots) != len(self._action_indices):
+            raise RuntimeError("trajectory recorder received duplicate action indices")
+        for state_slot, sample_index in enumerate(self._state_indices):
+            states = self._states_at(state_slot, sample_index)
+            if sample_index == 0:
+                for writer, state in zip(writers, states, strict=True):
+                    if writer is not None:
+                        writer.write_initial_state(state)
+                continue
+            action_slot = action_slots.pop(sample_index - 1, None)
+            if action_slot is None:
+                raise RuntimeError(
+                    f"trajectory recorder is missing action {sample_index - 1}"
+                )
+            for world, (writer, state) in enumerate(zip(writers, states, strict=True)):
+                if writer is None:
+                    continue
+                writer.append_transition(
+                    TrajectoryAction(
+                        sample_index=sample_index - 1,
+                        joint_target=self._arm_actions[action_slot, world],
+                        gripper_open_command=self._gripper_actions[action_slot, world],
+                    ),
+                    state,
+                )
+        if action_slots:
+            raise RuntimeError(
+                f"trajectory recorder has actions without next states: {sorted(action_slots)}"
+            )
+        self._state_indices.clear()
+        self._action_indices.clear()
+        self._source_references.clear()
+
+    def enqueue_readback(self) -> None:
+        """Queue one contiguous readback for the pending execution window."""
+
+        count = len(self._state_indices)
+        for buffer in self._buffers.values():
+            buffer.enqueue_readback(count=count)
+
+    def discard(self) -> None:
+        self._state_indices.clear()
+        self._action_indices.clear()
+        self._source_references.clear()
+
+    def _state_sources(self) -> dict[str, Any]:
+        state = self.runtime.state_0
+        scene = self.runtime.scene
+        grasp = self.runtime.grasp
+        return {
+            "joint_q": scene.robot.get_attribute("joint_q", state),
+            "joint_qd": scene.robot.get_attribute("joint_qd", state),
+            "body_q": scene.robot.get_attribute("body_q", state),
+            "body_qd": scene.robot.get_attribute("body_qd", state),
+            "particle_q": state.particle_q,
+            "particle_qd": state.particle_qd,
+            "gripper_q": scene.grippers.get_attribute("joint_q", state),
+            "grasp_attached": grasp.attached,
+            "grasp_previous_open": grasp.previous_open,
+            "grasp_pin_count": grasp.pin_count,
+            "grasp_pins": grasp.pins,
+            "grasp_pin_local": grasp.pin_local,
+        }
+
+    def _states_at(
+        self, slot: int, sample_index: int
+    ) -> tuple[TrajectoryState, ...]:
+        values = {name: buffer.numpy[slot] for name, buffer in self._buffers.items()}
+        world_offsets = _world_offsets(self.runtime)
+        openness = gripper_openness(
+            values["gripper_q"][:, 0],
+            self._gripper_lower,
+            self._gripper_upper,
+        )
+        states = []
+        for world, (start, end) in enumerate(self._ranges):
+            counts = values["grasp_pin_count"][world]
+            pins = np.full(values["grasp_pins"][world].shape, -1, dtype=np.int32)
+            for side, raw_count in enumerate(counts):
+                count = int(raw_count)
+                pins[side, :count] = (
+                    values["grasp_pins"][world, side, :count] - int(start)
+                )
+            states.append(
+                TrajectoryState(
+                    sample_index=sample_index,
+                    joint_q=values["joint_q"][world, 0],
+                    joint_qd=values["joint_qd"][world, 0],
+                    body_q=_local_body_q(
+                        values["body_q"][world, 0], world_offsets[world]
+                    ),
+                    body_qd=values["body_qd"][world, 0],
+                    particle_q=(
+                        values["particle_q"][start:end].copy() - world_offsets[world]
+                    ),
+                    particle_qd=values["particle_qd"][start:end],
+                    gripper_open_state=openness[world],
+                    grasp_attached=values["grasp_attached"][world],
+                    grasp_previous_open=values["grasp_previous_open"][world],
+                    grasp_pin_count=counts,
+                    grasp_pins=pins,
+                    grasp_pin_local=values["grasp_pin_local"][world],
+                )
+            )
+        return tuple(states)
+
+
+def _world_offsets(runtime) -> np.ndarray:
+    values = getattr(runtime.scene, "world_offsets", None)
+    if values is None:
+        return np.zeros((runtime.model.world_count, 3), dtype=np.float32)
+    offsets = np.asarray(values, dtype=np.float32)
+    expected = (runtime.model.world_count, 3)
+    if offsets.shape != expected:
+        raise RuntimeError(f"scene world offsets must have shape {expected}, got {offsets.shape}")
+    return offsets
+
+
+def _local_body_q(body_q: np.ndarray, offset: np.ndarray) -> np.ndarray:
+    values = np.asarray(body_q, dtype=np.float32).copy()
+    values[..., :3] -= offset
+    return values
+
+
+class _PinnedWarpBuffer:
+    def __init__(self, source, *, capacity: int) -> None:
+        import warp as wp
+
+        self._shape = tuple(source.shape)
+        self._dtype = source.dtype
+        self._device = wp.empty(
+            (capacity, *self._shape),
+            dtype=source.dtype,
+            device=source.device,
+        )
+        self._array = wp.empty(
+            (capacity, *self._shape),
+            dtype=source.dtype,
+            device="cpu",
+            pinned=bool(source.device.is_cuda),
+        )
+        self.numpy = self._array.numpy()
+
+    def copy_from(self, source, *, slot: int) -> None:
+        if tuple(source.shape) != self._shape or source.dtype != self._dtype:
+            raise RuntimeError("Newton trajectory source shape or dtype changed")
+        self._wp_copy(source, slot=slot)
+
+    def _wp_copy(self, source, *, slot: int) -> None:
+        import warp as wp
+
+        wp.copy(
+            self._device,
+            source,
+            dest_offset=slot * int(source.size),
+            count=int(source.size),
+        )
+
+    def enqueue_readback(self, *, count: int) -> None:
+        import warp as wp
+
+        if count:
+            wp.copy(
+                self._array,
+                self._device,
+                count=count * int(np.prod(self._shape, dtype=np.int64)),
+            )

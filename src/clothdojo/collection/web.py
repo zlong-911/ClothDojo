@@ -1,7 +1,11 @@
 """FastAPI control plane for the collection workspace."""
 
-from __future__ import annotations
-
+import asyncio
+import gzip
+import hashlib
+import json
+import threading
+import time
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlencode
@@ -57,9 +61,76 @@ _VR_DEVICE_PARAMS = {
 }
 
 
-def build_cloudxr_client_url(
-    endpoint: str, device: VRDevice = "pico4ultra"
-) -> str:
+class _StaleSnapshotCache:
+    """Share one expensive filesystem snapshot across polling browsers."""
+
+    def __init__(self, loader, *, ttl_seconds: float = 2.0):
+        self._loader = loader
+        self._ttl_seconds = ttl_seconds
+        self._condition = threading.Condition()
+        self._value = None
+        self._loaded_at = 0.0
+        self._refreshing = False
+        self._generation = 0
+
+    def get(self):
+        while True:
+            start_background = False
+            with self._condition:
+                if self._value is not None:
+                    if (
+                        time.monotonic() - self._loaded_at >= self._ttl_seconds
+                        and not self._refreshing
+                    ):
+                        self._refreshing = True
+                        start_background = True
+                    value = self._value
+                    break
+                if not self._refreshing:
+                    self._refreshing = True
+                    return self._load_initial()
+                self._condition.wait()
+        if start_background:
+            threading.Thread(target=self._refresh, daemon=True).start()
+        return value
+
+    def invalidate(self) -> None:
+        with self._condition:
+            self._generation += 1
+            self._loaded_at = 0.0
+
+    def _load_initial(self):
+        try:
+            value = self._loader()
+        except BaseException:
+            self._refreshing = False
+            self._condition.notify_all()
+            raise
+        self._value = value
+        self._loaded_at = time.monotonic()
+        self._refreshing = False
+        self._condition.notify_all()
+        return value
+
+    def _refresh(self) -> None:
+        with self._condition:
+            generation = self._generation
+        try:
+            value = self._loader()
+        except BaseException:
+            with self._condition:
+                self._refreshing = False
+                self._condition.notify_all()
+            return
+        with self._condition:
+            if generation == self._generation:
+                self._value = value
+                self._loaded_at = time.monotonic()
+            self._refreshing = False
+            self._condition.notify_all()
+
+
+def build_cloudxr_client_url(endpoint: str, device: VRDevice = "pico4ultra") -> str:
     """Build a validated device-specific CloudXR client URL."""
     host, port = endpoint.rsplit(":", 1)
     query = urlencode(
@@ -115,7 +186,7 @@ class StartSessionRequest(BaseModel):
 
 def create_app(config_path: str | Path):
     try:
-        from fastapi import FastAPI, HTTPException
+        from fastapi import FastAPI, HTTPException, Request
         from fastapi.responses import FileResponse, Response
     except ImportError as exc:
         raise RuntimeError(
@@ -130,6 +201,8 @@ def create_app(config_path: str | Path):
     hil = {profile_id: HILCatalog(profile) for profile_id, profile in config.profiles.items()}
     supervisor = TeleopSupervisor(config)
     workspace = CollectionWorkspace(config, assets, reviews, hil, supervisor)
+    snapshot_cache = _StaleSnapshotCache(workspace.snapshot)
+    hil_cache = _StaleSnapshotCache(workspace.hil_snapshot)
     static_root = Path(__file__).with_name("static")
     app = FastAPI(
         title="ClothDojo Collection Console",
@@ -137,6 +210,22 @@ def create_app(config_path: str | Path):
         redoc_url=None,
         openapi_url=None,
     )
+
+    def json_response(payload: dict, request: Request):
+        body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        etag = f'"{hashlib.sha256(body).hexdigest()}"'
+        if request.headers.get("if-none-match") == etag:
+            return Response(
+                status_code=304,
+                headers={"ETag": etag, "Cache-Control": "no-cache"},
+            )
+        headers = {"Cache-Control": "no-cache", "ETag": etag, "Vary": "Accept-Encoding"}
+        if "gzip" in request.headers.get("accept-encoding", "").lower():
+            compressed = gzip.compress(body, compresslevel=5)
+            if len(compressed) < len(body):
+                body = compressed
+                headers["Content-Encoding"] = "gzip"
+        return Response(content=body, media_type="application/json", headers=headers)
 
     def review_catalog(profile_id: str) -> ReviewCatalog:
         try:
@@ -166,8 +255,9 @@ def create_app(config_path: str | Path):
     # Browser response translation stays in CollectionWorkspace so canonical
     # data catalogs do not depend on presentation schemas.
     @app.get("/api/snapshot")
-    async def workspace_snapshot():
-        return workspace.snapshot()
+    async def workspace_snapshot(request: Request):
+        payload = await asyncio.to_thread(snapshot_cache.get)
+        return json_response(payload, request)
 
     @app.get("/api/assets")
     async def workspace_asset_page(
@@ -177,7 +267,8 @@ def create_app(config_path: str | Path):
         page_size: int = 48,
     ):
         try:
-            return workspace.asset_page(
+            return await asyncio.to_thread(
+                workspace.asset_page,
                 status=status,
                 query=query,
                 page=page,
@@ -216,24 +307,27 @@ def create_app(config_path: str | Path):
         request: AssetDecisionRequest,
     ):
         try:
-            return assets.decide(asset_id, request.decision)
+            result = await asyncio.to_thread(assets.decide, asset_id, request.decision)
+            snapshot_cache.invalidate()
+            return result
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/api/tasks/{profile_id}/annotations")
-    async def workspace_annotation_index(profile_id: str):
+    async def workspace_annotation_index(profile_id: str, request: Request):
         review_catalog(profile_id)
         try:
-            return workspace.annotation_index(profile_id)
+            payload = await asyncio.to_thread(workspace.annotation_index, profile_id)
+            return json_response(payload, request)
         except (OSError, RuntimeError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/api/tasks/{profile_id}/episodes/{episode_id}/annotation")
     async def workspace_annotation(profile_id: str, episode_id: str):
         try:
-            return review_catalog(profile_id).annotation(episode_id)
+            return await asyncio.to_thread(review_catalog(profile_id).annotation, episode_id)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except (RuntimeError, ValueError) as exc:
@@ -246,12 +340,15 @@ def create_app(config_path: str | Path):
         request: SaveAnnotationRequest,
     ):
         try:
-            return review_catalog(profile_id).save_annotation(
+            result = await asyncio.to_thread(
+                review_catalog(profile_id).save_annotation,
                 episode_id,
                 review_status=request.review_status,
                 segments=[segment.model_dump() for segment in request.segments],
                 expected_revision=request.expected_revision,
             )
+            snapshot_cache.invalidate()
+            return result
         except AnnotationConflictError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except FileNotFoundError as exc:
@@ -274,8 +371,9 @@ def create_app(config_path: str | Path):
         return FileResponse(path, media_type="video/mp4")
 
     @app.get("/api/hil/snapshot")
-    async def workspace_hil_snapshot():
-        return workspace.hil_snapshot()
+    async def workspace_hil_snapshot(request: Request):
+        payload = await asyncio.to_thread(hil_cache.get)
+        return json_response(payload, request)
 
     @app.get("/api/hil/profiles/{profile_id}/runs/{run_id}/episodes/{episode_id}/videos/{view}")
     async def workspace_hil_video(
@@ -305,11 +403,14 @@ def create_app(config_path: str | Path):
     ):
         try:
             run_id = workspace.rollout_run_for_episode(profile_id, episode_id)
-            return hil_catalog(profile_id).set_good(
+            result = await asyncio.to_thread(
+                hil_catalog(profile_id).set_good,
                 run_id,
                 episode_id,
                 good=request.good,
             )
+            hil_cache.invalidate()
+            return result
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except (OSError, RuntimeError, ValueError) as exc:
@@ -318,20 +419,26 @@ def create_app(config_path: str | Path):
     @app.post("/api/hil/interventions")
     async def workspace_start_intervention(request: StartInterventionRequest):
         try:
-            plan = hil_catalog(request.profile_id).intervention_plan(
+            plan = await asyncio.to_thread(
+                hil_catalog(request.profile_id).intervention_plan,
                 request.run_id,
                 [item.model_dump() for item in request.breakpoints],
             )
             asset_id = str(plan["asset_id"])
-            if asset_id not in set(assets.library.collectable_ids()):
+            collectable = await asyncio.to_thread(assets.library.collectable_ids)
+            if asset_id not in set(collectable):
                 raise RuntimeError("rollout garment is no longer converted and collectable")
-            return supervisor.start_session(
+            result = await asyncio.to_thread(
+                supervisor.start_session,
                 profile_id=request.profile_id,
                 asset_id=asset_id,
                 slot_id=request.slot_id,
                 mode="intervention",
                 intervention_plan=plan,
             )
+            snapshot_cache.invalidate()
+            hil_cache.invalidate()
+            return result
         except NoAvailableSlotError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except KeyError as exc:
@@ -341,17 +448,22 @@ def create_app(config_path: str | Path):
 
     @app.post("/api/sessions", status_code=201)
     async def workspace_start_session(request: StartSessionRequest):
-        if request.asset_id not in set(assets.library.collectable_ids()):
+        collectable = await asyncio.to_thread(assets.library.collectable_ids)
+        if request.asset_id not in set(collectable):
             raise HTTPException(
                 status_code=409,
                 detail="asset is rejected, missing, or not converted",
             )
         try:
-            return supervisor.start_session(
+            result = await asyncio.to_thread(
+                supervisor.start_session,
                 profile_id=request.profile_id,
                 asset_id=request.asset_id,
                 slot_id=request.slot_id,
             )
+            snapshot_cache.invalidate()
+            hil_cache.invalidate()
+            return result
         except NoAvailableSlotError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except KeyError as exc:
@@ -362,28 +474,29 @@ def create_app(config_path: str | Path):
     @app.post("/api/sessions/{session_id}/stop")
     async def workspace_stop_session(session_id: str):
         try:
-            return supervisor.stop_session(session_id)
+            result = await asyncio.to_thread(supervisor.stop_session, session_id)
+            snapshot_cache.invalidate()
+            hil_cache.invalidate()
+            return result
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/sessions/{session_id}/log")
     async def workspace_session_log(session_id: str):
         try:
-            return {"log": supervisor.session_log(session_id)}
+            return {"log": await asyncio.to_thread(supervisor.session_log, session_id)}
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/sessions/{session_id}/qr")
-    async def workspace_session_qr(
-        session_id: str, device: VRDevice = "pico4ultra"
-    ):
+    async def workspace_session_qr(session_id: str, device: VRDevice = "pico4ultra"):
         try:
             import qrcode
             from qrcode.image.svg import SvgPathImage
         except ImportError as exc:
             raise HTTPException(status_code=503, detail="QR support is not installed") from exc
         try:
-            session = supervisor.session(session_id)
+            session = await asyncio.to_thread(supervisor.session, session_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         client_url = build_cloudxr_client_url(str(session["endpoint"]), device)

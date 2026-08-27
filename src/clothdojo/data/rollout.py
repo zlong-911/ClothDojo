@@ -15,9 +15,19 @@ from clothdojo.data.lerobot import (
     _create_writer,
     _validate_video,
 )
+from clothdojo.rendering import DATASET_CAMERA_NAMES
 
-CAMERA_NAMES = ("cam_high", "cam_left_wrist", "cam_right_wrist")
+CAMERA_NAMES = DATASET_CAMERA_NAMES
 ARM_JOINTS = tuple(f"{side}/joint{joint}" for side in ("left", "right") for joint in range(1, 7))
+_ARM_COORD_INDICES = (0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13)
+
+
+class _TrajectoryRenderState:
+    """Minimal state owner for trajectory replay; no solver or contacts are built."""
+
+    def __init__(self, scene: Any) -> None:
+        self.scene = scene
+        self.state_0 = scene.model.state()
 
 
 class RolloutLeRobotWriter:
@@ -34,6 +44,7 @@ class RolloutLeRobotWriter:
         policy: dict[str, Any],
         training_eligible: bool,
         source_kind: str = "rtc_rollout",
+        rendering: dict[str, Any] | None = None,
         image_height: int = 480,
         image_width: int = 640,
         repo_id: str | None = None,
@@ -54,6 +65,7 @@ class RolloutLeRobotWriter:
         self.policy = dict(policy)
         self.training_eligible = bool(training_eligible)
         self.source_kind = str(source_kind)
+        self.rendering = dict(rendering or {"backend": "newton"})
         self.image_height = int(image_height)
         self.image_width = int(image_width)
         self.repo_id = repo_id or f"local/{self.output.name}"
@@ -136,6 +148,7 @@ class RolloutLeRobotWriter:
             training_eligible=self.training_eligible,
             source_kind=self.source_kind,
             episode_lengths=self._episode_lengths,
+            rendering=self.rendering,
         )
         self.staging.rename(self.output)
         self._closed = True
@@ -145,20 +158,19 @@ class RolloutLeRobotWriter:
 
 
 def inspect_rollout_collection_export(source: str | Path) -> dict[str, Any]:
-    """Validate a trajectory collection without building Newton or decoding video."""
-
-    from clothdojo.rollout.collection import load_rollout_collection
+    """Inspect canonical collection metadata without rendering or writing data."""
 
     root = Path(source).expanduser().resolve()
-    manifest = load_rollout_collection(root)
+    manifest, source_kind = _load_canonical_collection(root)
     frames = sum(int(item["action_count"]) for item in manifest["trajectories"])
     return {
-        "source_kind": "rollout_collection",
+        "source_kind": source_kind,
         "source": str(root),
         "output_format": "LeRobot v2.1",
         "output_episodes": len(manifest["trajectories"]),
         "output_frames": frames,
         "camera_names": list(CAMERA_NAMES),
+        "renderer": "newton",
         "training_eligible": manifest.get("training_eligible") is True,
     }
 
@@ -174,15 +186,73 @@ def export_rollout_collection(
 ) -> dict[str, Any]:
     """Replay canonical rollout states and publish one multi-episode LeRobot dataset."""
 
-    from clothdojo.rollout.collection import load_rollout_collection
+    def camera_factory(asset_id: str, _initial_state: Any):
+        return _NewtonTrajectoryCamera(
+            asset_id,
+            assets_root=assets_root,
+            device=device,
+        )
+
+    return _export_canonical_collection(
+        source,
+        output,
+        camera_factory=camera_factory,
+        rendering={"backend": "newton"},
+        repo_id=repo_id,
+        image_writer_threads=image_writer_threads,
+    )
+
+
+class _NewtonTrajectoryCamera:
+    """Render recorded states through the project's Newton camera backend."""
+
+    def __init__(
+        self,
+        asset_id: str,
+        *,
+        assets_root: str | Path,
+        device: str,
+    ) -> None:
+        from clothdojo.rollout.render import ShirtFlattenCameraObservation
+        from clothdojo.sim.scene import ShirtFlattenSpec, build_shirt_flatten
+
+        self._scene = build_shirt_flatten(
+            assets_root,
+            spec=ShirtFlattenSpec(garment_id=asset_id, world_count=1),
+            device=device,
+            visuals=True,
+        )
+        self._runtime = _TrajectoryRenderState(self._scene)
+        self._camera = ShirtFlattenCameraObservation(
+            self._scene,
+            camera_names=DATASET_CAMERA_NAMES,
+        )
+
+    def __call__(self, state) -> dict[str, np.ndarray]:
+        _restore_render_state(self._runtime, state)
+        return self._camera(self._runtime)
+
+    def close(self) -> None:
+        if hasattr(self._camera, "close"):
+            self._camera.close()
+
+
+def _export_canonical_collection(
+    source: str | Path,
+    output: str | Path,
+    *,
+    camera_factory: Callable[[str, Any], Any],
+    rendering: dict[str, Any],
+    repo_id: str | None,
+    image_writer_threads: int,
+) -> dict[str, Any]:
+    """Publish one canonical collection using a backend-specific camera."""
+
     from clothdojo.rollout.newton import pack_policy_state
-    from clothdojo.rollout.render import ShirtFlattenCameraObservation
-    from clothdojo.sim.runtime import ShirtFlattenRuntime
-    from clothdojo.sim.scene import ShirtFlattenSpec, build_shirt_flatten
     from clothdojo.trajectory import TrajectoryReader
 
     root = Path(source).expanduser().resolve()
-    manifest = load_rollout_collection(root)
+    manifest, source_kind = _load_canonical_collection(root)
     scenario = manifest["scenario"]
     trajectories = manifest["trajectories"]
     first_reader = TrajectoryReader(root / trajectories[0]["path"])
@@ -194,39 +264,38 @@ def export_rollout_collection(
         trajectory=str(root),
         policy=manifest["policy"],
         training_eligible=manifest.get("training_eligible") is True,
-        source_kind="rollout_collection",
+        source_kind=source_kind,
+        rendering=rendering,
         repo_id=repo_id,
         image_writer_threads=image_writer_threads,
     )
     try:
         active_asset = None
-        scene = None
-        runtime = None
         camera = None
-        for episode in trajectories:
-            if episode["asset_id"] != active_asset:
-                active_asset = episode["asset_id"]
-                spec = ShirtFlattenSpec(garment_id=active_asset, world_count=1)
-                scene = build_shirt_flatten(
-                    assets_root,
-                    spec=spec,
-                    device=device,
-                    visuals=True,
-                )
-                runtime = ShirtFlattenRuntime(scene)
-                camera = ShirtFlattenCameraObservation(scene)
+        for episode_index, episode in enumerate(trajectories):
             reader = TrajectoryReader(root / episode["path"])
             if reader.manifest.control_fps != first_reader.manifest.control_fps:
                 raise ValueError("rollout trajectories use different control rates")
+            if episode["asset_id"] != active_asset:
+                _close_camera(camera)
+                camera = None
+                active_asset = episode["asset_id"]
+                camera = camera_factory(active_asset, reader.state_at(0))
+            if hasattr(camera, "begin_episode"):
+                camera.begin_episode(
+                    episode_index,
+                    source_episode_id=Path(episode["path"]).name,
+                )
             for sample in reader.iter_samples():
-                _restore_render_state(runtime, sample.state)
-                arm_q = scene.arms.get_attribute("joint_q", runtime.state_0).numpy()[:, 0]
+                arm_q = np.asarray(sample.state.joint_q, dtype=np.float32)[
+                    np.asarray(_ARM_COORD_INDICES)
+                ][None, :]
                 observation = {
                     "observation.state": pack_policy_state(
                         arm_q,
                         sample.state.gripper_open_state.reshape(1, 2),
                     ),
-                    **camera(runtime),
+                    **camera(sample.state),
                 }
                 policy_action = pack_policy_state(
                     sample.action.joint_target.reshape(1, 12),
@@ -234,28 +303,88 @@ def export_rollout_collection(
                 )[0]
                 sink.add_frame(observation, policy_action)
             sink.save_episode()
+        _close_camera(camera)
+        camera = None
         sink.close()
-    except Exception:
+    except BaseException:
+        _close_camera(camera)
         sink.abort()
         raise
     summary = inspect_rollout_collection_export(root)
-    summary.update({"compatible": True, "output": str(Path(output).expanduser().resolve())})
+    summary.update(
+        {
+            "compatible": True,
+            "output": str(Path(output).expanduser().resolve()),
+            "renderer": rendering["backend"],
+        }
+    )
     return summary
 
 
+def _close_camera(camera: Any | None) -> None:
+    if camera is not None and hasattr(camera, "close"):
+        camera.close()
+
+
+def _load_canonical_collection(root: Path) -> tuple[dict[str, Any], str]:
+    try:
+        schema = json.loads((root / "meta.json").read_text(encoding="utf-8")).get("schema")
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"cannot read trajectory collection metadata: {root}: {exc}") from exc
+    if schema == "clothdojo_rollout":
+        from clothdojo.rollout.collection import load_rollout_collection
+
+        return load_rollout_collection(root), "rollout_collection"
+    if schema == "clothdojo_evaluation_condition":
+        from clothdojo.evaluation.results import load_evaluation_condition
+
+        condition = load_evaluation_condition(root)
+        if condition.meta.get("training_eligible") is not False:
+            raise ValueError("evaluation condition must be marked training_eligible=false")
+        trajectories = condition.meta.get("trajectories")
+        if not isinstance(trajectories, list) or len(trajectories) != len(condition.cases):
+            raise ValueError("evaluation condition trajectory index is incomplete")
+        return condition.meta, "evaluation_condition"
+    raise ValueError(f"unsupported canonical trajectory collection schema: {schema!r}")
+
+
 def _restore_render_state(runtime, state) -> None:
+    if int(runtime.scene.model.world_count) != 1:
+        raise ValueError("single-state replay requires one Newton world")
     robot = runtime.scene.robot
-    for name, values in (
-        ("joint_q", state.joint_q),
-        ("joint_qd", state.joint_qd),
-        ("body_q", state.body_q),
-        ("body_qd", state.body_qd),
-    ):
+    world_offsets = np.asarray(runtime.scene.world_offsets, dtype=np.float32)
+    if world_offsets.shape != (1, 3):
+        raise RuntimeError("render world offsets do not match the Newton world count")
+    for name in ("joint_q", "joint_qd", "body_q", "body_qd"):
         target = robot.get_attribute(name, runtime.state_0)
-        target.assign(np.asarray(values).reshape(target.numpy().shape))
+        values = np.asarray(getattr(state, name), dtype=np.float32)[None, None]
+        if name == "body_q":
+            values = values.copy()
+            values[0, 0, :, :3] += world_offsets[0]
+        _assign_render_array(target, values, name=name)
         robot.set_attribute(name, runtime.state_0, target)
-    runtime.state_0.particle_q.assign(state.particle_q)
-    runtime.state_0.particle_qd.assign(state.particle_qd)
+    particle_q = (
+        np.asarray(state.particle_q, dtype=np.float32) + world_offsets[0]
+    )
+    particle_qd = np.asarray(state.particle_qd, dtype=np.float32)
+    _assign_render_array(runtime.state_0.particle_q, particle_q, name="particle_q")
+    _assign_render_array(runtime.state_0.particle_qd, particle_qd, name="particle_qd")
+
+
+def _assign_render_array(target, values: np.ndarray, *, name: str) -> None:
+    """Assign NumPy scalar/vector views to a Warp array without device readback."""
+
+    logical_shape = tuple(target.shape)
+    actual_shape = tuple(values.shape)
+    if actual_shape != logical_shape and not (
+        len(actual_shape) == len(logical_shape) + 1
+        and actual_shape[:-1] == logical_shape
+    ):
+        raise ValueError(
+            f"render replay {name} shape {actual_shape} is incompatible with "
+            f"Warp shape {logical_shape}"
+        )
+    target.assign(np.ascontiguousarray(values))
 
 
 def _features(height: int, width: int) -> dict[str, dict[str, Any]]:
@@ -334,6 +463,7 @@ def _write_sidecar(
     training_eligible: bool,
     source_kind: str,
     episode_lengths: list[int],
+    rendering: dict[str, Any],
 ) -> None:
     episodes = len(episode_lengths)
     payload = {
@@ -349,6 +479,7 @@ def _write_sidecar(
         },
         "scenario": scenario,
         "policy": policy,
+        "rendering": rendering,
         "counts": {"output_episodes": episodes, "output_frames": frames},
         "episode_sets": {
             "good": list(range(episodes)),

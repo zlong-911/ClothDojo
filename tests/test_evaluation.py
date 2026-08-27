@@ -3,27 +3,25 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-import clothdojo.evaluation.collection as evaluation_collection
-from clothdojo.evaluation.collection import run_evaluation_condition
+from clothdojo.data.rollout import inspect_rollout_collection_export
+from clothdojo.evaluation.collection import score_evaluation_condition
 from clothdojo.evaluation.metric import (
     CanonicalTemplate,
-    TorchFactorizedClothMetric,
     factorized_cloth_distance,
+    file_sha256,
     load_canonical_template,
     save_canonical_template,
 )
 from clothdojo.evaluation.protocol import (
     EvaluationProtocol,
-    StableSuccessTracker,
+    SuccessTracker,
     load_evaluation_protocol,
 )
 from clothdojo.evaluation.results import (
-    EVALUATION_RESULT_FORMAT_VERSION,
     EVALUATION_RESULT_SCHEMA,
     EvaluationCaseKey,
     EvaluationCaseResult,
@@ -31,7 +29,9 @@ from clothdojo.evaluation.results import (
     summarize_paired_conditions,
     write_evaluation_cases,
 )
+from clothdojo.evaluation.scoring import result_from_curve, score_evaluation_trajectory
 from clothdojo.sim.scene import ShirtFlattenSpec
+from clothdojo.trajectory import TrajectoryAction, TrajectoryState, TrajectoryWriter
 
 TABLE_CENTER_XY = ShirtFlattenSpec().table_position[:2]
 
@@ -66,13 +66,10 @@ def _protocol(**overrides) -> EvaluationProtocol:
         "control_fps": 10,
         "horizon_seconds": 1.0,
         "metric_hz": 5,
-        "stable_seconds": 0.4,
         "deformable_weight": 0.65,
         "symmetry": "planar_180",
         "deformable_distance_max": 0.1,
         "rigid_distance_max": None,
-        "particle_speed_rms_max_m_s": 0.02,
-        "require_released": True,
     }
     values.update(overrides)
     return EvaluationProtocol(**values)
@@ -94,6 +91,15 @@ def test_factorized_metric_separates_shape_from_planar_pose() -> None:
     assert values.deformable_distance[0] == pytest.approx(0.0, abs=1.0e-6)
     assert values.rigid_distance[0] > 0.1
     assert values.combined_distance[0] == pytest.approx(0.35 * values.rigid_distance[0], rel=1.0e-5)
+
+    translated = template.particle_q.copy()
+    translated[:, :2] += [0.4, -0.3]
+    translation_only = factorized_cloth_distance(
+        translated[None], velocity[None], template, symmetry="none"
+    )
+    assert translation_only.deformable_distance[0] == pytest.approx(0.0, abs=1.0e-6)
+    assert translation_only.rigid_distance[0] == pytest.approx(0.0, abs=1.0e-6)
+    assert translation_only.combined_distance[0] == pytest.approx(0.0, abs=1.0e-6)
 
 
 def test_factorized_metric_detects_deformation_and_180_symmetry() -> None:
@@ -125,14 +131,15 @@ def test_factorized_metric_detects_deformation_and_180_symmetry() -> None:
     centroid_rotated = template.particle_q.copy()
     centroid = centroid_rotated[:, :2].mean(axis=0)
     centroid_rotated[:, :2] = 2.0 * centroid - centroid_rotated[:, :2]
-    wrong_pivot = factorized_cloth_distance(
+    translated_symmetric = factorized_cloth_distance(
         centroid_rotated[None],
         zero[None],
         template,
         symmetry="planar_180",
         symmetry_center_xy=TABLE_CENTER_XY,
     )
-    assert wrong_pivot.rigid_distance[0] > 0.1
+    assert translated_symmetric.combined_distance[0] == pytest.approx(0.0, abs=1.0e-6)
+    assert translated_symmetric.symmetry_index[0] == 1
 
 
 def test_planar_180_requires_an_explicit_finite_center() -> None:
@@ -152,99 +159,73 @@ def test_planar_180_requires_an_explicit_finite_center() -> None:
         )
 
 
-def test_torch_metric_matches_numpy_reference() -> None:
-    torch = pytest.importorskip("torch")
-    template = _template()
-    generator = np.random.default_rng(7)
-    q = np.repeat(template.particle_q[None], 3, axis=0)
-    q += generator.normal(0.0, 0.03, q.shape).astype(np.float32)
-    qd = generator.normal(0.0, 0.01, q.shape).astype(np.float32)
-    expected = factorized_cloth_distance(
-        q,
-        qd,
-        template,
-        symmetry_center_xy=TABLE_CENTER_XY,
-    )
-
-    metric = TorchFactorizedClothMetric(
-        template,
-        device="cpu",
-        symmetry_center_xy=TABLE_CENTER_XY,
-    )
-    actual = metric(torch.from_numpy(q), torch.from_numpy(qd))
-
-    for field in (
-        "deformable_distance",
-        "rigid_distance",
-        "combined_distance",
-        "speed_rms_m_s",
-    ):
-        np.testing.assert_allclose(
-            getattr(actual, field).numpy(), getattr(expected, field), atol=1.0e-6
-        )
-    np.testing.assert_array_equal(actual.symmetry_index.numpy(), expected.symmetry_index)
-
-
-def test_success_is_absorbing_only_after_release_speed_and_dwell() -> None:
-    protocol = _protocol()
-    tracker = StableSuccessTracker(protocol, batch_size=2)
+def test_success_only_uses_distance_thresholds_and_is_absorbing() -> None:
+    protocol = _protocol(rigid_distance_max=0.1)
+    tracker = SuccessTracker(protocol, batch_size=2)
     good = np.asarray([0.05, 0.05])
-    rigid = np.asarray([0.2, 0.2])
-    speed = np.asarray([0.0, 0.0])
+    rigid = np.asarray([0.05, 0.2])
 
-    tracker.update(
+    new = tracker.update(
         step=0,
         deformable_distance=good,
         rigid_distance=rigid,
-        speed_rms_m_s=speed,
-        released=np.asarray([False, True]),
     )
+    np.testing.assert_array_equal(new, [True, False])
+    assert tracker.confirmed_step.tolist() == [0, -1]
+
     new = tracker.update(
         step=2,
         deformable_distance=good,
-        rigid_distance=rigid,
-        speed_rms_m_s=speed,
-        released=np.asarray([True, True]),
+        rigid_distance=np.asarray([0.2, 0.05]),
     )
     np.testing.assert_array_equal(new, [False, True])
-    assert tracker.confirmed_step[1] == 2
-    assert tracker.stable_since_step[1] == 0
-
-    new = tracker.update(
-        step=4,
-        deformable_distance=good,
-        rigid_distance=rigid,
-        speed_rms_m_s=speed,
-        released=np.asarray([True, False]),
-    )
-    np.testing.assert_array_equal(new, [True, False])
-    new = tracker.update(
-        step=6,
-        deformable_distance=good,
-        rigid_distance=rigid,
-        speed_rms_m_s=speed,
-        released=np.asarray([True, False]),
-    )
-    np.testing.assert_array_equal(new, [False, False])
+    assert tracker.confirmed_step.tolist() == [0, 2]
     assert tracker.success.tolist() == [True, True]
 
     tracker.update(
-        step=8,
+        step=4,
         deformable_distance=np.asarray([1.0, 1.0]),
         rigid_distance=rigid,
-        speed_rms_m_s=np.asarray([1.0, 1.0]),
-        released=np.asarray([False, False]),
     )
     assert tracker.success.tolist() == [True, True]
+
+
+def test_offline_curve_is_the_single_source_for_success_and_best_results() -> None:
+    protocol = _protocol(rigid_distance_max=0.1)
+    curve = np.asarray(
+        [
+            [0.2, 0.05, 0.2, 0.01],
+            [0.1, 0.1, 0.1, 0.03],
+            [0.3, 0.3, 0.1, 0.05],
+            [0.4, 0.4, 0.4, 0.07],
+            [0.5, 0.5, 0.5, 0.09],
+            [0.6, 0.6, 0.6, 0.11],
+        ],
+        dtype=np.float32,
+    )
+
+    result = result_from_curve(
+        curve,
+        protocol,
+        key=EvaluationCaseKey("shirt", 3, 1),
+        initial_state_seed=7,
+        policy_seed=8,
+    )
+
+    assert result.success is True
+    assert result.success_at_end is False
+    assert result.confirmed_step == 2
+    assert result.best_observed_step == 2
+    assert result.best_observed_combined_distance == pytest.approx(0.1)
+    assert result.time_average_combined_distance == pytest.approx(0.3)
 
 
 def test_protocol_and_template_round_trip(tmp_path: Path) -> None:
     project = Path(__file__).resolve().parents[1]
     protocol = load_evaluation_protocol(project / "configs" / "evaluation" / "shirt_flatten.yaml")
     assert protocol.stage == "calibration"
-    assert protocol.horizon_steps == 1800
+    assert protocol.horizon_steps == 4500
     assert protocol.metric_stride == 5
-    assert protocol.stable_samples == 10
     assert protocol.target.symmetry_center_xy == TABLE_CENTER_XY
     assert protocol.target_min_settle_steps == 400
     assert protocol.target_max_settle_steps == 1500
@@ -267,129 +248,149 @@ def test_protocol_rejects_non_integral_sampling_grid() -> None:
         _protocol(horizon_seconds=0.3)
 
 
-def test_evaluation_repairs_complete_results_and_invalid_asset_npz(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_evaluation_is_scored_from_the_standard_complete_trajectory(tmp_path: Path) -> None:
     protocol = _protocol()
-    scenario = SimpleNamespace(
-        task_name="shirt_flatten",
-        steps=protocol.horizon_steps,
-        action_horizon=10,
-        to_json_dict=lambda: {"task": "shirt_flatten", "steps": 10},
-    )
-    states = tmp_path / "states"
+    template = _template()
+    condition = tmp_path / "condition"
+    output = condition / "trajectories" / "shirt_000003_r002"
     templates = tmp_path / "templates"
-    (states / "shirt").mkdir(parents=True)
-    templates.mkdir()
-    (states / "meta.json").write_text("{}", encoding="utf-8")
-    (states / "shirt" / "states.npz").write_bytes(b"states")
-    (templates / "shirt.npz").write_bytes(b"template")
-
-    monkeypatch.setattr(evaluation_collection, "load_rollout_scenario", lambda _: scenario)
-    monkeypatch.setattr(evaluation_collection, "load_evaluation_protocol", lambda _: protocol)
-    monkeypatch.setattr(
-        evaluation_collection,
-        "load_initial_state_collection",
-        lambda _: {"assets": [{"asset_id": "shirt"}]},
-    )
-    monkeypatch.setattr(
-        evaluation_collection.InitialStatePool,
-        "load",
-        lambda _: SimpleNamespace(state_count=1),
-    )
-    monkeypatch.setattr(
-        evaluation_collection,
-        "load_canonical_template",
-        lambda _: SimpleNamespace(asset_id="shirt"),
-    )
-    policy_identity = {
-        "checkpoint_sha256": "f" * 64,
-        "batched_inference": True,
-    }
-    monkeypatch.setattr(
-        evaluation_collection,
-        "RemoteSFTPolicy",
-        lambda *args, **kwargs: SimpleNamespace(identity=policy_identity),
-    )
-
-    worker_calls = []
-
-    def run_workers(jobs, **kwargs) -> None:
-        worker_calls.append([job["asset_id"] for job in jobs])
-        output = Path(kwargs["common_args"][4])
-        for job in jobs:
-            shape = (1, job["state_count"])
-            arrays = {
-                "initial_state_seed": np.full(shape, 7, dtype=np.int32),
-                "policy_seed": np.full(shape, 8, dtype=np.int64),
-                "success": np.zeros(shape, dtype=bool),
-                "success_at_end": np.zeros(shape, dtype=bool),
-                "confirmed_step": np.full(shape, -1, dtype=np.int32),
-                "stable_since_step": np.full(shape, -1, dtype=np.int32),
-                "terminal_deformable_distance": np.full(shape, 0.2, dtype=np.float32),
-                "terminal_rigid_distance": np.full(shape, 0.1, dtype=np.float32),
-                "terminal_combined_distance": np.full(shape, 0.15, dtype=np.float32),
-                "terminal_speed_rms_m_s": np.full(shape, 0.01, dtype=np.float32),
-                "best_settled_step": np.full(shape, -1, dtype=np.int32),
-                "best_settled_deformable_distance": np.full(shape, np.nan, dtype=np.float32),
-                "best_settled_rigid_distance": np.full(shape, np.nan, dtype=np.float32),
-                "best_settled_combined_distance": np.full(shape, np.nan, dtype=np.float32),
-                "curve": np.zeros((*shape, protocol.sample_count, 4), dtype=np.float32),
+    (templates / "templates").mkdir(parents=True)
+    template_path = templates / "templates" / "shirt.npz"
+    save_canonical_template(template_path, template)
+    (templates / "meta.json").write_text(
+        json.dumps(
+            {
+                "schema": "clothdojo_canonical_template_collection",
+                "format_version": 1,
+                "status": "complete",
+                "asset_count": 1,
+                "protocol": {
+                    "fingerprint": protocol.fingerprint,
+                    "target": protocol.target.to_json_dict(),
+                },
+                "assets": [
+                    {
+                        "asset_id": "shirt",
+                        "status": "complete",
+                        "path": "templates/shirt.npz",
+                        "sha256": file_sha256(template_path),
+                    }
+                ],
             }
-            evaluation_collection._write_asset_result(
-                evaluation_collection._asset_result_path(output, job["asset_id"]),
-                asset_id=job["asset_id"],
-                pool_sha256=job["pool_sha256"],
-                template_sha256=job["template_sha256"],
-                protocol_fingerprint=protocol.fingerprint,
-                checkpoint_sha256=policy_identity["checkpoint_sha256"],
-                execution="chunk",
-                exec_horizon=10,
-                arrays=arrays,
-            )
+        ),
+        encoding="utf-8",
+    )
+    writer = TrajectoryWriter(
+        output,
+        control_fps=protocol.control_fps,
+        sim_substeps=1,
+        max_actions=protocol.horizon_steps,
+        metadata={
+            "producer": "clothdojo_evaluation",
+            "training_eligible": False,
+            "asset_id": "shirt",
+            "replicate": 2,
+            "policy_seed": 8,
+            "initial_state": {"index": 3, "seed": 7},
+            "protocol_fingerprint": protocol.fingerprint,
+            "template_sha256": file_sha256(template_path),
+        },
+    )
+    writer.write_initial_state(_trajectory_state(0, template.particle_q))
+    deformed = template.particle_q.copy()
+    deformed[0, 0] -= 1.0
+    for index in range(protocol.horizon_steps):
+        writer.append_transition(
+            TrajectoryAction(
+                sample_index=index,
+                joint_target=np.zeros(12, dtype=np.float32),
+                gripper_open_command=np.zeros(2, dtype=np.float32),
+            ),
+            _trajectory_state(index + 1, deformed),
+        )
+    writer.close()
 
-    monkeypatch.setattr(evaluation_collection, "run_policy_asset_workers", run_workers)
-    output = tmp_path / "evaluation"
-    arguments = {
-        "scenario_path": tmp_path / "scenario.yaml",
-        "protocol_path": tmp_path / "protocol.yaml",
-        "initial_states_path": states,
-        "templates_path": templates,
-        "policy_endpoints": ("http://policy",),
-        "output": output,
-        "condition_id": "condition",
-        "gpus": ("cpu",),
+    scored = score_evaluation_trajectory(output, template, protocol)
+
+    assert scored.result.key == EvaluationCaseKey("shirt", 3, 2)
+    assert scored.result.success is True
+    assert scored.result.success_at_end is False
+    assert scored.result.confirmed_step == 0
+    assert scored.curve.shape == (protocol.sample_count, 4)
+
+    protocol_path = tmp_path / "protocol.yaml"
+    protocol_path.write_text(
+        """schema: clothdojo_evaluation_protocol
+protocol_id: test
+stage: calibration
+task: shirt_flatten
+timing: {control_fps: 10, horizon_seconds: 1.0, metric_hz: 5}
+metric: {deformable_weight: 0.65, symmetry: planar_180}
+success: {deformable_distance_max: 0.1, rigid_distance_max: null}
+target:
+  method: default_free_settle
+  min_settle_seconds: 8.0
+  max_settle_seconds: 30.0
+  stability_window_seconds: 1.0
+  speed_rms_max_m_s: 0.005
+  robot_particle_collision: false
+  symmetry_center_xy: [0.651, 0.0]
+""",
+        encoding="utf-8",
+    )
+    condition_meta = {
+        "schema": EVALUATION_RESULT_SCHEMA,
+        "status": "failed",
+        "condition_id": "offline",
+        "case_count": 1,
+        "results": "results.jsonl",
+        "training_eligible": False,
+        "scenario": {"prompt": "flatten the shirt"},
+        "policy": {"checkpoint_sha256": "f" * 64},
+        "protocol": {"fingerprint": protocol.fingerprint},
+        "templates": {"shirt": file_sha256(template_path)},
+        "trajectories": [
+            {
+                "asset_id": "shirt",
+                "initial_state_index": 3,
+                "replicate": 2,
+                "path": "trajectories/shirt_000003_r002",
+                "action_count": protocol.horizon_steps,
+            }
+        ],
     }
+    (condition / "meta.json").write_text(
+        json.dumps(condition_meta), encoding="utf-8"
+    )
 
-    run_evaluation_condition(**arguments)
-    assert worker_calls == [["shirt"]]
+    summary = score_evaluation_condition(condition, protocol_path, templates, workers=2)
 
-    (output / "results.jsonl").unlink()
-    run_evaluation_condition(**arguments)
-    assert worker_calls == [["shirt"]]
-    assert len(load_evaluation_condition(output).cases) == 1
+    assert summary["case_count"] == 1
+    assert load_evaluation_condition(condition).cases == (scored.result,)
+    export = inspect_rollout_collection_export(condition)
+    assert export["source_kind"] == "evaluation_condition"
+    assert export["training_eligible"] is False
 
-    (output / "assets" / "shirt.npz").write_bytes(b"broken")
-    run_evaluation_condition(**arguments)
-    assert worker_calls == [["shirt"], ["shirt"]]
-    assert len(load_evaluation_condition(output).cases) == 1
 
-    asset_result = output / "assets" / "shirt.npz"
-    with np.load(asset_result, allow_pickle=False) as stored:
-        payload = {name: stored[name] for name in stored.files}
-    payload["curve"] = payload["curve"].copy()
-    payload["curve"][0, 0, 0, 0] = np.nan
-    np.savez_compressed(asset_result, **payload)
-    run_evaluation_condition(**arguments)
-    assert worker_calls == [["shirt"], ["shirt"], ["shirt"]]
+def _trajectory_state(index: int, particles: np.ndarray) -> TrajectoryState:
+    def zeros(shape):
+        return np.zeros(shape, dtype=np.float32)
 
-    with np.load(asset_result, allow_pickle=False) as stored:
-        payload = {name: stored[name] for name in stored.files}
-    payload["curve"] = payload["curve"].copy()
-    payload["curve"][0, 0, 0, 0] = -1.0
-    np.savez_compressed(asset_result, **payload)
-    run_evaluation_condition(**arguments)
-    assert worker_calls == [["shirt"], ["shirt"], ["shirt"], ["shirt"]]
+    return TrajectoryState(
+        sample_index=index,
+        joint_q=zeros(12),
+        joint_qd=zeros(12),
+        body_q=zeros((2, 7)),
+        body_qd=zeros((2, 6)),
+        particle_q=np.asarray(particles, dtype=np.float32),
+        particle_qd=zeros(particles.shape),
+        gripper_open_state=zeros(2),
+        grasp_attached=np.zeros(2, dtype=np.int32),
+        grasp_previous_open=zeros(2),
+        grasp_pin_count=np.zeros(2, dtype=np.int32),
+        grasp_pins=np.full((2, 2), -1, dtype=np.int32),
+        grasp_pin_local=zeros((2, 2, 3)),
+    )
 
 
 def _case(asset: str, index: int, *, success: bool) -> EvaluationCaseResult:
@@ -400,15 +401,14 @@ def _case(asset: str, index: int, *, success: bool) -> EvaluationCaseResult:
         success=success,
         success_at_end=success,
         confirmed_step=4 if success else None,
-        stable_since_step=2 if success else None,
         terminal_deformable_distance=0.05 if success else 0.3,
         terminal_rigid_distance=0.1,
         terminal_combined_distance=0.07 if success else 0.23,
         terminal_speed_rms_m_s=0.01 if success else 0.2,
-        best_settled_step=4,
-        best_settled_deformable_distance=0.05 if success else 0.2,
-        best_settled_rigid_distance=0.1,
-        best_settled_combined_distance=0.07 if success else 0.17,
+        best_observed_step=4,
+        best_observed_deformable_distance=0.05 if success else 0.2,
+        best_observed_rigid_distance=0.1,
+        best_observed_combined_distance=0.07 if success else 0.17,
     )
 
 
@@ -419,6 +419,8 @@ def _publish(
     *,
     scenario: dict | None = None,
     initial_state_pools: dict | None = None,
+    horizon_steps: int = 10,
+    control_fps: int = 10,
 ) -> None:
     path.mkdir()
     ordered = tuple(cases)
@@ -426,20 +428,18 @@ def _publish(
     write_evaluation_cases(path / "results.jsonl", ordered)
     meta = {
         "schema": EVALUATION_RESULT_SCHEMA,
-        "format_version": EVALUATION_RESULT_FORMAT_VERSION,
         "status": "complete",
         "condition_id": condition,
         "protocol": {
             "id": "test",
             "stage": "frozen",
             "fingerprint": "d" * 64,
-            "horizon_steps": 10,
-            "control_fps": 10,
+            "horizon_steps": horizon_steps,
+            "control_fps": control_fps,
         },
         "scenario": scenario or {"fingerprint": "2" * 64},
         "initial_states_sha256": "e" * 64,
-        "initial_state_pools": initial_state_pools
-        or dict.fromkeys(assets, "0" * 64),
+        "initial_state_pools": initial_state_pools or dict.fromkeys(assets, "0" * 64),
         "templates": dict.fromkeys(assets, "1" * 64),
         "policy": {"checkpoint_sha256": "f" * 64},
         "execution": {"mode": "chunk", "exec_horizon": 2},
@@ -475,8 +475,39 @@ def test_paired_summary_uses_macro_assets_and_failure_censoring(tmp_path: Path) 
     assert rtc["success_rate_asset_macro"] == pytest.approx(0.75)
     assert rtc["restricted_mean_completion_seconds"] == pytest.approx(0.6)
     assert rtc["terminal_speed_rms_m_s_mean"] == pytest.approx(0.0733333333)
+    assert rtc["best_observed_combined_distance_mean"] == pytest.approx(0.1033333333)
+    assert rtc["terminal_minus_best_combined_distance_mean"] == pytest.approx(0.02)
+    assert rtc["time_average_combined_distance_mean"] is None
     assert summary["paired_comparisons"][0]["success_wins"] == 2
     assert summary["paired_comparisons"][0]["success_losses"] == 0
+
+
+def test_summary_reports_preregistered_success_checkpoints(tmp_path: Path) -> None:
+    fast = replace(
+        _case("a", 0, success=True),
+        confirmed_step=250,
+    )
+    slow = replace(
+        _case("a", 1, success=True),
+        confirmed_step=700,
+    )
+    _publish(
+        tmp_path / "condition",
+        "condition",
+        [fast, slow],
+        horizon_steps=900,
+        control_fps=10,
+    )
+
+    summary = summarize_paired_conditions([tmp_path / "condition"])
+
+    assert summary["conditions"][0]["success_rate_by_seconds"] == {
+        "30": 0.5,
+        "45": 0.5,
+        "60": 0.5,
+        "75": 1.0,
+        "90": 1.0,
+    }
 
 
 def test_paired_summary_rejects_missing_cases(tmp_path: Path) -> None:
@@ -525,3 +556,17 @@ def test_paired_summary_rejects_different_initial_state_pool_files(
 
     with pytest.raises(ValueError, match="initial-state pool"):
         summarize_paired_conditions([tmp_path / "base", tmp_path / "other"])
+
+
+def test_paired_summary_allows_extended_state_collection_metadata(tmp_path: Path) -> None:
+    case = _case("a", 0, success=False)
+    _publish(tmp_path / "base", "base", [case])
+    _publish(tmp_path / "other", "other", [case])
+    meta_path = tmp_path / "other" / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["initial_states_sha256"] = "9" * 64
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+
+    summary = summarize_paired_conditions([tmp_path / "base", tmp_path / "other"])
+
+    assert summary["case_count"] == 1

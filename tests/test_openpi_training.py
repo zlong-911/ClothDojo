@@ -4,7 +4,7 @@ import numpy as np
 import pyarrow as pa
 import pytest
 
-from clothdojo.training.openpi import _episode_ends, _float_matrix
+from clothdojo.training.openpi import _episode_ends, _float_matrix, compute_norm_stats
 
 
 def test_float_matrix_keeps_fixed_size_list_layout() -> None:
@@ -28,3 +28,8 @@ def test_episode_ends_are_frame_aligned() -> None:
 def test_episode_ends_reject_non_contiguous_labels() -> None:
     with pytest.raises(ValueError, match="contiguous and zero-based"):
         _episode_ends(np.array([0, 0, 2], dtype=np.int64))
+
+
+def test_norm_stats_reject_empty_default_prompt(tmp_path) -> None:
+    with pytest.raises(ValueError, match="default_prompt"):
+        compute_norm_stats(tmp_path, tmp_path / "stats", default_prompt="  ")

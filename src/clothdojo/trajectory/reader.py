@@ -81,6 +81,26 @@ class TrajectoryReader:
     def terminal_state(self) -> TrajectoryState:
         return self.state_at(self.manifest.state_count - 1)
 
+    def state_arrays(
+        self, fields: Iterable[str] | None = None
+    ) -> dict[str, np.ndarray]:
+        """Return selected validated read-only arrays for vectorized consumers."""
+
+        if fields is None:
+            return dict(self._states())
+        selected = tuple(fields)
+        if len(set(selected)) != len(selected) or any(
+            field not in STATE_ARRAY_DTYPES for field in selected
+        ):
+            raise ValueError("state array fields must be unique known state fields")
+        return self._load_arrays(
+            self.trajectory_dir / "states.npz",
+            _STATE_KEYS,
+            self.manifest.state_count,
+            self.manifest.state_shapes,
+            load_keys=("sample_index", *selected),
+        )
+
     def validate_training_data(
         self,
         *,
@@ -202,6 +222,7 @@ class TrajectoryReader:
         required_keys: tuple[str, ...],
         expected_count: int,
         expected_shapes: dict[str, list[int]],
+        load_keys: tuple[str, ...] | None = None,
     ) -> dict[str, np.ndarray]:
         if not path.is_file():
             raise RuntimeError(f"trajectory data file is missing: {path.name}")
@@ -214,20 +235,23 @@ class TrajectoryReader:
                 raise RuntimeError(
                     f"{path.name} fields differ: missing={missing}, unexpected={unexpected}"
                 )
-            arrays = {key: data[key] for key in required_keys}
+            selected_keys = required_keys if load_keys is None else load_keys
+            if any(key not in required_keys for key in selected_keys):
+                raise ValueError(f"{path.name} requested unknown fields")
+            arrays = {key: data[key] for key in selected_keys}
 
         wrong_dtypes = {
             key: str(arrays[key].dtype)
-            for key in required_keys
+            for key in selected_keys
             if arrays[key].dtype != _DTYPES[key]
         }
         if wrong_dtypes:
             raise RuntimeError(f"{path.name} has invalid dtypes: {wrong_dtypes}")
-        scalar_fields = [key for key in required_keys if arrays[key].ndim < 1]
+        scalar_fields = [key for key in selected_keys if arrays[key].ndim < 1]
         if scalar_fields:
             raise RuntimeError(f"{path.name} fields lack a sample axis: {scalar_fields}")
 
-        lengths = {key: int(arrays[key].shape[0]) for key in required_keys}
+        lengths = {key: int(arrays[key].shape[0]) for key in selected_keys}
         if any(length != expected_count for length in lengths.values()):
             raise RuntimeError(
                 f"{path.name} count mismatch: manifest={expected_count} arrays={lengths}"
@@ -239,7 +263,10 @@ class TrajectoryReader:
             )
         if set(expected_shapes) != set(required_keys) - {"sample_index"}:
             raise RuntimeError(f"{path.name} manifest shape fields are incomplete")
-        for key, expected_shape in expected_shapes.items():
+        for key in selected_keys:
+            if key == "sample_index":
+                continue
+            expected_shape = expected_shapes[key]
             actual_shape = list(arrays[key].shape[1:])
             if actual_shape != expected_shape:
                 raise RuntimeError(

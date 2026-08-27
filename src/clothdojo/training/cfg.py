@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,7 @@ def inspect_cfg_training(
 ) -> dict[str, Any]:
     """Validate both labeled datasets referenced by one CFG config."""
 
+    from clothdojo.rollout.checkpoint import rlinf_openpi_weights_sha256
     from clothdojo.training.rlinf import compose_config
 
     cfg = compose_config(config_path, overrides)
@@ -55,6 +57,8 @@ def inspect_cfg_training(
     openpi_data = cfg.actor.model.get("openpi_data", {})
     if openpi_data.get("adapt_to_pi") is not False:
         raise ValueError("Piper CFG requires actor.model.openpi_data.adapt_to_pi=false")
+    if openpi_data.get("extra_delta_transform") is not True:
+        raise ValueError("Piper CFG requires extra_delta_transform=true")
     norm_root = Path(str(openpi_data.get("norm_stats_path", ""))).expanduser().resolve()
     if not (norm_root / "norm_stats.json").is_file():
         raise FileNotFoundError(f"CFG norm_stats.json does not exist: {norm_root}")
@@ -64,6 +68,7 @@ def inspect_cfg_training(
     if norm_provenance.get("config_name") != cfg.actor.model.openpi.config_name:
         raise ValueError("CFG norm stats use a different OpenPI config")
     model_path = _validate_init_checkpoint(cfg.actor.model.model_path)
+    init_weights_sha256 = rlinf_openpi_weights_sha256(model_path)
 
     data_cfg = cfg.data
     if data_cfg.get("balance_dataset_weights", True):
@@ -105,12 +110,33 @@ def inspect_cfg_training(
     if not np.isfinite(weights).all() or np.any(weights <= 0):
         raise ValueError(f"CFG dataset weights must be finite and positive: {weights}")
     probabilities = weights / weights.sum()
+    model = cfg.actor.model
+    norm_file = norm_root / "norm_stats.json"
+    provenance_file = norm_root / "clothdojo.json"
     return {
         "compatible": True,
         "config": str(Path(config_path).expanduser().resolve()),
         "model_type": str(cfg.actor.model.model_type),
         "model_path": str(model_path),
+        "init_checkpoint_weights_sha256": init_weights_sha256,
         "norm_stats_path": str(norm_root),
+        "norm_stats": {
+            "stats_sha256": _sha256(norm_file),
+            "provenance_sha256": _sha256(provenance_file),
+        },
+        "inference_contract": {
+            "openpi_config": str(model.openpi.config_name),
+            "action_dim": int(model.action_dim),
+            "action_horizon": int(model.num_action_chunks),
+            "num_steps": int(model.openpi.num_steps),
+            "adapt_to_pi": False,
+            "extra_delta_transform": True,
+            "train_expert_only": bool(model.openpi.train_expert_only),
+            "positive_only_conditional": bool(
+                model.openpi.positive_only_conditional
+            ),
+            "unconditional_prob": float(model.openpi.unconditional_prob),
+        },
         "advantage_tag": tag,
         "balance_dataset_weights": False,
         "sampling_probabilities": {
@@ -119,6 +145,32 @@ def inspect_cfg_training(
         },
         "datasets": [report.to_json_dict() for report in reports],
     }
+
+
+def write_cfg_launch_manifest(cfg: Any, report: dict[str, Any]) -> Path:
+    """Publish the checked training/inference contract before RLINF starts."""
+
+    output = Path(str(cfg.runner.logger.log_path)).expanduser().resolve()
+    if output.exists():
+        if not output.is_dir():
+            raise NotADirectoryError(f"CFG output path is not a directory: {output}")
+        if any(output.iterdir()):
+            raise FileExistsError(f"CFG output directory is not unique and empty: {output}")
+    else:
+        output.mkdir(parents=True)
+    path = output / "cfg_launch_manifest.json"
+    payload = {
+        "schema": "clothdojo_cfg_launch",
+        "format_version": 1,
+        **report,
+    }
+    temporary = output / ".cfg_launch_manifest.json.tmp"
+    temporary.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, path)
+    return path
 
 
 def inspect_cfg_dataset(
@@ -406,14 +458,14 @@ def _require_sha256(value: Any, field: str) -> str:
 
 def _validate_init_checkpoint(value: Any) -> Path:
     root = Path(str(value)).expanduser().resolve()
+    if not root.is_dir():
+        raise FileNotFoundError(f"CFG initialization checkpoint is not a directory: {root}")
     candidates = (
         root / "actor" / "model_state_dict" / "full_weights.pt",
         root / "model_state_dict" / "full_weights.pt",
         root / "full_weights.pt",
         root / "model.safetensors",
     )
-    if root.is_file():
-        candidates = (root,)
     if not any(path.is_file() and path.stat().st_size > 0 for path in candidates):
         raise FileNotFoundError(f"CFG initialization checkpoint has no model weights: {root}")
     return root

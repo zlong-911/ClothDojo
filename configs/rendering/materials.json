@@ -1,0 +1,162 @@
+{
+  "schema": "clothdojo_visual_material_catalog",
+  "source": {
+    "name": "Poly Haven",
+    "license": "CC0",
+    "license_url": "https://polyhaven.com/license",
+    "api_url": "https://polyhaven.com/our-api",
+    "selected_on": "2026-08-27",
+    "working_resolution": "2k"
+  },
+  "source_files_hashes": {
+    "fabric_pattern_07": "af042f95980f6ccc87285c3bc23e11671a5fecde",
+    "book_pattern": "91db16c6ae2b8d5ab823f1d3970fdc9f6ef3cea5",
+    "fabric_pattern_05": "be7f619f251a6ba2f829e658c6a20948cdc18a4f",
+    "velour_velvet": "e306095d7fc7da415ba88dcfcc36cb894846a6ff",
+    "crepe_satin": "ed195e55fe094dcf7d4e58ebafb8f8e57af9ee19",
+    "cotton_jersey": "de468d9c53b8a1aaa40a37664f778bb44f9effdf",
+    "rough_linen": "4e637f8a844f5100c96dc1b33d4d63fd7309797a",
+    "plywood": "71277f7973f476845a1464810f133500691c2e43",
+    "wood_table_001": "141bbae9092a1169e3060de60359d9631592e6a4",
+    "oak_veneer_01": "a443b579da009eae524d5d318fc999faf964671a",
+    "marble_01": "11a4d204569907b76e1c4f7ef06a8b3fa90b5930",
+    "laminate_floor_02": "c5bf4f78e51905d1dc9c8b408abedc65b1933483",
+    "concrete_floor_worn_001": "e3d93fd423c3db5bbc000a930cc8b9d770187ce4",
+    "wood_floor": "a44e6375a09ab98780b876e709f2629e7ed30409",
+    "granite_tile": "e9721ed5c35b6d2dc5ad0dc9f8e9fd1b407949ff",
+    "studio_small_08": "fd97af68d48d8fe35ca4556b5a7a28938906d37a",
+    "studio_small_03": "d69ec09a43016714fd0dda163b3b0c585c968f56",
+    "photo_studio_01": "2cc6d14e4bfed4846d01b16af62268384cd36c9e",
+    "poly_haven_studio": "0ff8ab9e5f1ceb8b5b1d6f39d4730e0525da4330"
+  },
+  "layout": {
+    "root": "data/visual-assets/polyhaven",
+    "material": "materials/{role}/{id}",
+    "lighting": "lighting/{id}.hdr"
+  },
+  "maps": {
+    "required": {
+      "base_color": "sRGB",
+      "normal_gl": "raw",
+      "roughness": "raw"
+    },
+    "excluded": {
+      "ao": "Avoid baked-lighting leakage in illumination experiments.",
+      "displacement": "Keep rendered surface detail separate from simulated cloth topology."
+    }
+  },
+  "materials": [
+    {
+      "id": "fabric_pattern_07",
+      "role": "cloth",
+      "color_channels": ["col_03", "col_1", "col_2"],
+      "size_mm": [400.0, 400.0]
+    },
+    {
+      "id": "book_pattern",
+      "role": "cloth",
+      "color_channels": ["col1", "col2"],
+      "size_mm": [300.0, 300.0]
+    },
+    {
+      "id": "fabric_pattern_05",
+      "role": "cloth",
+      "color_channels": ["col_01", "col_02", "col_03"],
+      "size_mm": [500.0, 500.0]
+    },
+    {
+      "id": "velour_velvet",
+      "role": "cloth",
+      "color_channels": ["Diffuse"],
+      "size_mm": [284.228, 273.5]
+    },
+    {
+      "id": "crepe_satin",
+      "role": "cloth",
+      "color_channels": ["Diffuse"],
+      "size_mm": [263.199, 267.9]
+    },
+    {
+      "id": "cotton_jersey",
+      "role": "cloth",
+      "color_channels": ["Diffuse"],
+      "size_mm": [263.603, 263.8]
+    },
+    {
+      "id": "rough_linen",
+      "role": "cloth",
+      "color_channels": ["Diffuse"],
+      "size_mm": [270.708, 271.3]
+    },
+    {
+      "id": "plywood",
+      "role": "table",
+      "color_channels": ["Diffuse"],
+      "size_mm": [500.0, 500.0]
+    },
+    {
+      "id": "wood_table_001",
+      "role": "table",
+      "color_channels": ["Diffuse"],
+      "size_mm": [1500.0, 1500.0]
+    },
+    {
+      "id": "oak_veneer_01",
+      "role": "table",
+      "color_channels": ["Diffuse"],
+      "size_mm": [1830.0, 1830.0]
+    },
+    {
+      "id": "marble_01",
+      "role": "table",
+      "color_channels": ["Diffuse"],
+      "size_mm": [1500.0, 1500.0]
+    },
+    {
+      "id": "laminate_floor_02",
+      "role": "ground",
+      "color_channels": ["Diffuse"],
+      "size_mm": [1700.0, 1700.0]
+    },
+    {
+      "id": "concrete_floor_worn_001",
+      "role": "ground",
+      "color_channels": ["Diffuse"],
+      "size_mm": [3000.0, 3000.0]
+    },
+    {
+      "id": "wood_floor",
+      "role": "ground",
+      "color_channels": ["Diffuse"],
+      "size_mm": [1700.0, 1700.0]
+    },
+    {
+      "id": "granite_tile",
+      "role": "ground",
+      "color_channels": ["Diffuse"],
+      "size_mm": [2300.0, 2300.0]
+    }
+  ],
+  "lighting": [
+    {
+      "id": "studio_small_08",
+      "mean_luminance_2k": 0.683659,
+      "exposure_offset": 0.03
+    },
+    {
+      "id": "studio_small_03",
+      "mean_luminance_2k": 1.840699,
+      "exposure_offset": -1.4
+    },
+    {
+      "id": "photo_studio_01",
+      "mean_luminance_2k": 0.663293,
+      "exposure_offset": 0.07
+    },
+    {
+      "id": "poly_haven_studio",
+      "mean_luminance_2k": 0.708992,
+      "exposure_offset": -0.03
+    }
+  ]
+}

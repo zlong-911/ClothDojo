@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 import pytest
 
-from clothdojo.rollout.artifacts import validate_sft_norm_binding
+from clothdojo.rollout.artifacts import (
+    validate_cfg_checkpoint_binding,
+    validate_sft_norm_binding,
+)
+from clothdojo.rollout.parity import ConversionParityLimits
 
 
 def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -61,6 +66,56 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     return checkpoint, norm, manifest_file
 
 
+def _bind_passing_jax_parity(
+    checkpoint: Path,
+    norm: Path,
+    manifest: Path,
+    *,
+    weights_sha256: str,
+) -> Path:
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["schema"] = "clothdojo_pi05_jax_preflight"
+    jax_manifest = manifest.with_name("clothdojo_launch.json")
+    jax_manifest.write_text(json.dumps(payload), encoding="utf-8")
+    manifest.unlink()
+    metric = {
+        "shape": [2, 10, 14],
+        "mean_abs": 0.001,
+        "p99_abs": 0.005,
+        "max_abs": 0.01,
+        "rmse": 0.002,
+        "cosine": 0.99999,
+    }
+    report = {
+        "schema": "clothdojo_jax_openpi_rlinf_parity",
+        "format_version": 1,
+        "compatible": True,
+        "weights_sha256": weights_sha256,
+        "norm_stats_sha256": hashlib.sha256(
+            (norm / "norm_stats.json").read_bytes()
+        ).hexdigest(),
+        "precision": {
+            "jax_checkpoint": "float32",
+            "jax_compute": "bfloat16",
+            "pytorch_checkpoint": "float32",
+            "pytorch_compute": "native_bfloat16",
+        },
+        "limits": asdict(ConversionParityLimits()),
+        "metrics": {
+            "model_1_step_full": metric,
+            "model_1_step_executed": metric,
+            "model_10_step_full": metric,
+            "model_10_step_executed": metric,
+            "model_10_step_rtc_guidance": metric,
+            "final_action_executed": metric,
+        },
+        "violations": [],
+    }
+    parity = checkpoint / "clothdojo_parity.json"
+    parity.write_text(json.dumps(report), encoding="utf-8")
+    return parity
+
+
 def test_accepts_exact_launch_artifacts(tmp_path: Path) -> None:
     checkpoint, norm, manifest = _fixture(tmp_path)
 
@@ -72,6 +127,7 @@ def test_accepts_exact_launch_artifacts(tmp_path: Path) -> None:
     )
 
     assert identity == {
+        "source_framework": "pytorch",
         "norm_stats_sha256": hashlib.sha256((norm / "norm_stats.json").read_bytes()).hexdigest(),
         "norm_provenance_sha256": hashlib.sha256(
             (norm / "clothdojo.json").read_bytes()
@@ -99,6 +155,93 @@ def test_accepts_converted_jax_launch_artifacts(tmp_path: Path) -> None:
 
     assert identity["training_manifest_sha256"] == hashlib.sha256(
         jax_manifest.read_bytes()
+    ).hexdigest()
+
+
+def test_converted_jax_serving_requires_bound_passing_parity(tmp_path: Path) -> None:
+    checkpoint, norm, manifest = _fixture(tmp_path)
+    weights_sha256 = "aa" * 32
+    parity = _bind_passing_jax_parity(
+        checkpoint,
+        norm,
+        manifest,
+        weights_sha256=weights_sha256,
+    )
+
+    identity = validate_sft_norm_binding(
+        checkpoint,
+        norm,
+        openpi_config="pi05_aloha_robotwin",
+        action_horizon=50,
+        weights_sha256=weights_sha256,
+    )
+
+    assert identity["parity_report_sha256"] == hashlib.sha256(
+        parity.read_bytes()
+    ).hexdigest()
+
+
+def test_converted_jax_serving_rejects_missing_parity(tmp_path: Path) -> None:
+    checkpoint, norm, manifest = _fixture(tmp_path)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["schema"] = "clothdojo_pi05_jax_preflight"
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError, match=r"no clothdojo_parity\.json"):
+        validate_sft_norm_binding(
+            checkpoint,
+            norm,
+            openpi_config="pi05_aloha_robotwin",
+            action_horizon=50,
+            weights_sha256="aa" * 32,
+        )
+
+
+def test_converted_jax_serving_rejects_tampered_parity_metrics(tmp_path: Path) -> None:
+    checkpoint, norm, manifest = _fixture(tmp_path)
+    weights_sha256 = "aa" * 32
+    parity = _bind_passing_jax_parity(
+        checkpoint,
+        norm,
+        manifest,
+        weights_sha256=weights_sha256,
+    )
+    report = json.loads(parity.read_text(encoding="utf-8"))
+    report["metrics"]["final_action_executed"]["max_abs"] = 1.0
+    parity.write_text(json.dumps(report), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="metrics exceed the serving limits"):
+        validate_sft_norm_binding(
+            checkpoint,
+            norm,
+            openpi_config="pi05_aloha_robotwin",
+            action_horizon=50,
+            weights_sha256=weights_sha256,
+        )
+
+
+def test_accepts_fold_prompt_bound_by_launch_artifacts(tmp_path: Path) -> None:
+    checkpoint, norm, manifest_file = _fixture(tmp_path)
+    provenance_file = norm / "clothdojo.json"
+    provenance = json.loads(provenance_file.read_text(encoding="utf-8"))
+    provenance["data_kwargs"]["default_prompt"] = "Fold the shirt."
+    provenance_file.write_text(json.dumps(provenance), encoding="utf-8")
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    manifest["norm_stats"]["data_kwargs"] = provenance["data_kwargs"]
+    manifest["norm_stats"]["provenance_sha256"] = hashlib.sha256(
+        provenance_file.read_bytes()
+    ).hexdigest()
+    manifest_file.write_text(json.dumps(manifest), encoding="utf-8")
+
+    identity = validate_sft_norm_binding(
+        checkpoint,
+        norm,
+        openpi_config="pi05_aloha_robotwin",
+        action_horizon=50,
+    )
+
+    assert identity["training_manifest_sha256"] == hashlib.sha256(
+        manifest_file.read_bytes()
     ).hexdigest()
 
 
@@ -149,6 +292,61 @@ def test_rejects_semantic_drift_even_with_matching_file_hash(tmp_path: Path) -> 
             norm,
             openpi_config="pi05_aloha_robotwin",
             action_horizon=50,
+        )
+
+
+def test_cfg_binding_rejects_runtime_semantic_drift(tmp_path: Path) -> None:
+    run = tmp_path / "cfg_run"
+    checkpoint = run / "global_step_100"
+    checkpoint.mkdir(parents=True)
+    norm = tmp_path / "norm"
+    norm.mkdir()
+    stats = norm / "norm_stats.json"
+    provenance = norm / "clothdojo.json"
+    stats.write_text("{}\n", encoding="utf-8")
+    provenance.write_text("{}\n", encoding="utf-8")
+    manifest = {
+        "schema": "clothdojo_cfg_launch",
+        "format_version": 1,
+        "compatible": True,
+        "norm_stats": {
+            "stats_sha256": hashlib.sha256(stats.read_bytes()).hexdigest(),
+            "provenance_sha256": hashlib.sha256(provenance.read_bytes()).hexdigest(),
+        },
+        "inference_contract": {
+            "openpi_config": "pi05_aloha_robotwin",
+            "action_dim": 14,
+            "action_horizon": 50,
+            "num_steps": 5,
+            "adapt_to_pi": False,
+            "extra_delta_transform": True,
+            "train_expert_only": True,
+            "positive_only_conditional": False,
+        },
+    }
+    manifest_file = run / "cfg_launch_manifest.json"
+    manifest_file.write_text(json.dumps(manifest), encoding="utf-8")
+
+    identity = validate_cfg_checkpoint_binding(
+        checkpoint,
+        norm,
+        openpi_config="pi05_aloha_robotwin",
+        action_horizon=50,
+        action_dim=14,
+        positive_only_conditional=False,
+    )
+
+    assert identity["training_manifest_sha256"] == hashlib.sha256(
+        manifest_file.read_bytes()
+    ).hexdigest()
+    with pytest.raises(ValueError, match="inference contract differs"):
+        validate_cfg_checkpoint_binding(
+            checkpoint,
+            norm,
+            openpi_config="pi05_aloha_robotwin",
+            action_horizon=40,
+            action_dim=14,
+            positive_only_conditional=False,
         )
 
 

@@ -33,7 +33,9 @@ class AssetCatalog:
         needle = query.strip().casefold()
         with self._lock:
             garments = self.library.garments()
-        collectable = set(self.library.collectable_ids())
+        collectable = {
+            item.id for item in garments if item.decision == "accepted" and item.converted
+        }
         counts = {
             "all": len(garments),
             "pending": sum(item.decision == "pending" for item in garments),
@@ -79,7 +81,7 @@ class AssetCatalog:
         with self._lock:
             self.library.decide(asset_id, decision)
             garment = next(item for item in self.library.garments() if item.id == asset_id)
-            collectable = asset_id in self.library.collectable_ids()
+            collectable = garment.decision == "accepted" and garment.converted
         return {
             "id": garment.id,
             "decision": garment.decision,

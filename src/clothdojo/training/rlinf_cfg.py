@@ -12,7 +12,6 @@ sampler, optimizer and checkpoint behavior remain upstream RLINF behavior.
 
 from __future__ import annotations
 
-import glob
 import os
 from pathlib import Path
 from typing import Any
@@ -87,13 +86,15 @@ def _build_cfg_model(cfg: Any, torch_dtype: Any = None) -> Any:
     del torch_dtype
     import openpi.shared.download as download
     import openpi.transforms as transforms
-    import safetensors
-    import torch
     from openpi.training import checkpoints as checkpoints
     from rlinf.models.embodiment.openpi.dataconfig import get_openpi_config
     from rlinf.models.embodiment.openpi_cfg.openpi_cfg_action_model import (
         OpenPi0Config,
         OpenPi0ForCFGActionPrediction,
+    )
+
+    from clothdojo.rollout.checkpoint import (
+        strict_reload_matching_rlinf_openpi_checkpoint,
     )
 
     train_config = get_openpi_config(**_openpi_config_kwargs(cfg))
@@ -106,20 +107,18 @@ def _build_cfg_model(cfg: Any, torch_dtype: Any = None) -> Any:
     if model_config.train_expert_only:
         model.freeze_vlm()
 
-    direct_weights = os.path.join(checkpoint_dir, "model_state_dict", "full_weights.pt")
-    actor_weights = os.path.join(checkpoint_dir, "actor", "model_state_dict", "full_weights.pt")
-    if os.path.exists(direct_weights):
-        model.load_state_dict(torch.load(direct_weights, map_location="cpu"), strict=False)
-    elif os.path.exists(actor_weights):
-        model.load_state_dict(torch.load(actor_weights, map_location="cpu"), strict=False)
-    else:
-        weight_paths = sorted(glob.glob(os.path.join(checkpoint_dir, "*.safetensors")))
-        if not weight_paths:
-            weight_paths = [os.path.join(checkpoint_dir, "model.safetensors")]
-        for weight_path in weight_paths:
-            safetensors.torch.load_model(model, weight_path, strict=False)
-
     model.paligemma_with_expert.to_bfloat16_for_selected_params("bfloat16")
+    checkpoint_validation = strict_reload_matching_rlinf_openpi_checkpoint(
+        model,
+        checkpoint_dir,
+    )
+    expected_weights = cfg.get("expected_weights_sha256")
+    if expected_weights is not None and (
+        not isinstance(expected_weights, str)
+        or checkpoint_validation["weights_sha256"] != expected_weights
+    ):
+        raise RuntimeError("CFG initialization weights changed after preflight")
+    model.clothdojo_checkpoint_validation = checkpoint_validation
     data_config = train_config.data.create(train_config.assets_dirs, model_config)
     norm_stats = data_config.norm_stats
     if norm_stats is None:

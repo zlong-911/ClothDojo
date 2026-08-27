@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import numpy as np
@@ -29,21 +30,23 @@ class _Episode:
         self.world_count = world_count
         self.actions: list[np.ndarray] = []
         self.step_index = 0
+        self.synchronize_calls = 0
 
     def observe(self) -> dict[str, np.ndarray]:
         values = np.arange(self.world_count, dtype=np.float32)[:, None]
-        return {
-            "observation.state": np.repeat(values + self.step_index, 14, axis=1)
-        }
+        return {"observation.state": np.repeat(values + self.step_index, 14, axis=1)}
 
     def step(self, policy_actions: np.ndarray) -> None:
         self.actions.append(np.asarray(policy_actions).copy())
         self.step_index += 1
 
+    def synchronize(self) -> None:
+        self.synchronize_calls += 1
+
 
 class _Policy:
     def __init__(self) -> None:
-        self.calls: list[tuple[dict[str, np.ndarray], str]] = []
+        self.calls: list[tuple[dict[str, np.ndarray], str, int]] = []
         self.reset_args: tuple[int, str, int] | None = None
 
     def reset(self, seed: int, *, mode: str, exec_horizon: int) -> None:
@@ -53,9 +56,11 @@ class _Policy:
         self,
         observation: dict[str, np.ndarray],
         prompt: str,
+        *,
+        inference_delay_steps: int = 0,
     ) -> np.ndarray:
         call = len(self.calls)
-        self.calls.append((observation, prompt))
+        self.calls.append((observation, prompt, inference_delay_steps))
         batch = observation["observation.state"].shape[0]
         steps = np.arange(4, dtype=np.float32) + call * 100
         actions = np.broadcast_to(steps[None, :, None], (batch, 4, 14)).copy()
@@ -82,12 +87,79 @@ def test_one_runner_uses_the_same_synchronous_batch_cadence(mode: str) -> None:
     np.testing.assert_array_equal(episode.actions[0][:, 0], [0, 10, 20])
     np.testing.assert_array_equal(episode.actions[1][:, 0], [1, 11, 21])
     np.testing.assert_array_equal(episode.actions[2][:, 0], [100, 110, 120])
-    assert report.to_json_dict() == {
+    payload = report.to_json_dict()
+    assert {
+        key: payload[key]
+        for key in ("mode", "steps", "inference_requests", "exec_horizon", "world_count")
+    } == {
         "mode": mode,
         "steps": 5,
         "inference_requests": 3,
         "exec_horizon": 2,
+        "world_count": 3,
     }
+    assert payload["performance"]["wall_seconds"] > 0.0
+    assert payload["performance"]["executed_world_steps_per_worker_second"] > 0.0
+    assert payload["performance"]["phases"]["observation"]["calls"] == 3
+    assert payload["performance"]["phases"]["policy_end_to_end"]["calls"] == 3
+    assert payload["performance"]["phases"]["execution"]["calls"] == 3
+    assert episode.synchronize_calls == 4
+
+
+def test_rtc_fixed_delay_executes_old_actions_while_replanning() -> None:
+    episode = _Episode(world_count=1)
+    policy = _Policy()
+
+    report = run_episode(
+        episode,
+        policy,
+        _scenario(steps=5),
+        mode="rtc",
+        exec_horizon=2,
+        rtc_delay_steps=1,
+        policy_seed=123,
+    )
+
+    assert [call[2] for call in policy.calls] == [0, 1]
+    assert [int(call[0]["observation.state"][0, 0]) for call in policy.calls] == [0, 2]
+    np.testing.assert_array_equal(
+        np.asarray(episode.actions)[:, 0, 0],
+        [0, 1, 2, 101, 102],
+    )
+    assert report.inference_delay_steps == 1
+    assert report.timings.phases_overlap is True
+
+
+def test_rtc_fixed_delay_trajectory_is_independent_of_policy_wall_latency() -> None:
+    trajectories = []
+    for latency in (0.0, 0.02):
+        class DelayedPolicy(_Policy):
+            def __init__(self, delay: float) -> None:
+                super().__init__()
+                self.delay = delay
+
+            def infer(self, observation, prompt, *, inference_delay_steps=0):
+                if self.calls:
+                    time.sleep(self.delay)
+                return super().infer(
+                    observation,
+                    prompt,
+                    inference_delay_steps=inference_delay_steps,
+                )
+
+        episode = _Episode(world_count=1)
+        run_episode(
+            episode,
+            DelayedPolicy(latency),
+            _scenario(steps=5),
+            mode="rtc",
+            exec_horizon=2,
+            rtc_delay_steps=1,
+            policy_seed=123,
+        )
+        trajectories.append(np.asarray(episode.actions))
+
+    np.testing.assert_array_equal(trajectories[0], trajectories[1])
 
 
 def test_world_count_one_is_the_serial_case_of_the_same_runner() -> None:
@@ -145,8 +217,12 @@ def test_project_rollout_scenario_is_strict_and_fingerprinted(tmp_path: Path) ->
 
 def test_runner_rejects_wrong_policy_action_horizon() -> None:
     class ShortPolicy(_Policy):
-        def infer(self, observation, prompt):
-            return super().infer(observation, prompt)[:, :3]
+        def infer(self, observation, prompt, *, inference_delay_steps=0):
+            return super().infer(
+                observation,
+                prompt,
+                inference_delay_steps=inference_delay_steps,
+            )[:, :3]
 
     with pytest.raises(ValueError, match="shape"):
         run_episode(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import signal
 import subprocess
@@ -22,6 +23,9 @@ from isaacteleop.cloudxr.runtime import run
 run()
 """
 _SHUTDOWN_TIMEOUT_S = 60.0
+_APP_STARTUP_PHASE_TIMEOUT_S = 150.0
+_NEWTON_BUILD_TIMEOUT_S = 300.0
+_FAILED_STARTUP_SHUTDOWN_TIMEOUT_S = 5.0
 _MAX_STREAM_FPS = 20
 
 
@@ -48,7 +52,6 @@ def _run_slot(plan: SessionPlan, status: SessionStatusWriter, install_dir: Path)
     from isaacteleop.cloudxr.env_config import EnvConfig
     from isaacteleop.cloudxr.runtime import check_eula, wait_for_runtime_ready_sync
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(plan.gpu_id)
     status.write("starting", phase="configuring_cloudxr", gpu_id=plan.gpu_id)
     override = _write_overrides(plan, install_dir)
     environment = EnvConfig.from_args(str(install_dir), override)
@@ -124,6 +127,9 @@ async def _run_services(
         stdin=subprocess.DEVNULL,
         start_new_session=True,
     )
+    startup_deadline = loop.time() + _APP_STARTUP_PHASE_TIMEOUT_S
+    startup_phase = None
+    app_started = False
     try:
         while True:
             if stop.is_set():
@@ -140,6 +146,22 @@ async def _run_services(
                 if app.returncode == 0:
                     status.write("stopped", phase="teleop_exit", gpu_id=plan.gpu_id)
                 return int(app.returncode)
+            current = None if app_started else _read_status(plan.status_path)
+            if current is not None and current.get("state") == "failed":
+                await _terminate(app, timeout_s=_FAILED_STARTUP_SHUTDOWN_TIMEOUT_S)
+                raise RuntimeError(str(current.get("error") or "Isaac teleoperation failed"))
+            app_started = app_started or _app_started(current)
+            phase = None if current is None else current.get("phase")
+            if not app_started and phase is not None and phase != startup_phase:
+                startup_phase = phase
+                startup_deadline = loop.time() + _startup_timeout(phase)
+            if loop.time() >= startup_deadline and not app_started:
+                await _terminate(app, timeout_s=_FAILED_STARTUP_SHUTDOWN_TIMEOUT_S)
+                raise RuntimeError(
+                    "Isaac teleoperation did not finish startup within "
+                    f"{_startup_timeout(phase):.0f}s "
+                    f"in phase {phase or 'unknown'}"
+                )
             await asyncio.sleep(0.5)
     finally:
         await _terminate(app)
@@ -207,14 +229,30 @@ def _runtime_environment() -> dict[str, str]:
     return environment
 
 
-async def _terminate(process: subprocess.Popen) -> None:
+def _app_started(status: dict | None) -> bool:
+    return status is not None and status.get("state") in {"waiting_for_vr", "collecting"}
+
+
+def _startup_timeout(phase: object) -> float:
+    return _NEWTON_BUILD_TIMEOUT_S if phase == "building_newton" else _APP_STARTUP_PHASE_TIMEOUT_S
+
+
+def _read_status(path: Path) -> dict | None:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, ValueError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+async def _terminate(process: subprocess.Popen, *, timeout_s: float = _SHUTDOWN_TIMEOUT_S) -> None:
     if process.poll() is not None:
         return
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
         return
-    deadline = asyncio.get_running_loop().time() + _SHUTDOWN_TIMEOUT_S
+    deadline = asyncio.get_running_loop().time() + timeout_s
     while process.poll() is None and asyncio.get_running_loop().time() < deadline:
         await asyncio.sleep(0.1)
     if process.poll() is None:

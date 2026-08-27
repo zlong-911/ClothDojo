@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import warp as wp
 
-from clothdojo.sim.grasp import _reset_grasp, _update_grasp
+from clothdojo.sim.grasp import (
+    ParticleGrasp,
+    _reset_grasp,
+    _reset_release_collision,
+    _update_grasp,
+)
 
 
 def test_grasp_matches_expert_four_seed_two_ring_patch_and_release() -> None:
@@ -18,6 +25,10 @@ def test_grasp_matches_expert_four_seed_two_ring_patch_and_release() -> None:
     pin_local = wp.zeros(shape3, dtype=wp.vec3, device=device)
     frontier = wp.full(shape3, -1, dtype=wp.int32, device=device)
     next_frontier = wp.full(shape3, -1, dtype=wp.int32, device=device)
+    release_collision_countdown = wp.zeros(shape2, dtype=wp.int32, device=device)
+    shape_flags = wp.array([4, 4], dtype=wp.int32, device=device)
+    collision_shapes = wp.array([[[0], [1]]], dtype=wp.int32, device=device)
+    collision_shape_count = wp.ones(shape2, dtype=wp.int32, device=device)
 
     # Ten particles form a line. Four nearest seeds plus two expansion rings
     # must select [0..5]; the former nearest-plus-one-ring implementation only
@@ -63,8 +74,14 @@ def test_grasp_matches_expert_four_seed_two_ring_patch_and_release() -> None:
                 frontier,
                 next_frontier,
                 wp.array([(0.0, 0.0, 0.0)] * 2, dtype=wp.vec3, device=device),
+                release_collision_countdown,
+                shape_flags,
+                collision_shapes,
+                collision_shape_count,
                 0.1,
                 0.7,
+                3,
+                4,
                 0.01**2,
                 4,
                 2,
@@ -86,6 +103,17 @@ def test_grasp_matches_expert_four_seed_two_ring_patch_and_release() -> None:
     update()
     assert attached.numpy().tolist() == [[0, 0]]
     assert pin_count.numpy().tolist() == [[0, 0]]
+    assert release_collision_countdown.numpy().tolist() == [[3, 0]]
+    assert shape_flags.numpy().tolist() == [0, 4]
+
+    update()
+    update()
+    assert release_collision_countdown.numpy().tolist() == [[1, 0]]
+    assert shape_flags.numpy().tolist() == [0, 4]
+
+    update()
+    assert release_collision_countdown.numpy().tolist() == [[0, 0]]
+    assert shape_flags.numpy().tolist() == [4, 4]
 
     wp.launch(
         _reset_grasp,
@@ -101,3 +129,53 @@ def test_grasp_matches_expert_four_seed_two_ring_patch_and_release() -> None:
         device=device,
     )
     assert np.all(pins.numpy() == -1)
+
+    flags = shape_flags.numpy()
+    flags[0] = 0
+    shape_flags.assign(flags)
+    release_collision_countdown.assign(np.array([[2, 0]], dtype=np.int32))
+    wp.launch(
+        _reset_release_collision,
+        dim=(1, 2),
+        inputs=[
+            wp.array([True], dtype=wp.bool, device=device),
+            release_collision_countdown,
+            shape_flags,
+            collision_shapes,
+            collision_shape_count,
+            4,
+        ],
+        device=device,
+    )
+    assert release_collision_countdown.numpy().tolist() == [[0, 0]]
+    assert shape_flags.numpy().tolist() == [4, 4]
+
+
+def test_gripper_collision_shapes_are_isolated_by_world_side_and_link() -> None:
+    grasp = ParticleGrasp.__new__(ParticleGrasp)
+    grasp.world_count = 2
+    grasp.model = SimpleNamespace(
+        body_label=[
+            "/robot/left/link6",
+            "/robot/left/link7",
+            "/robot/right/link6",
+            "/robot/left/link5",
+            "/robot/left/link6",
+            "/robot/left/link8",
+            "/robot/right/link7",
+            "/robot/right/link5",
+        ],
+        body_world=wp.array([0, 0, 0, 0, 1, 1, 1, 1], dtype=wp.int32, device="cpu"),
+        shape_body=wp.array([0, 1, 2, 3, 4, 5, 6, 7], dtype=wp.int32, device="cpu"),
+        shape_world=wp.array([0, 0, 0, 0, 1, 1, 1, 1], dtype=wp.int32, device="cpu"),
+        # Bit 4 is COLLIDE_PARTICLES. Shapes 1 and 6 are proxy/disabled shapes.
+        shape_flags=wp.array([4, 2, 4, 4, 4, 4, 0, 4], dtype=wp.int32, device="cpu"),
+    )
+
+    indices, counts, collision_bit = grasp._gripper_collision_shapes()
+
+    assert collision_bit == 4
+    np.testing.assert_array_equal(counts, [[1, 1], [2, 0]])
+    np.testing.assert_array_equal(indices[0, 0, :1], [0])
+    np.testing.assert_array_equal(indices[0, 1, :1], [2])
+    np.testing.assert_array_equal(indices[1, 0, :2], [4, 5])

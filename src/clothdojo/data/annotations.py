@@ -61,6 +61,8 @@ class ExportPlan:
     min_segment_frames: int
     dropped_short_ranges: tuple[GoodSegment, ...]
     source_action_counts: tuple[tuple[str, int], ...]
+    whole_trajectory_good_only: bool
+    skipped_not_whole_trajectory_good: int
 
     @property
     def output_episodes(self) -> int:
@@ -121,6 +123,10 @@ class ExportPlan:
             "trajectories_with_bad": self.trajectories_with_bad,
             "bad_ranges": self.bad_ranges,
             "dropped_bad_frames": self.dropped_bad_frames,
+            "whole_trajectory_good_only": self.whole_trajectory_good_only,
+            "skipped_not_whole_trajectory_good": (
+                self.skipped_not_whole_trajectory_good
+            ),
             "min_segment_frames": self.min_segment_frames,
             "dropped_short_segments": self.dropped_short_segments,
             "dropped_short_frames": self.dropped_short_frames,
@@ -149,12 +155,16 @@ def build_good_segment_plan(
     dataset_root: str | Path,
     *,
     min_segment_frames: int = DEFAULT_MIN_SEGMENT_FRAMES,
+    whole_trajectory_good_only: bool = False,
 ) -> ExportPlan:
     """Build good ranges from ``trajectories`` and sparse bad annotations.
 
     Annotation endpoints are inclusive action indices. A missing annotation,
     an empty annotation, and an explicit ``good`` annotation all retain data.
-    ``review_status`` is recorded for provenance but never affects selection.
+    By default, ``review_status`` is recorded for provenance but does not affect
+    selection. ``whole_trajectory_good_only`` instead requires an explicit
+    ``review_status=complete`` annotation with no bad range, matching the
+    collection console's whole-trajectory Good state.
     """
 
     if (
@@ -189,6 +199,7 @@ def build_good_segment_plan(
     bad_ranges = 0
     dropped_bad_frames = 0
     dropped_short_ranges: list[GoodSegment] = []
+    skipped_not_whole_trajectory_good = 0
     source_ids: set[str] = set()
     source_action_counts: list[tuple[str, int]] = []
 
@@ -241,6 +252,11 @@ def build_good_segment_plan(
             annotation_sha256 = None
 
         merged = _merge_ranges(drop)
+        if whole_trajectory_good_only and (
+            review_status != "complete" or bool(merged)
+        ):
+            skipped_not_whole_trajectory_good += 1
+            continue
         if merged:
             trajectories_with_bad += 1
         bad_ranges += len(merged)
@@ -286,6 +302,8 @@ def build_good_segment_plan(
         min_segment_frames=min_segment_frames,
         dropped_short_ranges=tuple(dropped_short_ranges),
         source_action_counts=tuple(source_action_counts),
+        whole_trajectory_good_only=whole_trajectory_good_only,
+        skipped_not_whole_trajectory_good=skipped_not_whole_trajectory_good,
     )
 
 

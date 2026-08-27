@@ -7,7 +7,6 @@ from ClothDojo's canonical storage formats.
 
 from __future__ import annotations
 
-import json
 from collections import Counter
 from typing import TYPE_CHECKING, Any
 
@@ -129,7 +128,7 @@ class CollectionWorkspace:
 
     def annotation_index(self, profile_id: str) -> dict[str, Any]:
         return {
-            item["id"]: self.reviews[profile_id].annotation(item["id"])
+            item["id"]: item["annotation"]
             for item in self._episodes(profile_id)
             if item["status"] == "complete"
         }
@@ -183,11 +182,11 @@ class CollectionWorkspace:
                 "status": "offline",
                 "error": "Isaac Teleop supervisor is not configured",
                 "endpoint": None,
-                "proxy_port": 44401 + index * 10,
+                "proxy_port": 44401 + gpu_id * 10,
                 "session": None,
                 "export": None,
             }
-            for index, gpu_id in enumerate(self.config.teleoperation.gpu_ids)
+            for gpu_id in self.config.teleoperation.gpu_ids
         ]
 
     def rollout_run_for_episode(self, profile_id: str, episode_id: str) -> str:
@@ -230,28 +229,26 @@ class CollectionWorkspace:
         profile = self.config.profiles[profile_id]
         source_profile_id = profile.continuation_source_profile
         assert source_profile_id is not None
+        sources = continuation_sources(self.config, profile)
+        source_profile_ids = {
+            source_profile_id,
+            *(item["source_profile_id"] for item in sources),
+        }
         results = {}
-        destination_by_id = {item["id"]: item for item in destination_episodes}
-        for manifest_path in profile.trajectory_root.glob("*/manifest.json"):
-            try:
-                value = json.loads(manifest_path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                continue
-            metadata = value.get("metadata")
+        for result in destination_episodes:
+            metadata = result.get("metadata")
             if (
-                value.get("status") == "complete"
-                and int(value.get("action_count", 0)) > 0
+                result.get("status") == "complete"
+                and int(result.get("action_count", 0)) > 0
                 and isinstance(metadata, dict)
                 and metadata.get("source") == "task_continuation"
-                and metadata.get("source_profile_id") == source_profile_id
+                and metadata.get("source_profile_id") in source_profile_ids
                 and isinstance(metadata.get("source_episode_id"), str)
             ):
-                result = destination_by_id.get(manifest_path.parent.name)
-                if result is not None:
-                    results.setdefault(metadata["source_episode_id"], result)
+                results.setdefault(metadata["source_episode_id"], result)
 
         rows = []
-        for source in continuation_sources(self.config, profile):
+        for source in sources:
             source_id = source["source_episode_id"]
             result = results.get(source_id)
             if result is None:

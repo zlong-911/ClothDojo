@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,7 @@ def validate_sft_norm_binding(
     *,
     openpi_config: str,
     action_horizon: int,
+    weights_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Bind one served SFT checkpoint to the exact norm artifacts used at launch."""
 
@@ -28,7 +30,7 @@ def validate_sft_norm_binding(
             f"norm-stat provenance clothdojo.json does not exist: {provenance_file}"
         )
 
-    manifest_file = _find_training_manifest(checkpoint_path)
+    manifest_file = find_training_manifest(checkpoint_path)
     manifest = _read_json_object(manifest_file, "Pi0.5 launch manifest")
     if (
         manifest.get("schema")
@@ -94,27 +96,113 @@ def validate_sft_norm_binding(
         value = provenance.get(name)
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             raise ValueError(f"norm provenance {name} must be a positive integer")
-    required_data_kwargs = {
-        "adapt_to_pi": False,
-        "extra_delta_transform": True,
-        "default_prompt": "Flatten the shirt.",
-    }
-    if provenance.get("data_kwargs") != required_data_kwargs:
+    data_kwargs = provenance.get("data_kwargs")
+    if (
+        not isinstance(data_kwargs, dict)
+        or set(data_kwargs) != {
+            "adapt_to_pi",
+            "extra_delta_transform",
+            "default_prompt",
+        }
+        or data_kwargs.get("adapt_to_pi") is not False
+        or data_kwargs.get("extra_delta_transform") is not True
+        or not isinstance(data_kwargs.get("default_prompt"), str)
+        or not data_kwargs["default_prompt"].strip()
+    ):
         raise ValueError(
             "norm-stat transform contract differs from ClothDojo Pi0.5 ALOHA: "
-            f"{provenance.get('data_kwargs')!r} != {required_data_kwargs!r}"
+            f"{data_kwargs!r}"
         )
 
-    return {
+    result = {
+        "source_framework": (
+            "jax" if manifest.get("schema") == "clothdojo_pi05_jax_preflight" else "pytorch"
+        ),
         "norm_stats_sha256": stats_sha256,
         "norm_provenance_sha256": provenance_sha256,
         "training_manifest_sha256": _file_sha256(manifest_file),
         "dataset_info_sha256": provenance["dataset_info_sha256"],
         "dataset_sidecar_sha256": provenance["dataset_sidecar_sha256"],
     }
+    if manifest.get("schema") == "clothdojo_pi05_jax_preflight" and weights_sha256:
+        result.update(
+            _validate_jax_conversion_parity(
+                checkpoint_path,
+                weights_sha256=weights_sha256,
+                norm_stats_sha256=stats_sha256,
+            )
+        )
+    return result
 
 
-def _find_training_manifest(checkpoint: Path) -> Path:
+def validate_cfg_checkpoint_binding(
+    checkpoint: str | Path,
+    norm_stats: str | Path,
+    *,
+    openpi_config: str,
+    action_horizon: int,
+    action_dim: int,
+    positive_only_conditional: bool,
+) -> dict[str, Any]:
+    """Bind CFG serving semantics to the immutable training launch manifest."""
+
+    checkpoint_path = Path(checkpoint).expanduser().resolve()
+    norm_path = Path(norm_stats).expanduser().resolve()
+    norm_file = norm_path / "norm_stats.json" if norm_path.is_dir() else norm_path
+    provenance_file = norm_file.parent / "clothdojo.json"
+    for path, context in (
+        (norm_file, "CFG norm_stats.json"),
+        (provenance_file, "CFG norm provenance"),
+    ):
+        if not path.is_file():
+            raise FileNotFoundError(f"{context} does not exist: {path}")
+    manifest_file = find_cfg_training_manifest(checkpoint_path)
+    manifest = _read_json_object(manifest_file, "CFG launch manifest")
+    if (
+        manifest.get("schema") != "clothdojo_cfg_launch"
+        or manifest.get("format_version") != 1
+        or manifest.get("compatible") is not True
+    ):
+        raise ValueError(f"unsupported CFG launch manifest: {manifest_file}")
+    expected_contract = {
+        "openpi_config": openpi_config,
+        "action_dim": action_dim,
+        "action_horizon": action_horizon,
+        "adapt_to_pi": False,
+        "extra_delta_transform": True,
+        "train_expert_only": True,
+        "positive_only_conditional": positive_only_conditional,
+    }
+    contract = manifest.get("inference_contract")
+    if not isinstance(contract, dict):
+        raise ValueError(f"CFG launch manifest is missing inference_contract: {manifest_file}")
+    mismatches = {
+        key: {"expected": expected, "actual": contract.get(key)}
+        for key, expected in expected_contract.items()
+        if contract.get(key) != expected
+    }
+    if mismatches:
+        raise ValueError(f"served CFG inference contract differs from training: {mismatches}")
+    norm_identity = manifest.get("norm_stats")
+    if not isinstance(norm_identity, dict):
+        raise ValueError(f"CFG launch manifest is missing norm_stats: {manifest_file}")
+    actual_stats = _file_sha256(norm_file)
+    actual_provenance = _file_sha256(provenance_file)
+    expected_norm = {
+        "stats_sha256": actual_stats,
+        "provenance_sha256": actual_provenance,
+    }
+    if any(norm_identity.get(key) != value for key, value in expected_norm.items()):
+        raise ValueError("served CFG norm artifacts differ from the training launch manifest")
+    return {
+        "norm_stats_sha256": actual_stats,
+        "norm_provenance_sha256": actual_provenance,
+        "training_manifest_sha256": _file_sha256(manifest_file),
+    }
+
+
+def find_training_manifest(checkpoint: str | Path) -> Path:
+    checkpoint = Path(checkpoint).expanduser().resolve()
     for root in (checkpoint, *checkpoint.parents):
         for relative in (
             "pi05_launch_manifest.json",
@@ -129,6 +217,74 @@ def _find_training_manifest(checkpoint: Path) -> Path:
         "checkpoint is not below a Pi0.5 run containing "
         f"pi05_launch_manifest.json or clothdojo_launch.json: {checkpoint}"
     )
+
+
+def find_cfg_training_manifest(checkpoint: str | Path) -> Path:
+    checkpoint = Path(checkpoint).expanduser().resolve()
+    for root in (checkpoint, *checkpoint.parents):
+        candidate = root / "cfg_launch_manifest.json"
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(
+        "CFG checkpoint is not below a run containing cfg_launch_manifest.json: "
+        f"{checkpoint}"
+    )
+
+
+def _validate_jax_conversion_parity(
+    checkpoint: Path,
+    *,
+    weights_sha256: str,
+    norm_stats_sha256: str,
+) -> dict[str, str]:
+    from clothdojo.rollout.parity import (
+        ConversionParityLimits,
+        _parity_violations,
+    )
+
+    _require_sha256(weights_sha256, "served checkpoint")
+    for root in (checkpoint, *checkpoint.parents):
+        candidate = root / "clothdojo_parity.json"
+        if candidate.is_file():
+            parity_file = candidate
+            break
+    else:
+        raise FileNotFoundError(
+            f"converted JAX checkpoint has no clothdojo_parity.json: {checkpoint}"
+        )
+    parity = _read_json_object(parity_file, "JAX/PyTorch parity report")
+    expected_limits = asdict(ConversionParityLimits())
+    if (
+        parity.get("schema") != "clothdojo_jax_openpi_rlinf_parity"
+        or parity.get("format_version") != 1
+        or parity.get("compatible") is not True
+        or parity.get("weights_sha256") != weights_sha256
+        or parity.get("norm_stats_sha256") != norm_stats_sha256
+        or parity.get("precision")
+        != {
+            "jax_checkpoint": "float32",
+            "jax_compute": "bfloat16",
+            "pytorch_checkpoint": "float32",
+            "pytorch_compute": "native_bfloat16",
+        }
+        or parity.get("limits") != expected_limits
+        or parity.get("violations") != []
+    ):
+        raise ValueError(f"JAX/PyTorch parity report is not bound or accepted: {parity_file}")
+    metrics = parity.get("metrics")
+    if not isinstance(metrics, dict):
+        raise ValueError(f"JAX/PyTorch parity report has no metrics: {parity_file}")
+    try:
+        violations = _parity_violations(metrics, ConversionParityLimits())
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"JAX/PyTorch parity metrics are malformed: {parity_file}"
+        ) from exc
+    if violations:
+        raise ValueError(
+            f"JAX/PyTorch parity metrics exceed the serving limits: {violations}"
+        )
+    return {"parity_report_sha256": _file_sha256(parity_file)}
 
 
 def _read_json_object(path: Path, context: str) -> dict[str, Any]:

@@ -148,8 +148,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             openpi_config=args.openpi_config,
             action_horizon=args.action_horizon,
             num_steps=args.num_steps,
-            autocast=not args.no_autocast,
-            rtc_execution_horizon=args.rtc_execution_horizon,
+            rtc_guidance_horizon=args.rtc_guidance_horizon,
             rtc_max_guidance_weight=args.rtc_max_guidance_weight,
             rtc_prefix_schedule=args.rtc_prefix_schedule,
             device=args.device,
@@ -157,9 +156,77 @@ def main(argv: Sequence[str] | None = None) -> None:
             port=args.port,
         )
         return
+    if args.command == "policy" and args.policy_command == "serve-jax":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.rollout.policy import serve_jax_policy
+
+        serve_jax_policy(
+            args.checkpoint,
+            args.norm_stats,
+            args.training_config,
+            action_horizon=args.action_horizon,
+            num_steps=args.num_steps,
+            host=args.host,
+            port=args.port,
+        )
+        return
+    if args.command == "policy" and args.policy_command == "convert-jax":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.rollout.conversion import convert_jax_checkpoint
+
+        result = convert_jax_checkpoint(
+            args.checkpoint,
+            args.output,
+            args.norm_stats,
+            args.parity_config,
+            openpi_config=args.openpi_config,
+            action_horizon=args.action_horizon,
+            num_steps=args.num_steps,
+            parity_batch_size=args.parity_batch_size,
+            parity_execution_horizon=args.parity_execution_horizon,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return
+    if args.command == "policy" and args.policy_command == "serve-cfg":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.rollout.policy import serve_cfg_policy
+
+        serve_cfg_policy(
+            args.checkpoint,
+            args.norm_stats,
+            openpi_config=args.openpi_config,
+            action_horizon=args.action_horizon,
+            num_steps=args.num_steps,
+            guidance_scale=args.guidance_scale,
+            guidance_type=args.guidance_type,
+            positive_only_conditional=args.positive_only_conditional,
+            autocast=not args.no_autocast,
+            rtc_guidance_horizon=args.rtc_guidance_horizon,
+            rtc_max_guidance_weight=args.rtc_max_guidance_weight,
+            rtc_prefix_schedule=args.rtc_prefix_schedule,
+            device=args.device,
+            host=args.host,
+            port=args.port,
+        )
+        return
+    if args.command == "data" and args.data_command == "prepare-isaac-assets":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.data.isaac_render import prepare_isaac_assets
+
+        result = prepare_isaac_assets(args.output, include_room=args.include_room)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return
     if args.command == "data" and args.data_command == "export-lerobot":
         if passthrough:
             parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        if args.include_room and args.isaac_seed is None:
+            parser.error("--include-room requires --isaac-seed")
+        if args.randomize is not None and args.isaac_seed is None:
+            parser.error("--randomize requires --isaac-seed")
         source_root = Path(args.source).expanduser()
         source_manifest = source_root / "meta.json"
         if not source_manifest.is_file():
@@ -174,32 +241,68 @@ def main(argv: Sequence[str] | None = None) -> None:
                 raise RuntimeError(
                     f"cannot read source manifest: {source_manifest}: {exc}"
                 ) from exc
-        if source_schema == "clothdojo_rollout":
-            from clothdojo.data.rollout import (
-                export_rollout_collection,
-                inspect_rollout_collection_export,
-            )
-
+        if source_schema in {"clothdojo_rollout", "clothdojo_evaluation_condition"}:
             if args.plan_only:
-                print(
-                    json.dumps(
-                        inspect_rollout_collection_export(args.source),
-                        indent=2,
-                        sort_keys=True,
+                if args.isaac_seed is not None:
+                    from clothdojo.data.isaac_render import (
+                        inspect_isaac_rollout_export,
+                        parse_visual_randomization,
                     )
-                )
+
+                    result = inspect_isaac_rollout_export(
+                        args.source,
+                        seed=args.isaac_seed,
+                        include_room=args.include_room,
+                        randomize=(
+                            args.randomize
+                            if args.randomize is not None
+                            else parse_visual_randomization("all")
+                        ),
+                    )
+                else:
+                    from clothdojo.data.rollout import inspect_rollout_collection_export
+
+                    result = inspect_rollout_collection_export(args.source)
+                print(json.dumps(result, indent=2, sort_keys=True))
                 return
             output = args.output or str(source_root / "lerobot")
-            result = export_rollout_collection(
-                args.source,
-                output,
-                assets_root=args.assets,
-                device=args.device,
-                repo_id=args.repo_id,
-                image_writer_threads=args.image_writer_threads,
-            )
+            if args.isaac_seed is not None:
+                from clothdojo.data.isaac_render import (
+                    export_isaac_rollout_collection,
+                    parse_visual_randomization,
+                )
+
+                result = export_isaac_rollout_collection(
+                    args.source,
+                    output,
+                    assets_root=args.assets,
+                    visual_assets_root=args.visual_assets,
+                    device=args.device,
+                    seed=args.isaac_seed,
+                    include_room=args.include_room,
+                    randomize=(
+                        args.randomize
+                        if args.randomize is not None
+                        else parse_visual_randomization("all")
+                    ),
+                    repo_id=args.repo_id,
+                    image_writer_threads=args.image_writer_threads,
+                )
+            else:
+                from clothdojo.data.rollout import export_rollout_collection
+
+                result = export_rollout_collection(
+                    args.source,
+                    output,
+                    assets_root=args.assets,
+                    device=args.device,
+                    repo_id=args.repo_id,
+                    image_writer_threads=args.image_writer_threads,
+                )
             print(json.dumps(result, indent=2, sort_keys=True))
             return
+        if args.isaac_seed is not None:
+            parser.error("--isaac-seed is only supported for canonical rollout data")
         from clothdojo.data.lerobot import (
             export_review_dataset,
             inspect_review_export,
@@ -210,6 +313,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             plan, sources = inspect_review_export(
                 args.source,
                 min_segment_frames=args.min_segment_frames,
+                whole_trajectory_good_only=args.whole_trajectory_good_only,
             )
             summary = plan.to_json_dict()
             summary.pop("episodes")
@@ -236,6 +340,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 repo_id=args.repo_id,
                 image_writer_threads=args.image_writer_threads,
                 min_segment_frames=args.min_segment_frames,
+                whole_trajectory_good_only=args.whole_trajectory_good_only,
             )
         else:
             result = republish_review_dataset(
@@ -244,8 +349,23 @@ def main(argv: Sequence[str] | None = None) -> None:
                 args.output,
                 repo_id=args.repo_id,
                 min_segment_frames=args.min_segment_frames,
+                whole_trajectory_good_only=args.whole_trajectory_good_only,
             )
         print(json.dumps(result.to_json_dict(), indent=2, sort_keys=True))
+        return
+    if args.command == "data" and args.data_command == "render-rollout-review":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.data.rollout_review import render_rollout_review
+
+        result = render_rollout_review(
+            args.source,
+            output=args.output,
+            assets_root=args.assets,
+            device=args.device,
+            fps=args.fps,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
         return
     if args.command == "data" and args.data_command == "migrate-v3-indexed-view":
         if passthrough:
@@ -298,7 +418,6 @@ def main(argv: Sequence[str] | None = None) -> None:
                 "fingerprint": protocol.fingerprint,
                 "horizon_steps": protocol.horizon_steps,
                 "metric_stride": protocol.metric_stride,
-                "stable_samples": protocol.stable_samples,
             }
         )
         print(json.dumps(result, indent=2, sort_keys=True))
@@ -324,8 +443,11 @@ def main(argv: Sequence[str] | None = None) -> None:
             unseen_assets=args.unseen_assets,
             execution=args.execution,
             exec_horizon=args.exec_horizon,
+            rtc_delay_steps=args.rtc_delay_steps,
             batch_size=args.batch_size,
             replicates=args.replicates,
+            defer_scoring=args.defer_scoring,
+            score_workers=args.score_workers,
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return
@@ -349,6 +471,19 @@ def main(argv: Sequence[str] | None = None) -> None:
         from clothdojo.evaluation.results import summarize_paired_conditions
 
         result = summarize_paired_conditions(args.condition)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return
+    if args.command == "benchmark" and args.benchmark_command == "score":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.evaluation.collection import score_evaluation_condition
+
+        result = score_evaluation_condition(
+            args.condition,
+            args.protocol,
+            args.templates,
+            workers=args.workers,
+        )
         print(json.dumps(result, indent=2, sort_keys=True))
         return
     if passthrough:
@@ -387,6 +522,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             unseen_assets=args.unseen_assets,
             execution=args.execution,
             exec_horizon=args.exec_horizon,
+            rtc_delay_steps=args.rtc_delay_steps,
             batch_size=args.batch_size,
         )
         print(json.dumps(report, indent=2, sort_keys=True))
@@ -458,7 +594,7 @@ def _parser() -> argparse.ArgumentParser:
     make_states.add_argument("--drop-seconds", type=float, default=3.0)
     run_rollout = rollout_commands.add_parser(
         "run",
-        help="run an SFT policy over an initial-state pool",
+        help="run an SFT or CFG policy over an initial-state pool",
     )
     run_rollout.add_argument("--scenario", required=True)
     run_rollout.add_argument("--states", required=True)
@@ -484,7 +620,7 @@ def _parser() -> argparse.ArgumentParser:
         "--execution",
         choices=("chunk", "rtc"),
         default="chunk",
-        help="independent chunks or synchronous guided RTC (default: chunk)",
+        help="independent chunks or fixed-delay guided RTC (default: chunk)",
     )
     run_rollout.add_argument(
         "--exec-horizon",
@@ -492,9 +628,32 @@ def _parser() -> argparse.ArgumentParser:
         default=10,
         help="actions executed before replanning (default: 10)",
     )
+    run_rollout.add_argument(
+        "--rtc-delay-steps",
+        type=int,
+        default=0,
+        help="logical inference delay used by reproducible RTC rollout (default: 0)",
+    )
 
-    policy = commands.add_parser("policy", help="serve frozen rollout policies")
+    policy = commands.add_parser("policy", help="prepare and serve rollout policies")
     policy_commands = policy.add_subparsers(dest="policy_command")
+    convert_jax = policy_commands.add_parser(
+        "convert-jax",
+        help="convert one JAX EMA checkpoint to a checked rollout checkpoint",
+    )
+    convert_jax.add_argument("--checkpoint", required=True)
+    convert_jax.add_argument("--output", required=True)
+    convert_jax.add_argument("--norm-stats", required=True)
+    convert_jax.add_argument(
+        "--parity-config",
+        required=True,
+        help="matching JAX SFT config used to draw real parity observations",
+    )
+    convert_jax.add_argument("--openpi-config", default="pi05_aloha_robotwin")
+    convert_jax.add_argument("--action-horizon", type=int, default=50)
+    convert_jax.add_argument("--num-steps", type=int, default=10)
+    convert_jax.add_argument("--parity-batch-size", type=int, default=4)
+    convert_jax.add_argument("--parity-execution-horizon", type=int, default=10)
     serve_sft = policy_commands.add_parser(
         "serve-sft",
         help="serve an RLINF SFT checkpoint with RTC support",
@@ -504,21 +663,54 @@ def _parser() -> argparse.ArgumentParser:
     serve_sft.add_argument("--openpi-config", default="pi05_aloha_robotwin")
     serve_sft.add_argument("--action-horizon", type=int, default=50)
     serve_sft.add_argument("--num-steps", type=int, default=10)
-    serve_sft.add_argument("--rtc-execution-horizon", type=int, default=10)
+    serve_sft.add_argument("--rtc-guidance-horizon", type=int, default=10)
     serve_sft.add_argument("--rtc-max-guidance-weight", type=float, default=10.0)
     serve_sft.add_argument(
         "--rtc-prefix-schedule",
         choices=("linear", "exp", "ones", "zeros"),
         default="linear",
     )
-    serve_sft.add_argument(
-        "--no-autocast",
-        action="store_true",
-        help="disable CUDA BF16 autocast for a full-FP32 inference baseline",
-    )
     serve_sft.add_argument("--device", default="cuda:0")
     serve_sft.add_argument("--host", default="127.0.0.1")
     serve_sft.add_argument("--port", type=int, default=8080)
+    serve_jax = policy_commands.add_parser(
+        "serve-jax",
+        help="serve the original OpenPI/JAX EMA for chunk reference rollout",
+    )
+    serve_jax.add_argument("--checkpoint", required=True)
+    serve_jax.add_argument("--norm-stats", required=True)
+    serve_jax.add_argument("--training-config", required=True)
+    serve_jax.add_argument("--action-horizon", type=int, default=50)
+    serve_jax.add_argument("--num-steps", type=int, default=10)
+    serve_jax.add_argument("--host", default="127.0.0.1")
+    serve_jax.add_argument("--port", type=int, default=8080)
+    serve_cfg = policy_commands.add_parser(
+        "serve-cfg",
+        help="serve an RLINF CFG checkpoint with chunk and RTC support",
+    )
+    serve_cfg.add_argument("--checkpoint", required=True)
+    serve_cfg.add_argument("--norm-stats", required=True)
+    serve_cfg.add_argument("--openpi-config", default="pi05_aloha_robotwin")
+    serve_cfg.add_argument("--action-horizon", type=int, default=50)
+    serve_cfg.add_argument("--num-steps", type=int, default=5)
+    serve_cfg.add_argument("--guidance-scale", type=float, default=1.0)
+    serve_cfg.add_argument(
+        "--guidance-type",
+        choices=("positive", "negative", "no_guide"),
+        default="positive",
+    )
+    serve_cfg.add_argument("--positive-only-conditional", action="store_true")
+    serve_cfg.add_argument("--rtc-guidance-horizon", type=int, default=10)
+    serve_cfg.add_argument("--rtc-max-guidance-weight", type=float, default=10.0)
+    serve_cfg.add_argument(
+        "--rtc-prefix-schedule",
+        choices=("linear", "exp", "ones", "zeros"),
+        default="linear",
+    )
+    serve_cfg.add_argument("--no-autocast", action="store_true")
+    serve_cfg.add_argument("--device", default="cuda:0")
+    serve_cfg.add_argument("--host", default="127.0.0.1")
+    serve_cfg.add_argument("--port", type=int, default=8080)
 
     benchmark = commands.add_parser(
         "benchmark", help="validate protocols and summarize paired evaluations"
@@ -556,6 +748,17 @@ def _parser() -> argparse.ArgumentParser:
     benchmark_run.add_argument("--gpus", default="0")
     benchmark_run.add_argument("--batch-size", type=int, default=4)
     benchmark_run.add_argument("--replicates", type=int, default=1)
+    benchmark_run.add_argument(
+        "--defer-scoring",
+        action="store_true",
+        help="publish trajectories and leave offline scoring for benchmark score",
+    )
+    benchmark_run.add_argument(
+        "--score-workers",
+        type=int,
+        default=1,
+        help="offline scoring processes when scoring is not deferred (default: 1)",
+    )
     benchmark_run.add_argument("--limit-per-asset", type=int)
     benchmark_run.add_argument("--seen-assets", type=int)
     benchmark_run.add_argument("--unseen-assets", type=int)
@@ -563,6 +766,7 @@ def _parser() -> argparse.ArgumentParser:
         "--execution", choices=("chunk", "rtc"), default="chunk"
     )
     benchmark_run.add_argument("--exec-horizon", type=int, default=10)
+    benchmark_run.add_argument("--rtc-delay-steps", type=int, default=0)
     benchmark_summary = benchmark_commands.add_parser(
         "summarize", help="compare completed conditions over identical cases"
     )
@@ -571,6 +775,15 @@ def _parser() -> argparse.ArgumentParser:
         action="append",
         required=True,
         help="completed condition directory; repeat in baseline-first order",
+    )
+    benchmark_score = benchmark_commands.add_parser(
+        "score", help="recompute a condition from its saved trajectories"
+    )
+    benchmark_score.add_argument("--condition", required=True)
+    benchmark_score.add_argument("--protocol", required=True)
+    benchmark_score.add_argument("--templates", required=True)
+    benchmark_score.add_argument(
+        "--workers", type=int, default=1, help="offline scoring processes (default: 1)"
     )
 
     train = commands.add_parser("train", help="run a guarded ClothDojo training workflow")
@@ -627,6 +840,32 @@ def _parser() -> argparse.ArgumentParser:
     export.add_argument("--output", help="new LeRobot dataset directory")
     export.add_argument("--assets", default="assets", help="assets used to replay rollout states")
     export.add_argument("--device", default="cuda:0", help="render device for rollout replay")
+    export.add_argument(
+        "--isaac-seed",
+        type=int,
+        help="use Isaac RTX with a deterministic visual layout seed",
+    )
+    export.add_argument(
+        "--visual-assets",
+        default="data/visual-assets",
+        help="Poly Haven materials and optional rooms prepared for Isaac rendering",
+    )
+    export.add_argument(
+        "--include-room",
+        action="store_true",
+        help="include each sampled RoboDojo room; requires --isaac-seed",
+    )
+    from clothdojo.data.isaac_render import parse_visual_randomization
+
+    export.add_argument(
+        "--randomize",
+        type=parse_visual_randomization,
+        metavar="COMPONENTS",
+        help=(
+            "Isaac components varied per episode: none, all, or a comma-separated "
+            "subset of cloth,table,ground,lighting (default: all)"
+        ),
+    )
     export.add_argument("--repo-id", help="LeRobot repository identity stored in metadata")
     export.add_argument(
         "--reuse-from",
@@ -645,9 +884,42 @@ def _parser() -> argparse.ArgumentParser:
         help="drop reviewed-good fragments shorter than this many frames",
     )
     export.add_argument(
+        "--whole-trajectory-good-only",
+        action="store_true",
+        help="keep only trajectories explicitly reviewed Good as a whole",
+    )
+    export.add_argument(
         "--plan-only",
         action="store_true",
-        help="synchronize and validate inputs without decoding or writing data",
+        help="inspect the export plan without decoding, rendering, or writing data",
+    )
+    prepare_isaac = data_commands.add_parser(
+        "prepare-isaac-assets",
+        help="prepare curated Poly Haven visuals used by Isaac export",
+    )
+    prepare_isaac.add_argument(
+        "--output",
+        default="data/visual-assets",
+        help="visual asset directory",
+    )
+    prepare_isaac.add_argument(
+        "--include-room",
+        action="store_true",
+        help="also download the optional room assets",
+    )
+    rollout_review = data_commands.add_parser(
+        "render-rollout-review",
+        help="directly encode lightweight rollout videos for HIL review",
+    )
+    rollout_review.add_argument("--source", required=True, help="canonical rollout root")
+    rollout_review.add_argument("--output", help="review directory; defaults to SOURCE/review")
+    rollout_review.add_argument("--assets", default="assets", help="assets used for replay")
+    rollout_review.add_argument("--device", default="cuda:0", help="Newton render device")
+    rollout_review.add_argument(
+        "--fps",
+        type=int,
+        default=10,
+        help="review frame rate; must divide the rollout control rate",
     )
     indexed_view = data_commands.add_parser(
         "migrate-v3-indexed-view",

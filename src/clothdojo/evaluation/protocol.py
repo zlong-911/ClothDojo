@@ -17,7 +17,6 @@ import numpy as np
 import yaml
 
 EVALUATION_PROTOCOL_SCHEMA = "clothdojo_evaluation_protocol"
-EVALUATION_PROTOCOL_FORMAT_VERSION = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,13 +80,10 @@ class EvaluationProtocol:
     control_fps: int
     horizon_seconds: float
     metric_hz: int
-    stable_seconds: float
     deformable_weight: float
     symmetry: Literal["none", "planar_180"]
     deformable_distance_max: float
     rigid_distance_max: float | None
-    particle_speed_rms_max_m_s: float
-    require_released: bool
     target: CanonicalTargetProtocol = field(default_factory=CanonicalTargetProtocol)
 
     def __post_init__(self) -> None:
@@ -104,8 +100,8 @@ class EvaluationProtocol:
             raise ValueError("metric_hz must be a positive integer")
         if self.control_fps % self.metric_hz:
             raise ValueError("metric_hz must divide control_fps exactly")
-        if self.horizon_seconds <= 0.0 or self.stable_seconds <= 0.0:
-            raise ValueError("horizon_seconds and stable_seconds must be positive")
+        if self.horizon_seconds <= 0.0:
+            raise ValueError("horizon_seconds must be positive")
         if not 0.0 <= self.deformable_weight <= 1.0:
             raise ValueError("deformable_weight must be in [0, 1]")
         if self.symmetry not in {"none", "planar_180"}:
@@ -114,12 +110,9 @@ class EvaluationProtocol:
             raise ValueError("deformable_distance_max must be positive")
         if self.rigid_distance_max is not None and self.rigid_distance_max <= 0.0:
             raise ValueError("rigid_distance_max must be null or positive")
-        if self.particle_speed_rms_max_m_s < 0.0:
-            raise ValueError("particle_speed_rms_max_m_s must be non-negative")
         horizon_steps = _exact_count(self.horizon_seconds, self.control_fps, "horizon_seconds")
         if horizon_steps % (self.control_fps // self.metric_hz):
             raise ValueError("horizon_seconds must end on the metric sampling grid")
-        _exact_count(self.stable_seconds, self.metric_hz, "stable_seconds")
         _exact_count(
             self.target.min_settle_seconds,
             self.control_fps,
@@ -148,10 +141,6 @@ class EvaluationProtocol:
     @property
     def metric_stride(self) -> int:
         return self.control_fps // self.metric_hz
-
-    @property
-    def stable_samples(self) -> int:
-        return _exact_count(self.stable_seconds, self.metric_hz, "stable_seconds")
 
     @property
     def sample_count(self) -> int:
@@ -197,7 +186,6 @@ class EvaluationProtocol:
     def to_json_dict(self) -> dict[str, Any]:
         return {
             "schema": EVALUATION_PROTOCOL_SCHEMA,
-            "format_version": EVALUATION_PROTOCOL_FORMAT_VERSION,
             "protocol_id": self.protocol_id,
             "stage": self.stage,
             "task": self.task_name,
@@ -205,7 +193,6 @@ class EvaluationProtocol:
                 "control_fps": self.control_fps,
                 "horizon_seconds": self.horizon_seconds,
                 "metric_hz": self.metric_hz,
-                "stable_seconds": self.stable_seconds,
             },
             "metric": {
                 "deformable_weight": self.deformable_weight,
@@ -214,8 +201,6 @@ class EvaluationProtocol:
             "success": {
                 "deformable_distance_max": self.deformable_distance_max,
                 "rigid_distance_max": self.rigid_distance_max,
-                "particle_speed_rms_max_m_s": self.particle_speed_rms_max_m_s,
-                "require_released": self.require_released,
             },
             "target": self.target.to_json_dict(),
         }
@@ -232,7 +217,6 @@ def load_evaluation_protocol(path: str | Path) -> EvaluationProtocol:
         root,
         {
             "schema",
-            "format_version",
             "protocol_id",
             "stage",
             "task",
@@ -245,26 +229,19 @@ def load_evaluation_protocol(path: str | Path) -> EvaluationProtocol:
     )
     if root["schema"] != EVALUATION_PROTOCOL_SCHEMA:
         raise ValueError("unsupported evaluation protocol schema")
-    if root["format_version"] != EVALUATION_PROTOCOL_FORMAT_VERSION:
-        raise ValueError("unsupported evaluation protocol version")
     timing = _mapping(root["timing"], "timing")
     metric = _mapping(root["metric"], "metric")
     success = _mapping(root["success"], "success")
     target = _mapping(root["target"], "target")
     _exact_keys(
         timing,
-        {"control_fps", "horizon_seconds", "metric_hz", "stable_seconds"},
+        {"control_fps", "horizon_seconds", "metric_hz"},
         "timing",
     )
     _exact_keys(metric, {"deformable_weight", "symmetry"}, "metric")
     _exact_keys(
         success,
-        {
-            "deformable_distance_max",
-            "rigid_distance_max",
-            "particle_speed_rms_max_m_s",
-            "require_released",
-        },
+        {"deformable_distance_max", "rigid_distance_max"},
         "success",
     )
     _exact_keys(
@@ -287,7 +264,6 @@ def load_evaluation_protocol(path: str | Path) -> EvaluationProtocol:
         control_fps=_integer(timing["control_fps"], "control_fps"),
         horizon_seconds=_number(timing["horizon_seconds"], "horizon_seconds"),
         metric_hz=_integer(timing["metric_hz"], "metric_hz"),
-        stable_seconds=_number(timing["stable_seconds"], "stable_seconds"),
         deformable_weight=_number(metric["deformable_weight"], "deformable_weight"),
         symmetry=_string(metric["symmetry"], "symmetry"),
         deformable_distance_max=_number(
@@ -298,11 +274,6 @@ def load_evaluation_protocol(path: str | Path) -> EvaluationProtocol:
             if success["rigid_distance_max"] is None
             else _number(success["rigid_distance_max"], "rigid_distance_max")
         ),
-        particle_speed_rms_max_m_s=_number(
-            success["particle_speed_rms_max_m_s"],
-            "particle_speed_rms_max_m_s",
-        ),
-        require_released=_boolean(success["require_released"], "require_released"),
         target=CanonicalTargetProtocol(
             method=_string(target["method"], "target method"),
             min_settle_seconds=_number(target["min_settle_seconds"], "target min_settle_seconds"),
@@ -328,24 +299,20 @@ def load_evaluation_protocol(path: str | Path) -> EvaluationProtocol:
 
 
 @dataclass(slots=True)
-class StableSuccessTracker:
+class SuccessTracker:
     """Small NumPy reference for the benchmark's absorbing success state."""
 
     protocol: EvaluationProtocol
     batch_size: int
     success: np.ndarray = field(init=False)
-    streak: np.ndarray = field(init=False)
     confirmed_step: np.ndarray = field(init=False)
-    stable_since_step: np.ndarray = field(init=False)
     _last_step: int = field(init=False)
 
     def __post_init__(self) -> None:
         if isinstance(self.batch_size, bool) or self.batch_size < 1:
             raise ValueError("batch_size must be a positive integer")
         self.success = np.zeros(self.batch_size, dtype=bool)
-        self.streak = np.zeros(self.batch_size, dtype=np.int32)
         self.confirmed_step = np.full(self.batch_size, -1, dtype=np.int32)
-        self.stable_since_step = np.full(self.batch_size, -1, dtype=np.int32)
         self._last_step = -self.protocol.metric_stride
 
     def update(
@@ -354,29 +321,18 @@ class StableSuccessTracker:
         step: int,
         deformable_distance: np.ndarray,
         rigid_distance: np.ndarray,
-        speed_rms_m_s: np.ndarray,
-        released: np.ndarray,
     ) -> np.ndarray:
         if step != self._last_step + self.protocol.metric_stride:
             raise ValueError("success samples must be consecutive protocol sample steps")
         self._last_step = step
         deformable = self._vector(deformable_distance, "deformable_distance", np.float64)
         rigid = self._vector(rigid_distance, "rigid_distance", np.float64)
-        speed = self._vector(speed_rms_m_s, "speed_rms_m_s", np.float64)
-        free = self._vector(released, "released", bool)
         candidate = deformable <= self.protocol.deformable_distance_max
         if self.protocol.rigid_distance_max is not None:
             candidate &= rigid <= self.protocol.rigid_distance_max
-        candidate &= speed <= self.protocol.particle_speed_rms_max_m_s
-        if self.protocol.require_released:
-            candidate &= free
-        self.streak = np.where(candidate, self.streak + 1, 0).astype(np.int32)
-        newly_confirmed = (~self.success) & (self.streak >= self.protocol.stable_samples)
+        newly_confirmed = (~self.success) & candidate
         self.success |= newly_confirmed
         self.confirmed_step[newly_confirmed] = step
-        self.stable_since_step[newly_confirmed] = (
-            step - (self.protocol.stable_samples - 1) * self.protocol.metric_stride
-        )
         return newly_confirmed
 
     def _vector(self, value, name: str, dtype) -> np.ndarray:

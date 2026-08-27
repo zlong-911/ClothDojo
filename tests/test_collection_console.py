@@ -193,6 +193,11 @@ def test_hil_plan_binds_rollout_and_trajectory_hashes(tmp_path: Path) -> None:
     (run / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
 
     catalog = HILCatalog(profile)
+    review_video = run / "review/videos/cam_high/episode_000000.mp4"
+    review_video.parent.mkdir(parents=True)
+    review_video.write_bytes(b"review")
+    assert catalog.video("run_a", "shirt_a_000000", "cam_high") == review_video
+    assert catalog.runs()[0]["episodes"][0]["cameras"] == ["cam_high"]
     plan = catalog.intervention_plan("run_a", [{"episode_id": "shirt_a_000000", "sample_index": 3}])
     assert plan["asset_id"] == "shirt_a"
     assert len(plan["rollout_meta_sha256"]) == 64
@@ -294,6 +299,11 @@ def test_collection_console_preserves_old_workspace_design() -> None:
     assert 'useQuestColorWorkaround:"false"' in script
     assert 'cloudxrAutoRefreshMode:"any"' in script
     assert 'localStorage.setItem("clothdojo-vr-device"' in script
+    assert "let hilRefreshPromise=null" in script
+    assert "let refreshPromise=null" in script
+    assert 'const result=await pollRequest("/api/hil/snapshot",state.hilEtag)' in script
+    assert 'pollRequest("/api/snapshot",state.snapshotEtag)' in script
+    assert 'if(!document.hidden&&state.activePane!=="hil")refresh()' in script
     assert ".runtime{" in styles
     assert ".review-pane-actions button{flex:0 0 auto;white-space:nowrap}" in styles
 
@@ -324,9 +334,7 @@ def test_cloudxr_client_url_uses_validated_pico_profile() -> None:
 def test_cloudxr_client_url_uses_selected_quest_profile(
     device: str, tex_sub_image: str, color_workaround: str
 ) -> None:
-    query = parse_qs(
-        urlparse(build_cloudxr_client_url("33.229.154.175:44401", device)).query
-    )
+    query = parse_qs(urlparse(build_cloudxr_client_url("33.229.154.175:44401", device)).query)
 
     assert query["deviceProfile"] == [device]
     assert query["enableTexSubImage2D"] == [tex_sub_image]
@@ -337,9 +345,9 @@ def test_cloudxr_client_url_uses_selected_quest_profile(
 
 def test_collection_frontend_and_teleop_experience_are_packaged() -> None:
     project = Path(__file__).parents[1]
-    package_data = tomllib.loads((project / "pyproject.toml").read_text())["tool"][
-        "setuptools"
-    ]["package-data"]
+    package_data = tomllib.loads((project / "pyproject.toml").read_text())["tool"]["setuptools"][
+        "package-data"
+    ]
 
     assert package_data["clothdojo.collection"] == [
         "static/*.html",
@@ -389,6 +397,12 @@ profiles:
         snapshot = client.get("/api/snapshot")
         assert snapshot.status_code == 200
         assert snapshot.json()["slots"][0]["status"] == "offline"
+        assert snapshot.headers["etag"]
+        unchanged = client.get(
+            "/api/snapshot",
+            headers={"If-None-Match": snapshot.headers["etag"]},
+        )
+        assert unchanged.status_code == 304
         assets = client.get("/api/assets", params={"page_size": 1})
         assert assets.status_code == 200
         assert assets.json()["assets"][0]["id"] == "shirt_a"
@@ -503,3 +517,36 @@ def test_local_supervisor_leases_gpu_and_stops_process(tmp_path: Path) -> None:
         time.sleep(0.05)
     assert result["status"] == "stopped"
     assert supervisor.slots()[0]["status"] == "available"
+
+
+def test_local_supervisor_ports_are_stable_for_physical_gpu_ids(tmp_path: Path) -> None:
+    profile = _profile(tmp_path)
+    config = CollectionConfig(
+        project_root=tmp_path,
+        assets_root=tmp_path / "assets",
+        state_dir=tmp_path / "outputs/collection",
+        host="127.0.0.1",
+        port=8000,
+        teleoperation=TeleoperationConfig(client_host="10.0.0.8", gpu_ids=(2, 5)),
+        profiles={profile.id: profile},
+    )
+    supervisor = TeleopSupervisor(config)
+
+    assert supervisor._slot_specs() == [
+        {
+            "id": "gpu-2",
+            "gpu_id": 2,
+            "endpoint": "10.0.0.8:44421",
+            "signaling_port": 44408,
+            "media_port": 33454,
+            "proxy_port": 44421,
+        },
+        {
+            "id": "gpu-5",
+            "gpu_id": 5,
+            "endpoint": "10.0.0.8:44451",
+            "signaling_port": 44438,
+            "media_port": 33484,
+            "proxy_port": 44451,
+        },
+    ]

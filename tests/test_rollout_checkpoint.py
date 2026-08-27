@@ -14,6 +14,7 @@ from clothdojo.rollout.checkpoint import (
     _expected_legacy_openpi_layout,
     inspect_rlinf_openpi_checkpoint,
     resolve_rlinf_openpi_weights,
+    strict_reload_matching_rlinf_openpi_checkpoint,
     strict_reload_rlinf_openpi_checkpoint,
 )
 
@@ -45,6 +46,28 @@ def _inspect(root: Path) -> dict:
         num_steps=5,
         expected_layout=_layout(),
     )
+
+
+def test_strict_checkpoint_accepts_layout_without_tied_weights(tmp_path: Path) -> None:
+    layout = ExpectedCheckpointLayout(
+        tensors={"projection.weight": TensorSpec((2, 2), "float32")},
+        tied_groups=(),
+    )
+    save_file(
+        {"projection.weight": torch.zeros(2, 2)},
+        tmp_path / "model.safetensors",
+    )
+
+    manifest = inspect_rlinf_openpi_checkpoint(
+        tmp_path,
+        openpi_config="pi05_aloha_robotwin",
+        action_horizon=50,
+        action_env_dim=14,
+        num_steps=5,
+        expected_layout=layout,
+    )
+
+    assert manifest["tied_aliases"] == []
 
 
 class _TiedModel(torch.nn.Module):
@@ -197,6 +220,25 @@ def test_full_weights_accepts_equal_independent_tied_copies(tmp_path: Path) -> N
         "total_elements": 8,
         "max_abs_diff": 0.0,
     }
+
+
+def test_matching_model_reload_validates_cfg_style_runtime_layout(tmp_path: Path) -> None:
+    shared = torch.zeros(4, 2)
+    _write_full_weights(
+        tmp_path,
+        {
+            "embedding.weight": shared,
+            "lm_head.weight": shared,
+            "projection.weight": torch.zeros(2, 2, dtype=torch.bfloat16),
+        },
+    )
+    model = _TiedModel()
+
+    manifest = strict_reload_matching_rlinf_openpi_checkpoint(model, tmp_path)
+
+    assert manifest["strict"] is True
+    assert manifest["tensor_count"] == 3
+    torch.testing.assert_close(model.embedding.weight, torch.zeros(4, 2))
 
 
 def test_full_weights_reports_and_canonicalizes_divergent_tied_copy(tmp_path: Path) -> None:

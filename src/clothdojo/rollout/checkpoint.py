@@ -51,16 +51,27 @@ _SAFETENSORS_DTYPES = {
 
 
 def resolve_rlinf_openpi_weights(checkpoint: str | Path) -> ResolvedInferenceWeights:
-    """Resolve exactly the files selected by RLINF's ``model_type=openpi`` loader."""
+    """Resolve the one OpenPI state dict used by ClothDojo training and serving."""
 
     root = Path(checkpoint).expanduser().resolve()
+    if root.is_file():
+        if root.suffix == ".pt":
+            return ResolvedInferenceWeights(root=root.parent, format="pytorch", paths=(root,))
+        if root.suffix == ".safetensors":
+            return ResolvedInferenceWeights(
+                root=root.parent,
+                format="safetensors",
+                paths=(root,),
+            )
+        raise ValueError(f"unsupported OpenPI checkpoint file: {root}")
     if not root.is_dir():
-        raise FileNotFoundError(f"RLINF OpenPI checkpoint directory does not exist: {root}")
+        raise FileNotFoundError(f"RLINF OpenPI checkpoint does not exist: {root}")
 
     # Keep this order identical to rlinf.models.embodiment.openpi.get_model.
     for relative in (
         "model_state_dict/full_weights.pt",
         "actor/model_state_dict/full_weights.pt",
+        "full_weights.pt",
     ):
         candidate = root / relative
         if candidate.is_file():
@@ -72,7 +83,8 @@ def resolve_rlinf_openpi_weights(checkpoint: str | Path) -> ResolvedInferenceWei
     raise FileNotFoundError(
         "RLINF OpenPI inference weights do not exist; expected "
         f"{root / 'model_state_dict/full_weights.pt'}, "
-        f"{root / 'actor/model_state_dict/full_weights.pt'}, or root-level *.safetensors"
+        f"{root / 'actor/model_state_dict/full_weights.pt'}, "
+        f"{root / 'full_weights.pt'}, or root-level *.safetensors"
     )
 
 
@@ -92,12 +104,7 @@ def inspect_rlinf_openpi_checkpoint(
     """
 
     resolved = resolve_rlinf_openpi_weights(checkpoint)
-    expected = expected_layout or _expected_legacy_openpi_layout(
-        openpi_config,
-        int(action_horizon),
-        int(action_env_dim),
-        int(num_steps),
-    )
+    expected = expected_layout or _expected_openpi_rlinf_layout(int(action_horizon))
     actual = _read_stored_tensors(resolved)
     aliases = _validate_layout(actual, expected, resolved=resolved)
     digest = _weights_sha256(resolved)
@@ -106,7 +113,7 @@ def inspect_rlinf_openpi_checkpoint(
         "schema": "clothdojo_rlinf_openpi_checkpoint",
         "format_version": 1,
         "compatible": True,
-        "loader": "rlinf.models.embodiment.openpi",
+        "loader": "rlinf.models.embodiment.openpi_rlinf",
         "checkpoint_root": str(resolved.root),
         "weights_format": resolved.format,
         "weights_paths": [str(path) for path in resolved.paths],
@@ -116,7 +123,11 @@ def inspect_rlinf_openpi_checkpoint(
         "tensor_elements": sum(math.prod(tensor.spec.shape) for tensor in actual.values()),
         "dtype_counts": dict(sorted(dtype_counts.items())),
         "stored_dtype_contract": (
-            "released_base_all_float32"
+            (
+                "released_base_all_float32"
+                if expected_layout is not None
+                else "source_float32_runtime_bfloat16"
+            )
             if resolved.format == "safetensors"
             else "post_conversion_model_state_dict_exact"
         ),
@@ -155,12 +166,39 @@ def strict_reload_rlinf_openpi_checkpoint(
     """
 
     resolved = resolve_rlinf_openpi_weights(checkpoint)
-    expected = expected_layout or _expected_legacy_openpi_layout(
-        openpi_config,
-        int(action_horizon),
-        int(action_env_dim),
-        int(num_steps),
-    )
+    expected = expected_layout or _expected_openpi_rlinf_layout(int(action_horizon))
+    return _strict_reload(model, resolved, expected)
+
+
+def strict_reload_matching_rlinf_openpi_checkpoint(
+    model: Any,
+    checkpoint: str | Path,
+) -> dict[str, Any]:
+    """Validate and strictly reload weights against an already-built OpenPI model.
+
+    This is used by the CFG subclass, whose state-dict layout is owned by the
+    pinned RLINF implementation rather than the legacy SFT model constructor.
+    """
+
+    resolved = resolve_rlinf_openpi_weights(checkpoint)
+    expected = _layout_from_model(model)
+    actual = _read_stored_tensors(resolved)
+    aliases = _validate_layout(actual, expected, resolved=resolved)
+    reload_manifest = _strict_reload(model, resolved, expected)
+    return {
+        **reload_manifest,
+        "tensor_count": len(actual),
+        "tied_aliases": aliases,
+    }
+
+
+def _strict_reload(
+    model: Any,
+    resolved: ResolvedInferenceWeights,
+    expected: ExpectedCheckpointLayout,
+) -> dict[str, Any]:
+    """Strictly load one already-resolved, already-validated state dict."""
+
     if resolved.format == "safetensors" and len(resolved.paths) == 1:
         from safetensors.torch import load_model
 
@@ -200,6 +238,18 @@ def strict_reload_rlinf_openpi_checkpoint(
     }
 
 
+def _layout_from_model(model: Any) -> ExpectedCheckpointLayout:
+    tensors = {
+        key: TensorSpec(tuple(int(dim) for dim in value.shape), _torch_dtype_name(value.dtype))
+        for key, value in model.state_dict().items()
+    }
+    aliases: defaultdict[int, list[str]] = defaultdict(list)
+    for name, parameter in model.named_parameters(remove_duplicate=False):
+        aliases[id(parameter)].append(name)
+    tied_groups = tuple(tuple(names) for names in aliases.values() if len(names) > 1)
+    return ExpectedCheckpointLayout(tensors=tensors, tied_groups=tied_groups)
+
+
 def _canonicalized_alias_manifest(
     expected: ExpectedCheckpointLayout,
     stored_keys: set[str],
@@ -217,6 +267,36 @@ def _canonicalized_alias_manifest(
             }
         )
     return canonicalized
+
+
+@lru_cache(maxsize=8)
+def _expected_openpi_rlinf_layout(action_horizon: int) -> ExpectedCheckpointLayout:
+    """Construct the current RLinf Pi0.5 core without allocating parameters."""
+
+    import torch
+    from rlinf.models.embodiment.openpi_rlinf.pi0_model.pi0_config import Pi0Config
+
+    config = Pi0Config(
+        pi05=True,
+        action_dim=32,
+        action_horizon=action_horizon,
+        max_token_len=200,
+        paligemma_variant="gemma_2b",
+        action_expert_variant="gemma_300m",
+        dtype="float32",
+        pcd=False,
+    )
+    with torch.device("meta"):
+        model = config.create()
+    tensors = {
+        key: TensorSpec(
+            tuple(int(dim) for dim in value.shape),
+            _torch_dtype_name(value.dtype),
+        )
+        for key, value in model.state_dict().items()
+    }
+    del model
+    return ExpectedCheckpointLayout(tensors=tensors, tied_groups=())
 
 
 @lru_cache(maxsize=8)
@@ -429,7 +509,7 @@ def _validate_layout(
 
     if missing:
         raise ValueError(f"RLINF checkpoint is missing model keys: {sorted(missing)[:8]}")
-    if not expected.tied_groups or len(accepted_aliases) != len(expected.tied_groups):
+    if len(accepted_aliases) != len(expected.tied_groups):
         raise ValueError(
             "RLINF checkpoint tied-weight contract differs from the meta-device model; "
             f"expected={expected.tied_groups}, accepted={accepted_aliases}, "

@@ -39,7 +39,6 @@ data:
     - dataset_path: ${oc.env:CLOTHDOJO_CFG_ROLLOUT_DATASET}
       type: rollout
       weight: 0.25
-      episodes_path: ${oc.env:CLOTHDOJO_CFG_ROLLOUT_EPISODES}
 
 algorithm:
   adv_type: gae

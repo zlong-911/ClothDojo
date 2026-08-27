@@ -1,4 +1,4 @@
-"""Factorized deformable/rigid distance with an auditable Torch device path."""
+"""Factorized deformable/rigid distance for offline trajectory scoring."""
 
 from __future__ import annotations
 
@@ -130,9 +130,12 @@ class FactorizedMetricValues:
     deformable_distance: Any
     rigid_distance: Any
     combined_distance: Any
-    reward: Any
     speed_rms_m_s: Any
     symmetry_index: Any
+
+    @property
+    def reward(self) -> Any:
+        return -self.combined_distance
 
 
 def factorized_cloth_distance(
@@ -144,11 +147,14 @@ def factorized_cloth_distance(
     symmetry: str = "planar_180",
     symmetry_center_xy: Any | None = None,
 ) -> FactorizedMetricValues:
-    """NumPy reference for corresponding-particle planar Procrustes scoring.
+    """NumPy reference for translation-invariant planar Procrustes scoring.
 
     ``planar_180`` constructs its second target at runtime around the supplied
     world-space center; the canonical template always remains the reviewed
-    zero-degree target.
+    zero-degree target.  The deformable term removes planar translation and
+    rotation, while the rigid term retains rotation but deliberately ignores
+    planar translation.  Vertex correspondence and height remain intact, so
+    flipped or layered cloth is not made equivalent to the target.
     """
 
     positions, velocities = _validate_particle_batch(particle_q, particle_qd, template)
@@ -172,18 +178,18 @@ def factorized_cloth_distance(
     sine = np.sin(angle)
     gx = goal_xy[None, :, :, 0]
     gy = goal_xy[None, :, :, 1]
-    aligned_xy = np.stack(
+    aligned_centered_xy = np.stack(
         (
             gx * cosine[:, :, None] - gy * sine[:, :, None],
             gx * sine[:, :, None] + gy * cosine[:, :, None],
         ),
         axis=-1,
     )
-    aligned_xy += current_xy_mean[:, None, None, :]
+    aligned_xy = aligned_centered_xy + current_xy_mean[:, None, None, :]
     aligned_z = np.broadcast_to(goals[None, :, :, 2:3], (*aligned_xy.shape[:-1], 1))
     aligned = np.concatenate((aligned_xy, aligned_z), axis=-1)
     deformable = np.linalg.norm(current[:, None] - aligned, axis=-1).mean(axis=-1)
-    rigid = np.linalg.norm(aligned - goals[None], axis=-1).mean(axis=-1)
+    rigid = np.linalg.norm(aligned_centered_xy - goal_xy[None], axis=-1).mean(axis=-1)
     scale = template.normalization_scale_m
     deformable /= scale
     rigid /= scale
@@ -198,89 +204,9 @@ def factorized_cloth_distance(
         deformable_distance=selected_deformable.astype(np.float32),
         rigid_distance=selected_rigid.astype(np.float32),
         combined_distance=selected_combined.astype(np.float32),
-        reward=(-selected_combined).astype(np.float32),
         speed_rms_m_s=speed.astype(np.float32),
         symmetry_index=selected.astype(np.int32),
     )
-
-
-class TorchFactorizedClothMetric:
-    """Zero-copy-friendly Torch implementation used beside Newton on one CUDA stream."""
-
-    def __init__(
-        self,
-        template: CanonicalTemplate,
-        *,
-        device,
-        deformable_weight: float = 0.65,
-        symmetry: str = "planar_180",
-        symmetry_center_xy: Any | None = None,
-    ) -> None:
-        import torch
-
-        if not 0.0 <= deformable_weight <= 1.0:
-            raise ValueError("deformable_weight must be in [0, 1]")
-        self.template = template
-        self.deformable_weight = float(deformable_weight)
-        goals = _goal_variants(
-            template.particle_q,
-            symmetry,
-            symmetry_center_xy=symmetry_center_xy,
-        )
-        self.goals = torch.as_tensor(goals, dtype=torch.float32, device=device)
-        self.goal_xy_mean = self.goals[:, :, :2].mean(dim=1)
-        self.goal_xy = self.goals[:, :, :2] - self.goal_xy_mean[:, None, :]
-
-    def __call__(self, particle_q, particle_qd) -> FactorizedMetricValues:
-        import torch
-
-        expected = (self.template.particle_count, 3)
-        if particle_q.ndim != 3 or tuple(particle_q.shape[1:]) != expected:
-            raise ValueError(f"particle_q must have shape (batch, {expected[0]}, 3)")
-        if particle_qd.shape != particle_q.shape:
-            raise ValueError("particle_qd shape must match particle_q")
-        current_xy_mean = particle_q[:, :, :2].mean(dim=1)
-        current_xy = particle_q[:, :, :2] - current_xy_mean[:, None, :]
-        a = torch.einsum("vni,bni->bv", self.goal_xy, current_xy)
-        b = torch.einsum("vn,bn->bv", self.goal_xy[:, :, 0], current_xy[:, :, 1])
-        b -= torch.einsum("vn,bn->bv", self.goal_xy[:, :, 1], current_xy[:, :, 0])
-        angle = torch.atan2(b, a)
-        cosine = torch.cos(angle)[:, :, None]
-        sine = torch.sin(angle)[:, :, None]
-        gx = self.goal_xy[None, :, :, 0]
-        gy = self.goal_xy[None, :, :, 1]
-        aligned_xy = torch.stack(
-            (gx * cosine - gy * sine, gx * sine + gy * cosine), dim=-1
-        )
-        aligned_xy = aligned_xy + current_xy_mean[:, None, None, :]
-        aligned_z = self.goals[None, :, :, 2:3].expand(
-            particle_q.shape[0], -1, -1, -1
-        )
-        aligned = torch.cat((aligned_xy, aligned_z), dim=-1)
-        scale = self.template.normalization_scale_m
-        deformable = torch.linalg.vector_norm(particle_q[:, None] - aligned, dim=-1).mean(
-            dim=-1
-        ) / scale
-        rigid = torch.linalg.vector_norm(aligned - self.goals[None], dim=-1).mean(
-            dim=-1
-        ) / scale
-        combined = self.deformable_weight * deformable + (
-            1.0 - self.deformable_weight
-        ) * rigid
-        selected = combined.argmin(dim=1)
-        indices = selected[:, None]
-        selected_deformable = deformable.gather(1, indices).squeeze(1)
-        selected_rigid = rigid.gather(1, indices).squeeze(1)
-        selected_combined = combined.gather(1, indices).squeeze(1)
-        speed = torch.sqrt(torch.square(particle_qd).sum(dim=2).mean(dim=1))
-        return FactorizedMetricValues(
-            deformable_distance=selected_deformable,
-            rigid_distance=selected_rigid,
-            combined_distance=selected_combined,
-            reward=-selected_combined,
-            speed_rms_m_s=speed,
-            symmetry_index=selected,
-        )
 
 
 def _goal_variants(
@@ -296,9 +222,7 @@ def _goal_variants(
         raise ValueError("symmetry must be 'none' or 'planar_180'")
     center = np.asarray(symmetry_center_xy, dtype=np.float32)
     if center.shape != (2,) or not np.isfinite(center).all():
-        raise ValueError(
-            "planar_180 symmetry_center_xy must be a finite planar point"
-        )
+        raise ValueError("planar_180 symmetry_center_xy must be a finite planar point")
     rotated = points.copy()
     rotated[:, :2] = 2.0 * center - rotated[:, :2]
     return np.stack((points, rotated))

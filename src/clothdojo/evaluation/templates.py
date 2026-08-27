@@ -26,6 +26,53 @@ TEMPLATE_COLLECTION_SCHEMA = "clothdojo_canonical_template_collection"
 TEMPLATE_COLLECTION_FORMAT_VERSION = 1
 
 
+def resolve_canonical_templates(
+    collection: str | Path,
+    asset_ids,
+    *,
+    target_settings: dict[str, Any],
+) -> dict[str, tuple[Path, str]]:
+    """Resolve selected templates through the collection manifest."""
+
+    root = Path(collection).expanduser().resolve()
+    meta = _load_collection_meta(root / "meta.json")
+    if meta.get("status") != "complete":
+        raise ValueError("canonical template collection is incomplete")
+    if meta.get("protocol", {}).get("target") != target_settings:
+        raise ValueError("canonical template collection target settings differ")
+    entries = meta.get("assets")
+    if not isinstance(entries, list) or len(entries) != meta.get("asset_count"):
+        raise ValueError("canonical template asset count differs")
+    index = {}
+    for entry in entries:
+        asset_id = entry.get("asset_id") if isinstance(entry, dict) else None
+        if not isinstance(asset_id, str) or not asset_id or asset_id in index:
+            raise ValueError("canonical template collection has invalid asset ids")
+        index[asset_id] = entry
+
+    resolved = {}
+    for asset_id in asset_ids:
+        entry = index.get(asset_id)
+        if entry is None:
+            raise ValueError(f"canonical template is missing asset {asset_id}")
+        if entry.get("status") != "complete":
+            raise ValueError(f"canonical template entry is incomplete: {asset_id}")
+        raw_path = entry.get("path")
+        if not isinstance(raw_path, str) or not raw_path:
+            raise ValueError(f"canonical template path is invalid: {asset_id}")
+        relative = Path(raw_path)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError(f"canonical template path is invalid: {asset_id}")
+        path = (root / relative).resolve()
+        if not path.is_relative_to(root):
+            raise ValueError(f"canonical template path escapes its collection: {asset_id}")
+        expected_sha256 = entry.get("sha256")
+        if not isinstance(expected_sha256, str) or file_sha256(path) != expected_sha256:
+            raise ValueError(f"canonical template changed for asset {asset_id}")
+        resolved[asset_id] = (path, expected_sha256)
+    return resolved
+
+
 def generate_template_collection(
     initial_states: str | Path,
     protocol_path: str | Path,

@@ -8,6 +8,9 @@ import warp as wp
 from clothdojo.sim.grasp import ParticleGrasp
 from clothdojo.sim.scene import ShirtFlattenScene
 
+_CLOTH_BVH_REBUILD_CONTROL_STEPS = 2
+_CUDA_GRAPH_CONDITIONAL_MIN_DRIVER = (12, 4)
+
 
 @wp.kernel
 def _write_arm_targets(
@@ -78,6 +81,47 @@ def _damp_particles(
     particle_qd[particle] = particle_qd[particle] * retention
 
 
+def _prune_static_soft_contact_pairs(model, collision_pipeline) -> None:
+    """Remove particle-shape pairs disabled by immutable scene shape flags.
+
+    Newton 1.5 intentionally builds every world-compatible particle-shape pair
+    so applications can toggle ``COLLIDE_PARTICLES`` after construction.  This
+    scene never changes shape flags at runtime, and render/proxy shapes make
+    those dormant pairs dominate the contact buffer.  Keep this version-pinned
+    adaptation next to pipeline construction and validate Newton's default
+    capacity before narrowing its private pair count.
+    """
+
+    import newton
+
+    pairs = collision_pipeline.soft_rigid_contact_pairs
+    if len(pairs) == 0:
+        return
+    full_surface_count = len(collision_pipeline.soft_edge_rigid_pairs) + len(
+        collision_pipeline.soft_face_rigid_pairs
+    )
+    expected_capacity = len(pairs) + full_surface_count
+    if collision_pipeline.soft_contact_max != expected_capacity:
+        raise RuntimeError(
+            "static soft-contact pruning requires Newton 1.5's default capacity"
+        )
+    host_pairs = np.asarray(pairs.numpy(), dtype=np.int32)
+    shape_flags = np.asarray(model.shape_flags.numpy())
+    keep = (
+        shape_flags[host_pairs[:, 1]] & int(newton.ShapeFlags.COLLIDE_PARTICLES)
+    ) != 0
+    if bool(keep.all()):
+        return
+    filtered = np.ascontiguousarray(host_pairs[keep])
+    collision_pipeline.soft_rigid_contact_pairs = wp.array(
+        filtered,
+        dtype=wp.vec2i,
+        device=model.device,
+    )
+    collision_pipeline._soft_rigid_contact_pair_count = len(filtered)
+    collision_pipeline._soft_contact_max = len(filtered) + full_surface_count
+
+
 class ShirtFlattenRuntime:
     """Own state, controls, contacts and the one intentional two-solver step."""
 
@@ -91,6 +135,7 @@ class ShirtFlattenRuntime:
         self.spec = scene.spec
         self.use_cuda_graph = use_cuda_graph
         self._step_graph = None
+        self._control_steps_since_cloth_bvh_rebuild = 0
         self.state_0 = self.model.state()
         self.state_1 = self.model.state()
         self.control = self.model.control()
@@ -111,6 +156,7 @@ class ShirtFlattenRuntime:
             soft_contact_margin=self.spec.cloth_contact_margin,
             **collision_options,
         )
+        _prune_static_soft_contact_pairs(self.model, self.collision)
         self.contacts = self.collision.contacts()
         self.rigid = newton.solvers.SolverMuJoCo(
             self.model,
@@ -124,10 +170,24 @@ class ShirtFlattenRuntime:
             impratio=1.0,
             use_mujoco_cpu=False,
             use_mujoco_contacts=False,
+            # ClothDojo does not consume MuJoCo sensors. State synchronization
+            # remains enabled because cold trajectory restore also updates the
+            # robot coordinates owned by Newton state.
+            disable_sensors=True,
             # Style3D is not bitwise repeatable, so do not impose a stronger
             # mode on the rigid solver or its unused MuJoCo Warp sensor module.
             deterministic=wp.DeterministicMode.NOT_GUARANTEED,
         )
+        if (
+            self.rigid.mjw_model is not None
+            and wp.get_device(self.model.device).is_cuda
+            and wp.get_cuda_driver_version() < _CUDA_GRAPH_CONDITIONAL_MIN_DRIVER
+        ):
+            # MuJoCo Warp enables conditional graph nodes by default, but
+            # NVIDIA drivers older than CUDA 12.4 cannot capture them. Keep
+            # ClothDojo's outer whole-step CUDA Graph and use MuJoCo Warp's
+            # fixed-iteration graph on those hosts.
+            self.rigid.mjw_model.opt.graph_conditional = False
         self.cloth = newton.solvers.SolverStyle3D(
             self.model,
             iterations=self.spec.style3d_iterations,
@@ -218,15 +278,26 @@ class ShirtFlattenRuntime:
             wp.copy(self._graph_arm_target, arm_target)
             wp.copy(self._graph_gripper_open, gripper_open)
             wp.capture_launch(self._step_graph)
-            return
-        self._step_eager(arm_target, gripper_open)
+        else:
+            self._step_eager(arm_target, gripper_open)
+        self._control_steps_since_cloth_bvh_rebuild += 1
+        if (
+            self._control_steps_since_cloth_bvh_rebuild
+            >= _CLOTH_BVH_REBUILD_CONTROL_STEPS
+        ):
+            # Newton 1.5's Style3D collision owns one global BVH for every
+            # world. Rebuilding every frame is cheap for B1 but dominates B8;
+            # two control steps bounds refit aging while retaining batched
+            # throughput. The rebuild remains asynchronous on the same stream.
+            self.cloth.rebuild_bvh(self.state_0)
+            self._control_steps_since_cloth_bvh_rebuild = 0
 
     def _step_eager(self, arm_target, gripper_open) -> None:
-        self.grasp.pre_step(self.state_0)
         self.apply_action(arm_target, gripper_open)
         sub_dt = self.control_dt / float(self.spec.sim_substeps)
         for _ in range(self.spec.sim_substeps):
             self._step_rigid(sub_dt)
+            self.grasp.update(self.state_0, self.state_1)
             self._step_cloth(sub_dt)
 
     def _capture_step_graph(self) -> None:
@@ -251,6 +322,7 @@ class ShirtFlattenRuntime:
 
         if not 0.0 <= velocity_retention <= 1.0:
             raise ValueError("velocity_retention must be in [0, 1]")
+        self.cloth.rebuild_bvh(self.state_0)
         sub_dt = self.control_dt / float(self.spec.sim_substeps)
         for _ in range(self.spec.sim_substeps):
             self._step_cloth(sub_dt, static_patch=static_patch)
@@ -342,6 +414,7 @@ class ShirtFlattenRuntime:
             device=self.model.device,
         )
         self.cloth.rebuild_bvh(self.state_0)
+        self._control_steps_since_cloth_bvh_rebuild = 0
         self.grasp.reset(world_mask)
         articulation_mask = world_mask[: self.model.world_count]
         self.scene.arms.set_attribute(
@@ -379,8 +452,11 @@ class ShirtFlattenRuntime:
 
         full_q = self.state_0.particle_q.numpy()
         full_qd = self.state_0.particle_qd.numpy()
+        world_offsets = np.asarray(self.scene.world_offsets, dtype=np.float32)
+        if world_offsets.shape != (self.model.world_count, 3):
+            raise RuntimeError("scene world offsets do not match the Newton world count")
         for world, (start, end) in enumerate(ranges):
-            full_q[start:end] = q[world]
+            full_q[start:end] = q[world] + world_offsets[world]
             full_qd[start:end] = qd[world]
         for state in (self.state_0, self.state_1):
             state.particle_q.assign(full_q)
@@ -388,6 +464,7 @@ class ShirtFlattenRuntime:
             state.particle_f.zero_()
         self.cloth.dx.zero_()
         self.cloth.rebuild_bvh(self.state_0)
+        self._control_steps_since_cloth_bvh_rebuild = 0
         self.grasp.reset(self._all_worlds)
 
     def restore_state(self, frame) -> None:
@@ -418,6 +495,7 @@ class ShirtFlattenRuntime:
         self.rigid.reset(self.state_0, flags=0)
         self.cloth.dx.zero_()
         self.cloth.rebuild_bvh(self.state_0)
+        self._control_steps_since_cloth_bvh_rebuild = 0
         self.grasp.restore_state(frame)
         self.scene.arms.set_attribute(
             "joint_target_q",
@@ -481,8 +559,20 @@ class ShirtFlattenRuntime:
             self.rigid_contacts,
             dt,
         )
-        for name in ("joint_q", "joint_qd", "body_q", "body_qd"):
-            getattr(self.state_0, name).assign(getattr(self.state_1, name))
+
+    def _collide_cloth_with_updated_rigid_state(self) -> None:
+        """Collide current cloth against the rigid state produced this substep."""
+
+        # MuJoCo writes the updated rigid state to state_1 while the current
+        # cloth remains in state_0. Borrow state_1 as a zero-copy contact view:
+        # its body transforms stay current, and only its particle position
+        # reference is temporarily redirected to the current cloth buffer.
+        particle_q_out = self.state_1.particle_q
+        self.state_1.particle_q = self.state_0.particle_q
+        try:
+            self.collision.collide(self.state_1, self.contacts)
+        finally:
+            self.state_1.particle_q = particle_q_out
 
     def _step_cloth(self, dt: float, *, static_patch=None) -> None:
         self.state_0.clear_forces()
@@ -490,7 +580,7 @@ class ShirtFlattenRuntime:
         self.grasp.enforce(self.state_0, self.state_1, dt)
         if static_patch is not None:
             static_patch.enforce(self.state_0)
-        self.collision.collide(self.state_0, self.contacts)
+        self._collide_cloth_with_updated_rigid_state()
         self.cloth.step(self.state_0, self.state_1, None, self.contacts, dt)
         self.state_0, self.state_1 = self.state_1, self.state_0
         if static_patch is not None:

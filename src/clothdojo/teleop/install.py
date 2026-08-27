@@ -50,9 +50,14 @@ class TeleopInstallation:
 
     def environment(self, *, gpu_id: int, slot_root: Path, source_root: Path) -> dict[str, str]:
         environment = dict(os.environ)
-        environment["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+        # Kit must see identical physical indices in CUDA and Vulkan. Newton
+        # later adopts Kit's already-current CUDA context on the selected GPU.
+        environment.pop("CUDA_VISIBLE_DEVICES", None)
         environment["XDG_CACHE_HOME"] = str(slot_root / "cache")
-        environment["WARP_CACHE_PATH"] = str(slot_root / "warp-cache")
+        # Warp's compiled modules are architecture-specific, not GPU-index-
+        # specific. All slots on this installation share the cache so opening
+        # a second GPU does not compile the same Newton kernels again.
+        environment["WARP_CACHE_PATH"] = str(slot_root.parent / "warp-cache")
         environment["PXR_WORK_THREAD_LIMIT"] = "1"
         environment["TELEOP_WEB_CLIENT_STATIC_DIR"] = str(self.web_client_dir)
         existing_python_path = environment.get("PYTHONPATH", "").strip()

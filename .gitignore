@@ -1,4 +1,5 @@
 .venv/
+.venv-isaac/
 .cache/
 .pytest_cache/
 .ruff_cache/
@@ -17,4 +18,4 @@ checkpoints/
 /configs/collection.yaml
 
 # Complete project-local assets are managed outside Git.
-assets/
+/assets/

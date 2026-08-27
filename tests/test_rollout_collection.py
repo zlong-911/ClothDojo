@@ -6,12 +6,20 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from clothdojo.rollout.collection import (
-    _policy_endpoints_for_workers,
-    _policy_seed_for_batch,
-    _select_assets,
-    _validate_policy_identities,
-    load_rollout_collection,
+from clothdojo.rendering import policy_observation_settings
+from clothdojo.rollout.collection import load_rollout_collection
+from clothdojo.rollout.scheduling import (
+    policy_endpoints_for_workers,
+    select_assets,
+    validate_policy_identities,
+)
+from clothdojo.rollout.trajectory_collection import (
+    TrajectoryAssetJob,
+    TrajectoryCollectionSpec,
+    collect_trajectory_index,
+    execution_settings,
+    policy_seed_for_batch,
+    trajectory_name,
 )
 from clothdojo.trajectory import TrajectoryAction, TrajectoryState, TrajectoryWriter
 
@@ -111,7 +119,7 @@ def test_rollout_selects_a_fixed_seen_unseen_subset() -> None:
         {"asset_id": "u1", "split": "unseen"},
     ]
 
-    selected = _select_assets(assets, seen_assets=1, unseen_assets=1)
+    selected = select_assets(assets, seen_assets=1, unseen_assets=1)
 
     assert [(item["asset_id"], item["split"]) for item in selected] == [
         ("s0", "seen"),
@@ -122,39 +130,36 @@ def test_rollout_selects_a_fixed_seen_unseen_subset() -> None:
 def test_multi_gpu_rollout_requires_one_unique_endpoint_per_worker() -> None:
     endpoints = ("ws://policy-a:8080", "ws://policy-b:8080", "ws://unused:8080")
 
-    assert _policy_endpoints_for_workers(endpoints, 2) == endpoints[:2]
+    assert policy_endpoints_for_workers(endpoints, 2) == endpoints[:2]
     with pytest.raises(ValueError, match="one unique policy endpoint"):
-        _policy_endpoints_for_workers((endpoints[0],), 2)
+        policy_endpoints_for_workers((endpoints[0],), 2)
     with pytest.raises(ValueError, match="requires a unique policy endpoint"):
-        _policy_endpoints_for_workers((endpoints[0], endpoints[0]), 2)
+        policy_endpoints_for_workers((endpoints[0], endpoints[0]), 2)
 
 
-def test_rtc_rollout_requires_matching_server_execution_horizon() -> None:
+def test_rtc_rollout_accepts_independent_server_guidance_horizon() -> None:
     identity = {
         "backend": "rlinf-sft",
-        "rtc_guidance": {"execution_horizon": 10},
+        "rtc_guidance": {"guidance_horizon": 5},
     }
 
-    assert _validate_policy_identities((identity,), execution="rtc", exec_horizon=10) is identity
-    with pytest.raises(ValueError, match="execution horizon differs"):
-        _validate_policy_identities((identity,), execution="rtc", exec_horizon=5)
+    assert validate_policy_identities((identity,), execution="rtc") is identity
 
 
 def test_rtc_rollout_accepts_capable_openpi_server() -> None:
     identity = {
         "backend": "openpi",
-        "rtc_guidance": {"execution_horizon": 10},
+        "rtc_guidance": {"guidance_horizon": 10},
     }
 
-    assert _validate_policy_identities((identity,), execution="rtc", exec_horizon=10) is identity
+    assert validate_policy_identities((identity,), execution="rtc") is identity
 
 
 def test_rtc_rollout_rejects_openpi_without_rtc_capability() -> None:
     with pytest.raises(ValueError, match="RTC-capable policy server"):
-        _validate_policy_identities(
+        validate_policy_identities(
             ({"backend": "openpi"},),
             execution="rtc",
-            exec_horizon=10,
         )
 
 
@@ -162,25 +167,139 @@ def test_parallel_rollout_requires_server_batch_capability() -> None:
     identity = {"backend": "openpi", "batched_inference": True}
 
     assert (
-        _validate_policy_identities(
+        validate_policy_identities(
             (identity,),
             execution="chunk",
-            exec_horizon=10,
             worlds_per_batch=8,
         )
         is identity
     )
     with pytest.raises(ValueError, match="batched-inference"):
-        _validate_policy_identities(
+        validate_policy_identities(
             ({"backend": "openpi"},),
             execution="chunk",
-            exec_horizon=10,
             worlds_per_batch=2,
         )
 
 
 def test_policy_batch_seed_is_stable_and_preserves_single_world_seed() -> None:
-    assert _policy_seed_for_batch(np.asarray([17], dtype=np.int32)) == 17
-    first = _policy_seed_for_batch(np.asarray([17, 23, 41], dtype=np.int32))
-    assert first == _policy_seed_for_batch(np.asarray([17, 23, 41], dtype=np.int32))
-    assert first != _policy_seed_for_batch(np.asarray([41, 23, 17], dtype=np.int32))
+    assert policy_seed_for_batch(np.asarray([17], dtype=np.int32)) == 17
+    first = policy_seed_for_batch(np.asarray([17, 23, 41], dtype=np.int32))
+    assert first == policy_seed_for_batch(np.asarray([17, 23, 41], dtype=np.int32))
+    assert first != policy_seed_for_batch(np.asarray([41, 23, 17], dtype=np.int32))
+
+
+def test_shared_runner_uses_one_layout_for_rollout_and_evaluation_cases() -> None:
+    assert trajectory_name("shirt", 7, None) == "shirt_000007"
+    assert trajectory_name("shirt", 7, 2) == "shirt_000007_r002"
+    seeds = np.asarray([17, 23], dtype=np.int32)
+    assert policy_seed_for_batch(seeds, 0) != policy_seed_for_batch(seeds, 1)
+
+    with pytest.raises(ValueError, match="reserved keys"):
+        TrajectoryAssetJob(
+            asset_id="shirt",
+            pool="states.npz",
+            pool_sha256="a" * 64,
+            state_count=1,
+            metadata={"policy": {}},
+        )
+
+
+def test_shared_runner_indexes_evaluation_provenance(tmp_path: Path) -> None:
+    scenario = tmp_path / "scenario.yaml"
+    scenario.write_text(
+        """schema: clothdojo_rollout_scenario
+format_version: 1
+scenario_id: test
+task_name: shirt_flatten
+seed: 0
+prompt: flatten the shirt
+steps: 1
+action_horizon: 1
+""",
+        encoding="utf-8",
+    )
+    identity = {
+        "backend": "openpi",
+        "checkpoint_sha256": "b" * 64,
+        "batched_inference": True,
+    }
+    extra = {
+        "condition_id": "condition",
+        "protocol_fingerprint": "c" * 64,
+        "template_sha256": "d" * 64,
+    }
+    root = tmp_path / "trajectories"
+    output = root / "shirt_000000_r000"
+    writer = TrajectoryWriter(
+        output,
+        control_fps=50,
+        sim_substeps=6,
+        max_actions=1,
+        metadata={
+            "producer": "clothdojo_evaluation",
+            "training_eligible": False,
+            "asset_id": "shirt",
+            "policy_kind": "openpi",
+            "policy": identity,
+            "policy_seed": 123,
+            "cloth_visual": "nocs",
+            "observation": policy_observation_settings(),
+            "execution": execution_settings("chunk", 1),
+            "parallelism": {"worlds": 1, "active_worlds": 1, "batch_start": 0},
+            "initial_state": {
+                "pool_sha256": "a" * 64,
+                "index": 0,
+                "seed": 17,
+            },
+            "replicate": 0,
+            **extra,
+        },
+    )
+    writer.write_initial_state(_state(0))
+    writer.append_transition(
+        TrajectoryAction(
+            sample_index=0,
+            joint_target=np.zeros((12,), dtype=np.float32),
+            gripper_open_command=np.zeros((2,), dtype=np.float32),
+        ),
+        _state(1),
+    )
+    writer.close()
+    job = TrajectoryAssetJob(
+        asset_id="shirt",
+        pool="states.npz",
+        pool_sha256="a" * 64,
+        state_count=1,
+        replicates=(0,),
+        metadata=extra,
+    )
+    spec = TrajectoryCollectionSpec(
+        scenario_path=str(scenario),
+        assets_root=str(tmp_path / "assets"),
+        trajectories_root=str(root),
+        expected_checkpoint_sha256=None,
+        policy_identity=identity,
+        execution="chunk",
+        exec_horizon=1,
+        rtc_delay_steps=0,
+        horizon_steps=1,
+        batch_size=1,
+        producer="clothdojo_evaluation",
+        training_eligible=False,
+    )
+
+    index = collect_trajectory_index([job], spec=spec)
+
+    assert index == [
+        {
+            "asset_id": "shirt",
+            "initial_state_index": 0,
+            "seed": 17,
+            "policy_seed": 123,
+            "path": "trajectories/shirt_000000_r000",
+            "action_count": 1,
+            "execution_report": {},
+            "replicate": 0,
+        }
+    ]

@@ -7,28 +7,8 @@ import math
 import numpy as np
 import warp as wp
 
-CAMERA_NAMES = ("cam_high", "cam_left_wrist", "cam_right_wrist")
-
-_CAMERA_MATRICES = (
-    (
-        (0.0, 0.8660254037844386, -0.5, 0.253845),
-        (-1.0, 0.0, 0.0, 0.001071),
-        (0.0, 0.5, 0.8660254037844386, 1.308),
-        (0.0, 0.0, 0.0, 1.0),
-    ),
-    (
-        (0.0, 1.0, 0.0, 0.0),
-        (1.0, 0.0, 0.0, 0.0),
-        (0.0, 0.0, -1.0, 0.0109),
-        (0.0, 0.0, 0.0, 1.0),
-    ),
-    (
-        (0.0, 1.0, 0.0, 0.0),
-        (1.0, 0.0, 0.0, 0.0),
-        (0.0, 0.0, -1.0, 0.0109),
-        (0.0, 0.0, 0.0, 1.0),
-    ),
-)
+from clothdojo.rendering import CAMERA_MATRICES as _CAMERA_MATRICES
+from clothdojo.rendering import CAMERA_NAMES, DATASET_CAMERA_NAMES, DATASET_CAMERAS
 
 
 @wp.kernel
@@ -60,12 +40,13 @@ def _sync_visual_vertices(
     particle_points: wp.array(dtype=wp.vec3f),
     particle_normals: wp.array(dtype=wp.vec3f),
     source_indices: wp.array(dtype=int),
+    world_offset: wp.vec3f,
     visual_points: wp.array(dtype=wp.vec3f),
     visual_normals: wp.array(dtype=wp.vec3f),
 ):
     vertex = wp.tid()
     source = source_indices[vertex]
-    visual_points[vertex] = particle_points[source]
+    visual_points[vertex] = particle_points[source] - world_offset
     visual_normals[vertex] = particle_normals[source]
 
 
@@ -79,9 +60,10 @@ def _reset_mesh_bounds(bounds: wp.array2d(dtype=wp.float32)):
 @wp.kernel
 def _accumulate_mesh_bounds(
     points: wp.array(dtype=wp.vec3f),
+    world_offset: wp.vec3f,
     bounds: wp.array2d(dtype=wp.float32),
 ):
-    point = points[wp.tid()]
+    point = points[wp.tid()] - world_offset
     wp.atomic_min(bounds, 0, 0, point[0])
     wp.atomic_min(bounds, 0, 1, point[1])
     wp.atomic_min(bounds, 0, 2, point[2])
@@ -124,6 +106,7 @@ class ShirtFlattenCameraObservation:
         *,
         width: int = 640,
         height: int = 480,
+        camera_names: tuple[str, ...] = CAMERA_NAMES,
     ) -> None:
         from newton.sensors import SensorTiledCamera
 
@@ -135,6 +118,15 @@ class ShirtFlattenCameraObservation:
         self.model = scene.model
         self.width = int(width)
         self.height = int(height)
+        self.camera_names = tuple(camera_names)
+        if self.camera_names not in (
+            CAMERA_NAMES,
+            DATASET_CAMERA_NAMES,
+            (CAMERA_NAMES[0],),
+        ):
+            raise ValueError(
+                "camera_names must be policy cameras, dataset cameras or only cam_high"
+            )
         self._sensor = SensorTiledCamera(model=self.model)
         self._sensor.default_render_config.enable_backface_culling = False
         self._sensor.default_render_config.enable_shadows = True
@@ -143,36 +135,68 @@ class ShirtFlattenCameraObservation:
         self._sensor.utils.create_default_light(enable_shadows=True)
         self._smooth_cloth = _SmoothClothVisual(self._sensor, scene)
 
-        fovs = (
-            _vertical_fov(10.0, 14.266),
-            _vertical_fov(13.0, 15.71625),
-            _vertical_fov(13.0, 15.71625),
+        all_fovs = tuple(
+            _vertical_fov(camera.focal_length, camera.horizontal_aperture)
+            for camera in DATASET_CAMERAS
         )
+        camera_indices = tuple(DATASET_CAMERA_NAMES.index(name) for name in self.camera_names)
+        fovs = tuple(all_fovs[index] for index in camera_indices)
         self._rays = self._sensor.utils.compute_camera_rays_pinhole(
             self.width,
             self.height,
             camera_fovs=fovs,
         )
+        world_offsets = np.asarray(scene.world_offsets, dtype=np.float32)
+        if world_offsets.shape != (self.world_count, 3):
+            raise RuntimeError("camera world offsets do not match the Newton world count")
         local = tuple(_matrix_to_transform(matrix) for matrix in _CAMERA_MATRICES)
-        self._transforms = wp.array(
-            [[transform] * self.world_count for transform in local],
-            dtype=wp.transformf,
-            device=self.model.device,
+        high_transforms = tuple(
+            _matrix_to_transform(_translated_matrix(_CAMERA_MATRICES[0], offset))
+            for offset in world_offsets
         )
-        self._wrist_local = wp.array(local[1:], dtype=wp.transformf, device=self.model.device)
-        if int(self.model.body_count) % self.world_count:
-            raise RuntimeError("render body count is not homogeneous across worlds")
-        self._bodies_per_world = int(self.model.body_count) // self.world_count
-        self._wrist_bodies = wp.array(
-            [
-                _body_index(self.model, "left", "camera", self._bodies_per_world),
-                _body_index(self.model, "right", "camera", self._bodies_per_world),
-            ],
-            dtype=int,
-            device=self.model.device,
-        )
+        if self.camera_names in (CAMERA_NAMES, DATASET_CAMERA_NAMES):
+            camera_transforms = [
+                high_transforms,
+                [local[1]] * self.world_count,
+                [local[2]] * self.world_count,
+            ]
+            if self.camera_names == DATASET_CAMERA_NAMES:
+                camera_transforms.append(
+                    tuple(
+                        _matrix_to_transform(
+                            _translated_matrix(_CAMERA_MATRICES[3], offset)
+                        )
+                        for offset in world_offsets
+                    )
+                )
+            self._transforms = wp.array(
+                camera_transforms,
+                dtype=wp.transformf,
+                device=self.model.device,
+            )
+            self._wrist_local = wp.array(
+                local[1:3], dtype=wp.transformf, device=self.model.device
+            )
+            if int(self.model.body_count) % self.world_count:
+                raise RuntimeError("render body count is not homogeneous across worlds")
+            self._bodies_per_world = int(self.model.body_count) // self.world_count
+            self._wrist_bodies = wp.array(
+                [
+                    _body_index(self.model, "left", "camera", self._bodies_per_world),
+                    _body_index(self.model, "right", "camera", self._bodies_per_world),
+                ],
+                dtype=int,
+                device=self.model.device,
+            )
+        else:
+            self._transforms = wp.array(
+                [high_transforms], dtype=wp.transformf, device=self.model.device
+            )
+            self._wrist_local = None
+            self._wrist_bodies = None
+            self._bodies_per_world = 0
         self._color = self._sensor.utils.create_color_image_output(
-            self.width, self.height, len(CAMERA_NAMES)
+            self.width, self.height, len(self.camera_names)
         )
         self._rgba = self._sensor.utils.to_rgba_from_color(self._color)
 
@@ -180,18 +204,19 @@ class ShirtFlattenCameraObservation:
         if runtime.scene.model is not self.model:
             raise ValueError("camera and runtime must use the same Newton model")
         self._smooth_cloth.sync(runtime)
-        wp.launch(
-            _update_wrist_cameras,
-            dim=(2, self.world_count),
-            inputs=[
-                runtime.state_0.body_q,
-                self._wrist_bodies,
-                self._wrist_local,
-                self._bodies_per_world,
-                self._transforms,
-            ],
-            device=self.model.device,
-        )
+        if self._wrist_bodies is not None:
+            wp.launch(
+                _update_wrist_cameras,
+                dim=(2, self.world_count),
+                inputs=[
+                    runtime.state_0.body_q,
+                    self._wrist_bodies,
+                    self._wrist_local,
+                    self._bodies_per_world,
+                    self._transforms,
+                ],
+                device=self.model.device,
+            )
         self.model.bvh_refit_shapes(runtime.state_0)
         self._sensor.update(
             runtime.state_0,
@@ -202,11 +227,11 @@ class ShirtFlattenCameraObservation:
         rgb = (
             self._rgba[:, :, :, :3]
             .numpy()
-            .reshape(self.world_count, len(CAMERA_NAMES), self.height, self.width, 3)
+            .reshape(self.world_count, len(self.camera_names), self.height, self.width, 3)
         )
         return {
             f"observation.images.{name}": rgb[:, index].copy()
-            for index, name in enumerate(CAMERA_NAMES)
+            for index, name in enumerate(self.camera_names)
         }
 
 
@@ -249,9 +274,7 @@ class _SmoothClothVisual:
         context._RenderContext__triangle_indices = None
         context.triangle_mesh = None
         self._model = scene.model
-        triangles = np.asarray(
-            scene.model.tri_indices.numpy(), dtype=np.int32
-        ).reshape(-1, 3)
+        triangles = np.asarray(scene.model.tri_indices.numpy(), dtype=np.int32).reshape(-1, 3)
         particle_world = np.asarray(scene.model.particle_world.numpy(), dtype=np.int32)
         triangle_worlds = particle_world[triangles]
         if np.any(triangle_worlds != triangle_worlds[:, :1]):
@@ -266,6 +289,7 @@ class _SmoothClothVisual:
             dtype=wp.vec3f,
             device=scene.model.device,
         )
+        self._particle_ranges = []
         if scene.model.bvh_shape_bounds is None:
             raise RuntimeError("Newton render model has no shape BVH bounds")
         self._visuals = []
@@ -305,15 +329,19 @@ class _SmoothClothVisual:
                         dtype=wp.float32,
                         device=scene.model.device,
                     ),
+                    wp.vec3f(*map(float, scene.world_offsets[world])),
                 )
+            )
+            self._particle_ranges.append(
+                (int(particle_indices[0]), int(particle_indices[-1]) + 1)
             )
 
     def sync(self, runtime) -> None:
         particle_q = runtime.state_0.particle_q
         if self._particle_normals.shape[0] != particle_q.shape[0]:
             raise RuntimeError("physics and NOCS garment vertex counts differ")
-        if len(runtime.grasp.particle_ranges()) != len(self._visuals):
-            raise RuntimeError("physics and NOCS garment world counts differ")
+        if any(end > particle_q.shape[0] for _, end in self._particle_ranges):
+            raise RuntimeError("render state and NOCS garment particle ranges differ")
         self._particle_normals.zero_()
         wp.launch(
             _accumulate_vertex_normals,
@@ -327,7 +355,17 @@ class _SmoothClothVisual:
             inputs=[self._particle_normals],
             device=self._model.device,
         )
-        for shape_index, mesh, points, normals, source_indices, start, end, bounds in self._visuals:
+        for (
+            shape_index,
+            mesh,
+            points,
+            normals,
+            source_indices,
+            start,
+            end,
+            bounds,
+            world_offset,
+        ) in self._visuals:
             wp.launch(
                 _sync_visual_vertices,
                 dim=points.shape[0],
@@ -335,6 +373,7 @@ class _SmoothClothVisual:
                     particle_q,
                     self._particle_normals,
                     source_indices,
+                    world_offset,
                     points,
                     normals,
                 ],
@@ -346,11 +385,20 @@ class _SmoothClothVisual:
                 bounds,
                 self._model.bvh_shape_bounds,
                 shape_index,
+                world_offset=world_offset,
                 device=self._model.device,
             )
 
 
-def _refit_deforming_mesh_bounds(points, bounds, shape_bounds, shape_index: int, *, device) -> None:
+def _refit_deforming_mesh_bounds(
+    points,
+    bounds,
+    shape_bounds,
+    shape_index: int,
+    *,
+    world_offset,
+    device,
+) -> None:
     """Refresh one deforming static Mesh's local bounds without rebuilding the scene BVH."""
 
     wp.launch(
@@ -362,7 +410,7 @@ def _refit_deforming_mesh_bounds(points, bounds, shape_bounds, shape_index: int,
     wp.launch(
         _accumulate_mesh_bounds,
         dim=points.shape[0],
-        inputs=[points, bounds],
+        inputs=[points, world_offset, bounds],
         device=device,
     )
     wp.launch(
@@ -380,6 +428,12 @@ def _vertical_fov(focal_length: float, vertical_aperture: float) -> float:
 def _matrix_to_transform(matrix):
     values = np.asarray(matrix, dtype=np.float32).reshape(4, 4)
     return wp.transform_from_matrix(wp.mat44f(*map(float, values.reshape(-1))))
+
+
+def _translated_matrix(matrix, offset):
+    values = np.asarray(matrix, dtype=np.float32).reshape(4, 4).copy()
+    values[:3, 3] += np.asarray(offset, dtype=np.float32)
+    return values
 
 
 def _body_index(model, side: str, link: str, bodies_per_world: int) -> int:

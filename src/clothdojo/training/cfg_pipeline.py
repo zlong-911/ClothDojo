@@ -135,7 +135,7 @@ def run_cfg_pipeline(
     """Label both datasets, run the exact data gate, then launch CFG."""
 
     from clothdojo.training.cfg import inspect_cfg_training
-    from clothdojo.training.rlinf import run as run_rlinf
+    from clothdojo.training.rlinf import compose_config, run_config
 
     plan = inspect_cfg_pipeline(
         advantage_config=advantage_config,
@@ -184,7 +184,8 @@ def run_cfg_pipeline(
             _write_status(status_path, spec, status="running", stage="cfg_data_gate")
             gate = inspect_cfg_training(cfg_config, cfg_overrides)
             _write_status(status_path, spec, status="running", stage="cfg_training")
-            run_rlinf(kind="cfg", config_path=cfg_config, overrides=cfg_overrides)
+            cfg = compose_config(cfg_config, cfg_overrides)
+            run_config(kind="cfg", cfg=cfg, cfg_manifest=gate)
         except BaseException as exc:
             _write_status(
                 status_path,

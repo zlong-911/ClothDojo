@@ -383,6 +383,7 @@ class TeleopSupervisor:
                 "phase",
                 "teleop_state",
                 "recording",
+                "recording_finalizing",
                 "recording_frames",
                 "physics_cuda_graph",
                 "ik_cuda_graph",
@@ -408,12 +409,12 @@ class TeleopSupervisor:
             {
                 "id": f"gpu-{gpu_id}",
                 "gpu_id": gpu_id,
-                "endpoint": f"{host}:{PROXY_PORT + index * PORT_STRIDE}",
-                "signaling_port": SIGNALING_PORT + index * PORT_STRIDE,
-                "media_port": MEDIA_PORT + index * PORT_STRIDE,
-                "proxy_port": PROXY_PORT + index * PORT_STRIDE,
+                "endpoint": f"{host}:{PROXY_PORT + gpu_id * PORT_STRIDE}",
+                "signaling_port": SIGNALING_PORT + gpu_id * PORT_STRIDE,
+                "media_port": MEDIA_PORT + gpu_id * PORT_STRIDE,
+                "proxy_port": PROXY_PORT + gpu_id * PORT_STRIDE,
             }
-            for index, gpu_id in enumerate(self.config.teleoperation.gpu_ids)
+            for gpu_id in self.config.teleoperation.gpu_ids
         ]
 
     def _slot(self, slot_id: str) -> dict[str, Any]:

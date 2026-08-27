@@ -1,7 +1,7 @@
 # Adapted from Hugging Face LeRobot's RTC implementation, Copyright 2025
 # The HuggingFace Inc. team, licensed under the Apache License, Version 2.0.
 
-"""LeRobot guided RTC at ClothDojo's RLINF sampling boundary."""
+"""Physical Intelligence/LeRobot guided RTC at the RLINF sampling boundary."""
 
 from __future__ import annotations
 
@@ -15,22 +15,31 @@ from typing import Any, Literal
 class GuidedRTCConfig:
     """The small, inference-only part of LeRobot's guided RTC config."""
 
-    execution_horizon: int = 10
+    guidance_horizon: int = 10
     max_guidance_weight: float = 10.0
     prefix_attention_schedule: Literal["linear", "exp", "ones", "zeros"] = "linear"
 
     def __post_init__(self) -> None:
-        if self.execution_horizon < 1:
-            raise ValueError("execution_horizon must be positive")
-        if self.max_guidance_weight <= 0:
-            raise ValueError("max_guidance_weight must be positive")
+        if isinstance(self.guidance_horizon, bool) or not isinstance(
+            self.guidance_horizon, int
+        ):
+            raise TypeError("guidance_horizon must be an integer")
+        if self.guidance_horizon < 1:
+            raise ValueError("guidance_horizon must be positive")
+        if (
+            isinstance(self.max_guidance_weight, bool)
+            or not isinstance(self.max_guidance_weight, (int, float))
+            or not math.isfinite(self.max_guidance_weight)
+            or self.max_guidance_weight <= 0
+        ):
+            raise ValueError("max_guidance_weight must be finite and positive")
         if self.prefix_attention_schedule not in {"linear", "exp", "ones", "zeros"}:
             raise ValueError("unsupported RTC prefix schedule")
 
     def to_json_dict(self) -> dict[str, int | float | str | bool]:
         return {
-            "implementation": "lerobot_guided_upstream",
-            "execution_horizon": self.execution_horizon,
+            "implementation": "physical_intelligence_guided_vjp",
+            "guidance_horizon": self.guidance_horizon,
             "max_guidance_weight": self.max_guidance_weight,
             "prefix_attention_schedule": self.prefix_attention_schedule,
             "delta_rebase": True,
@@ -91,10 +100,10 @@ def guided_velocity(
     target = torch.zeros_like(x_t)
     overlap = min(previous_actions.shape[1], x_t.shape[1])
     target[:, :overlap, : previous_actions.shape[2]] = previous_actions[:, :overlap]
-    execution_horizon = min(config.execution_horizon, overlap)
+    guidance_horizon = min(config.guidance_horizon, overlap)
     weights = prefix_weights(
         inference_delay,
-        execution_horizon,
+        guidance_horizon,
         x_t.shape[1],
         config.prefix_attention_schedule,
         device=x_t.device,
@@ -106,10 +115,22 @@ def guided_velocity(
         time_tensor = time_tensor.reshape(1, 1, 1)
     elif time_tensor.ndim == 1:
         time_tensor = time_tensor[:, None, None]
-    latent = x_t.detach().clone()
-    velocity = denoise(latent)
-    predicted_actions = latent - time_tensor * velocity
-    correction = ((target - predicted_actions) * weights).detach()
+    # RTC guides the final-action estimate through the complete denoising map.
+    # Keeping the velocity's Jacobian here is the defining difference from a
+    # direct output-space blend.  ``sample_guided_actions`` is called below a
+    # no-grad inference boundary, so explicitly re-enable autograd for the VJP.
+    with torch.enable_grad():
+        latent = x_t.detach().clone().requires_grad_(True)
+        velocity = denoise(latent)
+        predicted_actions = latent - time_tensor * velocity
+        error = ((target - predicted_actions) * weights).detach()
+        correction = torch.autograd.grad(
+            predicted_actions,
+            latent,
+            grad_outputs=error,
+            retain_graph=False,
+            create_graph=False,
+        )[0]
 
     tau = 1.0 - time_tensor
     maximum = torch.as_tensor(
@@ -123,7 +144,7 @@ def guided_velocity(
         torch.nan_to_num(coefficient * inv_r2, posinf=maximum),
         maximum,
     )
-    return velocity - guidance_weight * correction
+    return (velocity - guidance_weight * correction).detach()
 
 
 def sample_guided_actions(
@@ -176,4 +197,182 @@ def sample_guided_actions(
         )
         delta = timesteps[index] - timesteps[index + 1]
         x_t = (x_t - delta * velocity).detach()
+    return x_t
+
+
+def sample_guided_openpi_rlinf_actions(
+    model: Any,
+    observation: Any,
+    previous_actions: Any,
+    *,
+    inference_delay: int,
+    num_steps: int,
+    config: GuidedRTCConfig,
+):
+    """Run guided RTC on RLinf's current ``openpi_rlinf`` Pi0 core."""
+
+    import torch
+    from rlinf.models.embodiment.openpi_rlinf.pi0_model import model as model_module
+
+    if num_steps < 1:
+        raise ValueError("RTC num_steps must be positive")
+    observation = model_module.preprocess_observation(observation, train=False)
+    with torch.no_grad():
+        _, prefix_mask, prefix_cache = model.build_prefix_cache(observation)
+        x_t = torch.randn(
+            previous_actions.shape[0],
+            model.action_horizon,
+            model.action_dim,
+            device=previous_actions.device,
+            dtype=torch.float32,
+        )
+
+    dt = -1.0 / num_steps
+    time = 1.0
+    while time >= -dt / 2:
+        time_tensor = torch.full(
+            (x_t.shape[0],),
+            time,
+            device=x_t.device,
+            dtype=torch.float32,
+        )
+
+        def denoise(latent, current_time=time_tensor):
+            suffix = model.run_suffix(
+                observation,
+                latent,
+                current_time,
+                prefix_cache,
+                prefix_mask,
+            )
+            return model.velocity_from_suffix(suffix)
+
+        velocity = guided_velocity(
+            x_t,
+            previous_actions,
+            inference_delay=inference_delay,
+            time=time_tensor,
+            denoise=denoise,
+            config=config,
+        )
+        x_t = (x_t + dt * velocity).detach()
+        time += dt
+    return x_t
+
+
+def sample_guided_cfg_actions(
+    model: Any,
+    observation: Any,
+    previous_actions: Any,
+    *,
+    inference_delay: int,
+    config: GuidedRTCConfig,
+):
+    """Compose RLINF CFG velocity first, then apply paper-faithful RTC."""
+
+    import torch
+    from openpi.models_pytorch.pi0_pytorch import make_att_2d_masks
+
+    guidance_type = model.config.guidance_type
+    if guidance_type not in {"positive", "negative", "no_guide"}:
+        raise ValueError(f"unsupported CFG guidance type: {guidance_type!r}")
+    if model.config.positive_only_conditional and guidance_type == "negative":
+        raise ValueError("negative CFG guidance requires negative-conditioned training")
+
+    with torch.no_grad():
+        (
+            images,
+            image_masks,
+            language,
+            language_masks,
+            positive_language,
+            positive_language_masks,
+            negative_language,
+            negative_language_masks,
+            state,
+        ) = model._preprocess_observation(observation, train=False)
+
+        def build_cache(tokens, masks):
+            prefix_embs, prefix_pad_masks, prefix_att_masks = model.embed_prefix(
+                images,
+                image_masks,
+                tokens,
+                masks,
+            )
+            attention = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
+            positions = torch.cumsum(prefix_pad_masks, dim=1) - 1
+            attention = model._prepare_attention_masks_4d(attention)
+            _, cache = model.paligemma_with_expert.forward(
+                attention_mask=attention,
+                position_ids=positions,
+                past_key_values=None,
+                inputs_embeds=[prefix_embs, None],
+                use_cache=True,
+            )
+            return prefix_pad_masks, cache
+
+        model.paligemma_with_expert.paligemma.language_model.config._attn_implementation = (
+            "eager"
+        )
+        uncond_masks, uncond_cache = build_cache(language, language_masks)
+        if guidance_type == "positive":
+            cond_masks, cond_cache = build_cache(
+                positive_language,
+                positive_language_masks,
+            )
+        elif guidance_type == "negative":
+            cond_masks, cond_cache = build_cache(
+                negative_language,
+                negative_language_masks,
+            )
+        else:
+            cond_masks = cond_cache = None
+
+        x_t = model.sample_noise(
+            (state.shape[0], model.config.action_horizon, model.config.action_dim),
+            state.device,
+        )
+
+    step_size = torch.tensor(
+        1.0 / model.config.num_steps,
+        dtype=torch.float32,
+        device=state.device,
+    )
+    for index in range(model.config.num_steps):
+        time = torch.full(
+            (state.shape[0],),
+            1.0 - index / model.config.num_steps,
+            dtype=torch.float32,
+            device=state.device,
+        )
+
+        def denoise(latent, current_time=time):
+            unconditional = model.denoise_step(
+                state,
+                uncond_masks,
+                uncond_cache,
+                latent,
+                current_time,
+            )
+            if guidance_type == "no_guide":
+                return unconditional
+            conditional = model.denoise_step(
+                state,
+                cond_masks,
+                cond_cache,
+                latent,
+                current_time,
+            )
+            scale = model.config.cfgrl_guidance_scale
+            return (1.0 - scale) * unconditional + scale * conditional
+
+        velocity = guided_velocity(
+            x_t,
+            previous_actions,
+            inference_delay=inference_delay,
+            time=time,
+            denoise=denoise,
+            config=config,
+        )
+        x_t = (x_t - step_size * velocity).detach()
     return x_t

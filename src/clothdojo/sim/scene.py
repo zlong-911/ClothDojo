@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass
+from math import ceil, sqrt
 from pathlib import Path
 
 import numpy as np
@@ -26,6 +27,8 @@ _PIPER_CONTACT_MARKER = f"{_PIPER_COLLISION_MARKER}contact_"
 _PIPER_PROXY_MARKER = f"{_PIPER_COLLISION_MARKER}self_collision_proxy_"
 _PIPER_CONTACT_SHAPE_COUNT = 99
 _PIPER_PROXY_SHAPE_COUNT = 27
+WORLD_LAYOUT = "centered_grid"
+WORLD_SPACING_M = 3.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +95,7 @@ class ShirtFlattenScene:
     arm_joint_coord_indices: tuple[int, ...]
     garment_particles_per_world: tuple[int, int]
     spec: ShirtFlattenSpec
+    world_offsets: tuple[tuple[float, float, float], ...]
 
 
 def build_shirt_flatten(
@@ -142,6 +146,10 @@ def build_shirt_flatten(
     particle_range = add_style3d_garment(template, garment_path, spec, mesh=garment_mesh)
     builder = newton.ModelBuilder(gravity=spec.gravity)
     _register_solver_attributes(newton, builder)
+    world_offsets = _centered_world_offsets(spec.world_count)
+    world_xforms = tuple(
+        wp.transform(offset, wp.quat_identity()) for offset in world_offsets
+    )
     if visuals:
         # The NOCS proxy deforms independently in each world. Build one public
         # ModelBuilder world per proxy so Newton owns distinct Mesh buffers;
@@ -158,11 +166,12 @@ def build_shirt_flatten(
                 garment_mesh[0],
                 mesh_identity=world_index,
             )
-            builder.add_world(world)
+            builder.add_world(world, xform=world_xforms[world_index])
     else:
-        # Newton 1.5 recommends colocated worlds and merges all replicated
-        # copies in one pass instead of composing them one at a time.
-        builder.replicate(template, spec.world_count)
+        # SolverStyle3D 1.5 owns an ungrouped self-collision BVH. Physically
+        # separate worlds so its broad phase cannot create cross-world cloth
+        # contacts; project boundaries convert back to world-local coordinates.
+        builder.replicate(template, spec.world_count, xforms=world_xforms)
     model = builder.finalize(device=device, requires_grad=False)
     model.soft_contact_ke = spec.soft_contact_ke
     model.soft_contact_kd = spec.soft_contact_kd
@@ -178,16 +187,39 @@ def build_shirt_flatten(
             f"got {robot.count} for {spec.world_count} worlds"
         )
     return ShirtFlattenScene(
-        model,
-        robot,
-        arms,
-        grippers,
-        end_effectors,
-        tuple(end_effector_links),
-        tuple(arm_coords),
-        particle_range,
-        spec,
+        model=model,
+        robot=robot,
+        arms=arms,
+        grippers=grippers,
+        end_effectors=end_effectors,
+        end_effector_body_indices=tuple(end_effector_links),
+        arm_joint_coord_indices=tuple(arm_coords),
+        garment_particles_per_world=particle_range,
+        spec=spec,
+        world_offsets=world_offsets,
     )
+
+
+def _centered_world_offsets(
+    world_count: int,
+) -> tuple[tuple[float, float, float], ...]:
+    """Place physics worlds on a compact centered grid for Style3D isolation."""
+
+    if world_count < 1:
+        raise ValueError("world_count must be positive")
+    columns = ceil(sqrt(world_count))
+    rows = ceil(world_count / columns)
+    offsets = []
+    for world in range(world_count):
+        row, column = divmod(world, columns)
+        offsets.append(
+            (
+                (column - 0.5 * (columns - 1)) * WORLD_SPACING_M,
+                (row - 0.5 * (rows - 1)) * WORLD_SPACING_M,
+                0.0,
+            )
+        )
+    return tuple(offsets)
 
 
 def _register_solver_attributes(newton, builder) -> None:

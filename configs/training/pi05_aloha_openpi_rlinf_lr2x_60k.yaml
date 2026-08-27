@@ -4,6 +4,13 @@ hydra:
     dir: .
   output_subdir: null
 
+# This recipe is a framework comparison, so its numerical contract is derived
+# from the named JAX trial instead of being duplicated in project Python code.
+clothdojo:
+  jax_reference:
+    matrix: pi05_aloha_jax_lr2x_60k_seed43.yaml
+    trial: decay60k_lr2x_seed43
+
 cluster:
   num_nodes: 1
   component_placement:
@@ -16,8 +23,8 @@ runner:
   logger:
     log_path: ${oc.env:CLOTHDOJO_TRAIN_OUTPUT}
     project_name: clothdojo
-    experiment_name: shirt_flatten_pi05_openpi_rlinf_lr2x_60k_seed42
-    logger_backends: [tensorboard]
+    experiment_name: shirt_flatten_pi05_openpi_rlinf_lr2x_60k_seed43
+    logger_backends: [tensorboard, wandb]
   max_epochs: -1
   # Fixed training budget: there is no metric-based early stopping.
   max_steps: 60000
@@ -28,6 +35,7 @@ runner:
 
 data:
   train_data_paths: ${oc.env:CLOTHDOJO_LEROBOT_DATASET}
+  openpi_data_home: ${oc.env:CLOTHDOJO_OPENPI_CACHE}
   # RLINF interprets this per rank, so 2 means 16 decoder workers on 8 ranks.
   num_workers: 2
 
@@ -36,7 +44,8 @@ actor:
   training_backend: fsdp
   micro_batch_size: 8
   global_batch_size: 64
-  seed: 42
+  # Match the completed JAX lr2x-60k comparison run.
+  seed: 43
   model:
     model_type: openpi_rlinf
     model_path: ${oc.env:CLOTHDOJO_PI05_CHECKPOINT}
@@ -81,6 +90,10 @@ actor:
     lr_scheduler: openpi_cosine
     num_cycles: 0.5
     min_lr: 5.0e-6
+    # OpenPI/JAX publishes EMA weights for inference while retaining online
+    # weights and optimizer state for resume. The project worker preserves the
+    # same checkpoint contract for RLINF.
+    ema_decay: 0.99
   fsdp_config:
     strategy: fsdp
     sharding_strategy: full_shard
@@ -94,6 +107,9 @@ actor:
     forward_prefetch: false
     limit_all_gathers: false
     backward_prefetch: null
+    # The worker writes EMA inference weights at the standard full-weights
+    # path; RLINF's DCP checkpoint remains the online resumable training state.
+    save_full_model_weights: false
     use_liger_kernel: false
     mixed_precision:
       param_dtype: bf16

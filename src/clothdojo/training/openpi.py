@@ -15,12 +15,16 @@ def compute_norm_stats(
     output_root: str | Path,
     *,
     config_name: str = "pi05_aloha_robotwin",
+    default_prompt: str = "Flatten the shirt.",
     block_size: int = 4096,
 ) -> dict[str, Any]:
     """Compute exact state/action stats with the same transforms as training."""
 
     if isinstance(block_size, bool) or block_size < 1:
         raise ValueError("block_size must be positive")
+    default_prompt = default_prompt.strip()
+    if not default_prompt:
+        raise ValueError("default_prompt must not be empty")
     dataset = Path(dataset_root).expanduser().resolve()
     output = Path(output_root).expanduser().resolve()
     info_path = dataset / "meta/info.json"
@@ -61,7 +65,7 @@ def compute_norm_stats(
     data_kwargs = {
         "adapt_to_pi": False,
         "extra_delta_transform": True,
-        "default_prompt": "Flatten the shirt.",
+        "default_prompt": default_prompt,
     }
     config = get_openpi_config(
         config_name,

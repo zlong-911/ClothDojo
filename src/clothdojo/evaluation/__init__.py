@@ -1,9 +1,8 @@
-"""Versioned, policy-independent cloth evaluation primitives."""
+"""Policy-independent cloth evaluation primitives."""
 
 from clothdojo.evaluation.metric import (
     CanonicalTemplate,
     FactorizedMetricValues,
-    TorchFactorizedClothMetric,
     factorized_cloth_distance,
     load_canonical_template,
     save_canonical_template,
@@ -11,7 +10,7 @@ from clothdojo.evaluation.metric import (
 from clothdojo.evaluation.protocol import (
     CanonicalTargetProtocol,
     EvaluationProtocol,
-    StableSuccessTracker,
+    SuccessTracker,
     load_evaluation_protocol,
 )
 from clothdojo.evaluation.results import (
@@ -29,8 +28,7 @@ __all__ = [
     "EvaluationCaseResult",
     "EvaluationProtocol",
     "FactorizedMetricValues",
-    "StableSuccessTracker",
-    "TorchFactorizedClothMetric",
+    "SuccessTracker",
     "factorized_cloth_distance",
     "load_canonical_template",
     "load_evaluation_condition",

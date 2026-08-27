@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 
 EVALUATION_RESULT_SCHEMA = "clothdojo_evaluation_condition"
-EVALUATION_RESULT_FORMAT_VERSION = 2
+SUCCESS_CHECKPOINT_SECONDS = (30, 45, 60, 75, 90)
 
 
 @dataclass(frozen=True, order=True, slots=True)
@@ -31,15 +31,15 @@ class EvaluationCaseResult:
     success: bool
     success_at_end: bool
     confirmed_step: int | None
-    stable_since_step: int | None
     terminal_deformable_distance: float
     terminal_rigid_distance: float
     terminal_combined_distance: float
     terminal_speed_rms_m_s: float
-    best_settled_step: int | None
-    best_settled_deformable_distance: float | None
-    best_settled_rigid_distance: float | None
-    best_settled_combined_distance: float | None
+    best_observed_step: int
+    best_observed_deformable_distance: float
+    best_observed_rigid_distance: float
+    best_observed_combined_distance: float
+    time_average_combined_distance: float | None = None
 
     def __post_init__(self) -> None:
         if not self.key.asset_id:
@@ -52,41 +52,37 @@ class EvaluationCaseResult:
             raise ValueError("success fields must be booleans")
         if self.success != (self.confirmed_step is not None):
             raise ValueError("success and confirmed_step disagree")
-        if (self.confirmed_step is None) != (self.stable_since_step is None):
-            raise ValueError("confirmed_step and stable_since_step must appear together")
         if self.confirmed_step is not None:
-            if any(
-                isinstance(value, bool) or not isinstance(value, int) or value < 0
-                for value in (self.confirmed_step, self.stable_since_step)
+            if (
+                isinstance(self.confirmed_step, bool)
+                or not isinstance(self.confirmed_step, int)
+                or self.confirmed_step < 0
             ):
-                raise ValueError("success steps must be non-negative integers")
-            if self.stable_since_step > self.confirmed_step:
-                raise ValueError("stable_since_step cannot follow confirmed_step")
-        best_values = (
-            self.best_settled_step,
-            self.best_settled_deformable_distance,
-            self.best_settled_rigid_distance,
-            self.best_settled_combined_distance,
-        )
-        if any(value is None for value in best_values) != all(
-            value is None for value in best_values
+                raise ValueError("confirmed_step must be a non-negative integer")
+        if (
+            isinstance(self.best_observed_step, bool)
+            or not isinstance(self.best_observed_step, int)
+            or self.best_observed_step < 0
         ):
-            raise ValueError("best-settled fields must be all null or all present")
-        if self.best_settled_step is not None and (
-            isinstance(self.best_settled_step, bool)
-            or not isinstance(self.best_settled_step, int)
-            or self.best_settled_step < 0
-        ):
-            raise ValueError("best_settled_step must be a non-negative integer")
+            raise ValueError("best_observed_step must be a non-negative integer")
         numeric = (
             self.terminal_deformable_distance,
             self.terminal_rigid_distance,
             self.terminal_combined_distance,
             self.terminal_speed_rms_m_s,
-            *(value for value in best_values[1:] if value is not None),
+            self.best_observed_deformable_distance,
+            self.best_observed_rigid_distance,
+            self.best_observed_combined_distance,
         )
         if not np.isfinite(numeric).all() or any(value < 0.0 for value in numeric):
             raise ValueError("evaluation metrics must be finite and non-negative")
+        if self.time_average_combined_distance is not None and (
+            not np.isfinite(self.time_average_combined_distance)
+            or self.time_average_combined_distance < 0.0
+        ):
+            raise ValueError(
+                "time_average_combined_distance must be finite and non-negative"
+            )
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -98,23 +94,19 @@ class EvaluationCaseResult:
             "success": self.success,
             "success_at_end": self.success_at_end,
             "confirmed_step": self.confirmed_step,
-            "stable_since_step": self.stable_since_step,
             "terminal": {
                 "deformable_distance": self.terminal_deformable_distance,
                 "rigid_distance": self.terminal_rigid_distance,
                 "combined_distance": self.terminal_combined_distance,
                 "speed_rms_m_s": self.terminal_speed_rms_m_s,
             },
-            "best_settled": (
-                None
-                if self.best_settled_step is None
-                else {
-                    "step": self.best_settled_step,
-                    "deformable_distance": self.best_settled_deformable_distance,
-                    "rigid_distance": self.best_settled_rigid_distance,
-                    "combined_distance": self.best_settled_combined_distance,
-                }
-            ),
+            "best_observed": {
+                "step": self.best_observed_step,
+                "deformable_distance": self.best_observed_deformable_distance,
+                "rigid_distance": self.best_observed_rigid_distance,
+                "combined_distance": self.best_observed_combined_distance,
+            },
+            "time_average_combined_distance": self.time_average_combined_distance,
         }
 
 
@@ -167,8 +159,6 @@ def load_evaluation_condition(source: str | Path) -> EvaluationConditionResults:
         raise RuntimeError(f"cannot read evaluation condition {root}: {exc}") from exc
     if meta.get("schema") != EVALUATION_RESULT_SCHEMA:
         raise ValueError("unsupported evaluation result schema")
-    if meta.get("format_version") != EVALUATION_RESULT_FORMAT_VERSION:
-        raise ValueError("unsupported evaluation result version")
     if meta.get("status") != "complete":
         raise RuntimeError("evaluation condition is not complete")
     relative = meta.get("results")
@@ -203,7 +193,6 @@ def summarize_paired_conditions(sources: Iterable[str | Path]) -> dict[str, Any]
     identity = (
         reference.meta["protocol"]["fingerprint"],
         reference.meta["scenario"],
-        reference.meta["initial_states_sha256"],
         reference.meta["initial_state_pools"],
         reference.meta["templates"],
         reference.horizon_steps,
@@ -216,7 +205,6 @@ def summarize_paired_conditions(sources: Iterable[str | Path]) -> dict[str, Any]
         actual_identity = (
             condition.meta["protocol"]["fingerprint"],
             condition.meta["scenario"],
-            condition.meta["initial_states_sha256"],
             condition.meta["initial_state_pools"],
             condition.meta["templates"],
             condition.horizon_steps,
@@ -267,7 +255,6 @@ def summarize_paired_conditions(sources: Iterable[str | Path]) -> dict[str, Any]
         )
     return {
         "schema": "clothdojo_evaluation_summary",
-        "format_version": 2,
         "protocol": reference.meta["protocol"],
         "initial_states_sha256": reference.meta["initial_states_sha256"],
         "templates": reference.meta["templates"],
@@ -303,6 +290,23 @@ def _condition_summary(condition, mapping, ordered_keys):
         for asset in assets
     }
     successful_times = completion[successes]
+    time_averages = [
+        mapping[key].time_average_combined_distance for key in ordered_keys
+    ]
+    success_rates_by_seconds = {
+        str(seconds): float(
+            np.mean(
+                [
+                    mapping[key].confirmed_step is not None
+                    and mapping[key].confirmed_step
+                    <= seconds * condition.control_fps
+                    for key in ordered_keys
+                ]
+            )
+        )
+        for seconds in SUCCESS_CHECKPOINT_SECONDS
+        if seconds <= horizon_seconds
+    }
     return {
         "condition_id": condition.condition_id,
         "case_count": len(ordered_keys),
@@ -310,6 +314,7 @@ def _condition_summary(condition, mapping, ordered_keys):
         "success_rate_micro": float(successes.mean()),
         "success_at_end_rate_micro": float(successes_at_end.mean()),
         "success_rate_asset_macro": float(np.mean(list(asset_rates.values()))),
+        "success_rate_by_seconds": success_rates_by_seconds,
         "asset_success_rates": asset_rates,
         "restricted_mean_completion_seconds": float(completion.mean()),
         "median_success_time_seconds": (
@@ -317,6 +322,23 @@ def _condition_summary(condition, mapping, ordered_keys):
         ),
         "terminal_combined_distance_mean": float(
             np.mean([mapping[key].terminal_combined_distance for key in ordered_keys])
+        ),
+        "best_observed_combined_distance_mean": float(
+            np.mean([mapping[key].best_observed_combined_distance for key in ordered_keys])
+        ),
+        "terminal_minus_best_combined_distance_mean": float(
+            np.mean(
+                [
+                    mapping[key].terminal_combined_distance
+                    - mapping[key].best_observed_combined_distance
+                    for key in ordered_keys
+                ]
+            )
+        ),
+        "time_average_combined_distance_mean": (
+            None
+            if any(value is None for value in time_averages)
+            else float(np.mean(time_averages))
         ),
         "terminal_speed_rms_m_s_mean": float(
             np.mean([mapping[key].terminal_speed_rms_m_s for key in ordered_keys])
@@ -330,9 +352,9 @@ def _case_from_json(value: Any) -> EvaluationCaseResult:
     terminal = value.get("terminal")
     if not isinstance(terminal, dict):
         raise ValueError("evaluation case terminal metric is invalid")
-    best = value.get("best_settled")
-    if best is not None and not isinstance(best, dict):
-        raise ValueError("evaluation case best_settled metric is invalid")
+    best = value.get("best_observed")
+    if not isinstance(best, dict):
+        raise ValueError("evaluation case best_observed metric is invalid")
     return EvaluationCaseResult(
         key=EvaluationCaseKey(
             asset_id=str(value["asset_id"]),
@@ -344,19 +366,17 @@ def _case_from_json(value: Any) -> EvaluationCaseResult:
         success=value["success"],
         success_at_end=value["success_at_end"],
         confirmed_step=value.get("confirmed_step"),
-        stable_since_step=value.get("stable_since_step"),
         terminal_deformable_distance=float(terminal["deformable_distance"]),
         terminal_rigid_distance=float(terminal["rigid_distance"]),
         terminal_combined_distance=float(terminal["combined_distance"]),
         terminal_speed_rms_m_s=float(terminal["speed_rms_m_s"]),
-        best_settled_step=None if best is None else int(best["step"]),
-        best_settled_deformable_distance=(
-            None if best is None else float(best["deformable_distance"])
-        ),
-        best_settled_rigid_distance=(
-            None if best is None else float(best["rigid_distance"])
-        ),
-        best_settled_combined_distance=(
-            None if best is None else float(best["combined_distance"])
+        best_observed_step=int(best["step"]),
+        best_observed_deformable_distance=float(best["deformable_distance"]),
+        best_observed_rigid_distance=float(best["rigid_distance"]),
+        best_observed_combined_distance=float(best["combined_distance"]),
+        time_average_combined_distance=(
+            None
+            if value.get("time_average_combined_distance") is None
+            else float(value["time_average_combined_distance"])
         ),
     )

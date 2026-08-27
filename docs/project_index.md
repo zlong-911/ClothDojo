@@ -1,133 +1,74 @@
-# Project index
+# 项目索引
 
-- `requirements.txt`: the single readable environment definition.
-- `pyproject.toml`: package metadata, CLI registration and tool configuration.
-- `src/clothdojo/cli.py`: the only user-facing command dispatcher.
-- `src/clothdojo/diagnostics.py`: installation and runtime compatibility check.
-- `src/clothdojo/training/rlinf.py`: `openpi-rlinf`, STEAM and CFG training adapter.
-- `src/clothdojo/training/openpi_rlinf_sft.py`: current RLINF OpenPI worker boundary.
-- `src/clothdojo/training/steam.py`: STEAM critic data/hyperparameter gates,
-  launch manifest and three-member checkpoint merge.
-- `src/clothdojo/training/rlinf_steam.py`: deterministic RLINF STEAM loader,
-  state/full-model training and FP32-master runtime adapter.
-- `src/clothdojo/training/steam_dataloader.py`: forkserver-safe loader entrypoint.
-- `configs/training/steam_value_shirt_flatten.yaml`: shared production contract
-  for three independent 8-GPU STEAM evaluator members.
+本文件只用于定位稳定入口，不解释具体功能或实验参数。
 
-- `src/clothdojo/training/rlinf_cfg.py`: registered RLINF CFG model/worker
-  extension that preserves ClothDojo's OpenPI data settings.
-- `src/clothdojo/training/cfg.py`: static two-dataset CFG compatibility and
-  exact advantage-coverage gate.
-- `src/clothdojo/training/steam_advantages.py`: owned distributed STEAM
-  inference, quantile labeling and atomic provenance publication.
-- `src/clothdojo/training/cfg_pipeline.py`: locked and status-recorded
-  STEAM-labeling → data-gate → CFG transition.
-- `src/clothdojo/training/episode_selection.py`: explicit reviewed episode
-  split shared by labeling and CFG sampling.
-- `src/clothdojo/training/openpi.py`: exact ALOHA normalization statistics
-  using the same transforms as RLINF training.
-- `src/clothdojo/training/jax_sft.py`: `openpi-jax` SFT entry, strict Orbax
-  initialization, short-run gates and EMA/online checkpoint roles.
-- `src/clothdojo/training/matrix.py`: durable sequential JAX SFT parameter
-  matrix that records per-gate state and continues with the next reviewed trial
-  after a failed trial.
-- `configs/training/pi05_aloha_jax.yaml`: 8-GPU OpenPI/JAX 40,000-update
-  contract aligned to the original OpenPI optimizer and precision policy.
-- `configs/training/pi05_aloha_jax_matrix.yaml`: paired LR/schedule/batch
-  experiments with sample-equivalent logging and checkpoint intervals.
-- `configs/training/pi05_aloha.yaml`: reviewed-good ALOHA π0.5 RLINF
-  contract for the 8-GPU, 40,000-update baseline.
-- `configs/training/cfg_pi05_aloha.yaml`: guarded expert/RTC CFG mixture,
-  external artifact references and 50-update evaluation checkpoints.
-- `configs/training/steam_advantages_pi05_aloha.yaml`: accepted STEAM
-  checkpoint, two-view scoring inputs, q80/q30 labels and eight-GPU inference.
-- `configs/rollout/shirt_flatten.yaml`: production 1,800-step rollout scenario.
-- `configs/evaluation/shirt_flatten.yaml`: calibration-stage, fingerprinted
-  flattening success and timeout protocol.
-- `src/clothdojo/rollout/initial_states.py`: validated garment-specific initial
-  state pool and batched Newton generator.
-- `src/clothdojo/rollout/policy.py`: identity-checked remote client and released
-  RLINF SFT policy service.
-- `src/clothdojo/rollout/guided_rtc.py`: minimal adapter matching LeRobot
-  guided RTC for RLINF's OpenPI flow sampler.
-- `src/clothdojo/rollout/collection.py`: dynamic multi-GPU scheduling,
-  fixed-size same-asset world batches and canonical multi-trajectory manifest.
-- `src/clothdojo/rollout/engine.py`: the one synchronized batch loop for chunk
-  and zero-delay RTC; one world is simply a batch of one.
-- `src/clothdojo/rollout/newton.py`: exact batched ALOHA action mapping and
-  per-world atomic trajectory publication.
-- `src/clothdojo/rollout/render.py`: three-view tiled RGB observations from the
-  live simulation model.
-- `src/clothdojo/evaluation/`: canonical factorized metric, GPU success
-  tracker, compact condition runner and exact paired summarizer.
-- `src/clothdojo/trajectory/`: trajectory dataset definition and atomic I/O.
-- `src/clothdojo/trajectory/newton.py`: one-way Newton-to-trajectory adapter.
-- `src/clothdojo/data/annotations.py`: bad-only annotation complement and
-  deterministic output episode plan.
-- `src/clothdojo/data/review_source.py`: narrow read-only adapter for the old
-  single-episode LeRobot v3 review cache.
-- `src/clothdojo/data/lerobot.py`: transactional pinned-LeRobot v2.1 writer,
-  export provenance and STEAM episode selection.
-- `src/clothdojo/data/v3_indexed_view.py`: atomic one-way v3-to-v2.1
-  publication without video re-encoding.
-- `src/clothdojo/data/indexed_lerobot.py`: project-owned per-camera timestamp
-  index reader used by CFG and STEAM.
-- `src/clothdojo/data/rollout.py`: offline trajectory replay and transactional
-  multi-episode LeRobot rollout export.
-- `configs/migration/cfg_*_v3_indexed_view.yaml`: exact historical CFG input
-  migration contracts.
-- `src/clothdojo/assets/garments.py`: minimal source/selection/converted garment
-  storage shared by the collection console and simulator.
-- `src/clothdojo/collection/config.py`: strict collection profiles and the two
-  user-facing teleoperation choices; runtime installation paths are excluded.
-- `src/clothdojo/collection/assets.py`: paginated garment curation over the
-  canonical selection file.
-- `src/clothdojo/collection/review.py`: trajectory/review index and
-  revision-guarded atomic annotations.
-- `src/clothdojo/collection/hil.py`: rollout review and immutable HIL
-  intervention plans plus completed-branch indexing.
-- `src/clothdojo/collection/continuation.py`: validated terminal-state discovery,
-  consumption tracking and immutable continuation plans.
-- `src/clothdojo/collection/workspace.py`: stable view-model adapter between
-  the preserved old workspace and ClothDojo's canonical catalogs.
-- `src/clothdojo/collection/web.py`: local FastAPI control plane and static
-  four-panel browser workspace.
-- `src/clothdojo/collection/supervisor.py`: local SQLite GPU leases, fixed
-  process launch, PID reconciliation and bounded session logs.
-- `src/clothdojo/collection/static/`: the old console's DOM, CSS and interaction
-  design, mechanically split into HTML/CSS/JavaScript without a Node runtime.
-- `src/clothdojo/teleop/`: fixed CloudXR/Isaac application entry, OpenXR input,
-  Newton 1.5 IK/control, full-state cold restore, Fabric/NOCS display bridge and
-  canonical recording.
-- `src/clothdojo/teleop/teleop.kit`: packaged minimal Isaac RTX/OpenXR
-  experience; it intentionally excludes Isaac's Warp extension.
-- `src/clothdojo/sim/cloth.py`: converted-USDC to public Style3D builder boundary.
-- `src/clothdojo/sim/scene.py`: minimal Piper/table/garment scene and Newton 1.5
-  batch replication.
-- `src/clothdojo/sim/runtime.py`: explicit MuJoCo/Style3D control and reset.
-- `src/clothdojo/sim/grasp.py`: fixed-allocation expert four-seed/two-ring
-  connected cloth-patch grasp.
-- `src/clothdojo/sim/check.py`: executable full-scene acceptance gate.
-- `assets/robots/piper/piper.usda`: simplified entry to the Piper USD closure,
-  including the authored 99-contact/27-proxy expert collision layer; no URDF or
-  custom collision cache is required at runtime.
-- `assets/`: project-local source, preview and converted assets; ignored by Git.
-- `docs/architecture.md`: system boundaries and dependency direction.
-- `docs/migration.md`: ordered migration with acceptance gates.
-- `docs/trajectory.md`: temporal alignment, fields and persistence guarantees.
-- `docs/lerobot_export.md`: reviewed data selection, conversion and acceptance
-  contract.
-- `docs/pi05_sft.md`: evidence-backed Pi0.5 SFT contract and launch preflight.
-- `docs/pi05_jax_sft.md`: authoritative JAX SFT contract, launch gates and
-  conversion boundary into RLINF.
-- `docs/newton_15_audit.md`: public API changes and physics acceptance gates.
-- `docs/rlinf_delta_audit.md`: disposition of all 19 old RLINF source changes.
-- `docs/rtc_rollout.md`: RTC execution, rendering and publication acceptance
-  contract.
-- `docs/evaluation.md`: canonical targets, stable success semantics, condition
-  pairing and benchmark output contract.
-- `docs/collection.md`: collection data ownership, web/control boundary and
-  fixed NVIDIA Isaac Teleop + CloudXR runtime architecture.
-- `docs/offline_cfg.md`: RTC rollout-to-CFG artifact contract, readiness and
-  remote launch gate.
-- `docs/todo.md`: deferred decisions with long-term risk.
+## 顶层文件
+
+| 位置 | 用途 |
+| --- | --- |
+| `README.md` | 项目总览和最短使用入口 |
+| `AGENTS.md` | Agent 的协作、表达、实现与工具约定 |
+| `requirements.txt` | 默认仿真、训练和数据环境定义 |
+| `requirements-isaac-render.txt` | 可选 Isaac Sim 5 离线渲染依赖 |
+| `pyproject.toml` | 包、CLI、pytest 和 Ruff 配置 |
+| `paper/` | 论文工程；中文初稿为 `paper/draft_zh.md`，LaTeX 入口为 `paper/main.tex` |
+| `configs/` | 运行与实验配置 |
+| `assets/` | 项目资产 |
+| `configs/rendering/materials.json` | 高质量视觉材质与 HDRI 的固定选择清单 |
+| `data/` | 正式数据与模型产物 |
+| `data/visual-assets/polyhaven/` | Poly Haven CC0 材质的本地 2K 工作副本 |
+| `outputs/` | 可删除的运行输出 |
+| `tests/` | 长期回归测试 |
+
+## 源码
+
+| 位置 | 职责 |
+| --- | --- |
+| `src/clothdojo/cli.py` | 用户命令入口 |
+| `src/clothdojo/diagnostics.py` | 环境诊断 |
+| `src/clothdojo/assets/` | 资产目录与元数据 |
+| `src/clothdojo/assets/materials.py` | Poly Haven 固定清单、下载校验与物理纹理尺度 |
+| `src/clothdojo/sim/` | 仿真场景与运行时 |
+| `src/clothdojo/rendering.py` | Newton 与 Isaac 共用的四视角标定及策略观测 contract |
+| `src/clothdojo/trajectory/` | 遥操、rollout 与评测共用的轨迹格式、读写和 Newton capture |
+| `src/clothdojo/data/` | 数据转换与导出 |
+| `src/clothdojo/data/rollout_review.py` | canonical rollout 的无 solver 轻量 HIL 审查视频 |
+| `src/clothdojo/collection/` | 采集控制面 |
+| `src/clothdojo/teleop/` | 遥操运行时 |
+| `src/clothdojo/training/` | 训练与数据处理入口 |
+| `src/clothdojo/training/jax_sft.py` | `openpi-jax` 单次与矩阵训练入口 |
+| `src/clothdojo/training/openpi_rlinf_sft.py` | `openpi-rlinf` 的 deterministic loader、FP32 master 与 EMA checkpoint worker 边界 |
+| `src/clothdojo/training/steam.py` | STEAM critic 数据/超参数门禁、launch manifest 与三成员 checkpoint 合并 |
+| `src/clothdojo/training/rlinf_steam.py` | RLINF STEAM 的确定性 DataLoader、state/full-model 与 FP32-master 运行时适配 |
+| `configs/training/steam_value_shirt_flatten.yaml` | 三个独立 8-GPU STEAM evaluator member 共用的正式训练配置 |
+| `src/clothdojo/rollout/` | 策略执行、共用 trajectory collection runner 与轨迹生成 |
+| `src/clothdojo/rollout/policy.py` | SFT/CFG 服务、远端协议与 CFG+RTC 组合 |
+| `src/clothdojo/rollout/guided_rtc.py` | Physical Intelligence guided RTC 数学 |
+| `src/clothdojo/rollout/conversion.py` | JAX EMA 到 rollout checkpoint 的一次性受检转换 |
+| `src/clothdojo/rollout/parity.py` | JAX/PyTorch 同观测、同噪声的数值对齐门禁 |
+| `src/clothdojo/rollout/trajectory_collection.py` | rollout 与 evaluation 共用的 worker、batch、轨迹恢复和事务发布 |
+| `src/clothdojo/data/rollout.py` | canonical rollout 的 LeRobot 四视角发布 |
+| `src/clothdojo/data/isaac_render.py` | 同一导出入口的 Isaac RTX 与逐 episode 外观随机化后端 |
+| `src/clothdojo/training/cfg_pipeline.py` | STEAM advantage、数据 gate 与 CFG launch |
+| `src/clothdojo/evaluation/collection.py` | 评测 condition 规划、离线 scoring 与发布 |
+| `src/clothdojo/evaluation/scoring.py` | canonical trajectory 的离线指标计算 |
+| `src/clothdojo/evaluation/results.py` | condition 读取与配对汇总 |
+
+新增代码前先检查现有目录是否已经拥有对应职责。具体命令和参数使用：
+
+```bash
+.venv/bin/clothdojo --help
+.venv/bin/clothdojo <command> --help
+```
+
+## 文档
+
+- [`development.md`](development.md)：环境、工具和目录约定。
+- [`benchmark.md`](benchmark.md)：严重褶皱服装展平 benchmark 的数据路径与实验规划。
+- [`reference_index.md`](reference_index.md)：官方文档与源码入口。
+- [`compute_hosts.md`](compute_hosts.md)：远端计算节点。
+- [`experiments/rapid_iteration_evaluation.md`](experiments/rapid_iteration_evaluation.md)：
+  checkpoint chunk 对比与 RTC 参数初步评测结果。
+- [`todo.md`](todo.md)：用户明确保留的长期事项。
+
+旧项目位于 `/cfs/mlp/training/docker/user/hadoop-aipnlp/huangzilong09/repos/newton-cloth-rl`，只用于查找历史行为和证据。

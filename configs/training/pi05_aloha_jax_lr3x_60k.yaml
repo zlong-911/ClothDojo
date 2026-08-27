@@ -1,0 +1,22 @@
+schema: clothdojo_pi05_jax_matrix
+format_version: 1
+name: pi05_aloha_reviewed_good_lr3x_60k_20260827
+base_config: pi05_aloha_jax.yaml
+status_dir: ${oc.env:CLOTHDOJO_JAX_MATRIX_DIR}
+continue_on_error: false
+stages: [initialize, overfit, pilot, parity, full]
+
+# The previous sweep ended at 2x, so its optimum was not bracketed. This run
+# tests the next conservative point while using the same extended budget and
+# checkpoint cadence as the 2x replication.
+trials:
+  - name: decay60k_lr3x
+    overrides:
+      - experiment.profile=decay_60k_lr_3x
+      - training.num_train_steps=60000
+      - optimizer.peak_lr=7.5e-5
+      - optimizer.decay_steps=60000
+      - optimizer.decay_lr=7.5e-6
+      - gates.pilot_steps=3000
+      - logging.run_name=shirt_flatten_reviewed_good_pi05_jax_decay60k_lr3x
+      - logging.wandb_group=pi05_sft_lr_60k

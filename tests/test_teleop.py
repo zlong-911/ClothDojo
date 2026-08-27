@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from clothdojo.teleop.cloudxr_slot import _write_overrides
+from clothdojo.teleop.cloudxr_slot import _app_started, _startup_timeout, _write_overrides
 from clothdojo.teleop.control import (
     BimanualTeleopController,
     TeleopSafetyConfig,
@@ -14,10 +14,12 @@ from clothdojo.teleop.control import (
     XRHandFrame,
 )
 from clothdojo.teleop.ik import DualArmIKController
+from clothdojo.teleop.install import TeleopInstallation
 from clothdojo.teleop.interaction import ButtonEdges, HomeReturn
 from clothdojo.teleop.isaac_app import (
     _configure_openusd_startup,
     _prime_changed_inputs,
+    _simulation_app_config,
     _targets_changed,
 )
 from clothdojo.teleop.openxr import IsaacOpenXRBackend
@@ -111,6 +113,38 @@ def test_cloudxr_pacing_targets_the_measured_teleop_rate(tmp_path, monkeypatch) 
 
     assert "NV_MAX_FPS=20\n" in config
     assert "NV_CXR_GPU_INDEX_VULKAN=0\n" in config
+
+
+def test_nonzero_gpu_keeps_physical_cuda_and_vulkan_indices_aligned(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "7")
+    installation = TeleopInstallation(
+        root=tmp_path / "runtime",
+        python=tmp_path / "python",
+        cloudxr_library_dir=tmp_path / "libraries",
+        web_client_dir=tmp_path / "client",
+        nvenc_filter=None,
+    )
+    environment = installation.environment(
+        gpu_id=1,
+        slot_root=tmp_path / "slot",
+        source_root=tmp_path / "src",
+    )
+    plan = SimpleNamespace(gpu_id=1)
+    config = _simulation_app_config(plan, tmp_path / "isaac")
+
+    assert "CUDA_VISIBLE_DEVICES" not in environment
+    assert environment["WARP_CACHE_PATH"] == str(tmp_path / "warp-cache")
+    assert config["active_gpu"] == 1
+    assert config["physics_gpu"] == 1
+    assert config["enable_crashreporter"] is False
+
+
+def test_cloudxr_startup_state_converges_only_after_isaac_is_ready() -> None:
+    assert not _app_started(None)
+    assert not _app_started({"state": "starting", "phase": "building_newton"})
+    assert _app_started({"state": "waiting_for_vr"})
+    assert _app_started({"state": "collecting"})
+    assert _startup_timeout("building_newton") > _startup_timeout("starting_isaac")
 
 
 def test_isaac_limits_openusd_traversal_before_kit_startup(monkeypatch) -> None:

@@ -31,9 +31,7 @@ class ReviewCatalog:
         self.profile = profile
         self._lock = threading.RLock()
         self._source_cache: tuple[tuple[int, int], dict[str, ReviewSource]] | None = None
-        self._episode_cache: tuple[tuple[tuple[int, int], ...], list[dict[str, Any]]] | None = (
-            None
-        )
+        self._episode_cache: tuple[tuple[tuple[int, int], ...], list[dict[str, Any]]] | None = None
 
     def episodes(self, *, page: int = 1, page_size: int = 50) -> dict:
         if page < 1:
@@ -152,9 +150,10 @@ class ReviewCatalog:
         root = self.profile.trajectory_root
         if not root.is_dir():
             return []
-        stamp = tuple(
-            _directory_stamp(path)
-            for path in (root, root / "annotations", self.profile.review_root)
+        stamp = (
+            _file_set_stamp(root, "*/manifest.json"),
+            _file_set_stamp(root / "annotations", "*.segments.json"),
+            (_directory_stamp(self.profile.review_root),),
         )
         with self._lock:
             if self._episode_cache is not None and self._episode_cache[0] == stamp:
@@ -178,11 +177,13 @@ class ReviewCatalog:
                         "action_count": manifest.action_count,
                         "control_fps": manifest.control_fps,
                         "asset_id": manifest.metadata.get("asset_id"),
+                        "metadata": dict(manifest.metadata),
                         "review_ready": source is not None,
                         "cameras": []
                         if source is None
                         else [_camera_name(key) for key in source.video_keys],
                         "review_status": annotation["review_status"],
+                        "annotation": annotation,
                         "bad_segment_count": sum(
                             segment["label"] == "bad" for segment in annotation["segments"]
                         ),
@@ -317,3 +318,16 @@ def _directory_stamp(path: Path) -> tuple[int, int]:
     except FileNotFoundError:
         return (0, 0)
     return (value.st_mtime_ns, value.st_size)
+
+
+def _file_set_stamp(path: Path, pattern: str) -> tuple[tuple[str, int, int], ...]:
+    if not path.is_dir():
+        return ()
+    result = []
+    for item in path.glob(pattern):
+        try:
+            stat = item.stat()
+        except FileNotFoundError:
+            continue
+        result.append((str(item.relative_to(path)), stat.st_mtime_ns, stat.st_size))
+    return tuple(sorted(result))

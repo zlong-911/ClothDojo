@@ -54,11 +54,35 @@ class XRAnchorRuntime:
         self._post_sync_subscription.unsubscribe()
 
 
-def build_render_stage(runtime, plan) -> Path:
+def build_render_stage(runtime, plan, *, cloth_visual: str = "nocs") -> Path:
     """Author the visual-only stage consumed by Isaac RTX/OpenXR."""
+    return _build_render_stage(
+        runtime.spec,
+        runtime.state_0.particle_q.numpy(),
+        plan,
+        cloth_visual=cloth_visual,
+    )
+
+
+def build_replay_render_stage(initial_points, plan, *, cloth_visual: str = "normal") -> Path:
+    """Author the same stage directly from a recorded trajectory state."""
+    from clothdojo.sim.scene import ShirtFlattenSpec
+
+    return _build_render_stage(
+        ShirtFlattenSpec(),
+        initial_points,
+        plan,
+        cloth_visual=cloth_visual,
+    )
+
+
+def _build_render_stage(spec, initial_points, plan, *, cloth_visual: str) -> Path:
     from pxr import Gf, Usd, UsdGeom, UsdLux, UsdShade, Vt
 
     from clothdojo.sim.cloth import load_garment_mesh
+
+    if cloth_visual not in {"normal", "nocs"}:
+        raise ValueError("cloth_visual must be 'normal' or 'nocs'")
 
     output_path = plan.session_root / "teleop_stage.usda"
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -76,16 +100,15 @@ def build_render_stage(runtime, plan) -> Path:
     if physics and "none" in physics.GetVariantNames():
         physics.SetVariantSelection("none")
 
-    spec = runtime.spec
     table_material = _preview_material(stage, "/World/Looks/Table", (0.82, 0.84, 0.87), 0.38)
     table = _define_textured_cube(
-        stage, "/World/Table", spec.table_half_extents, physical_uvs=False
+        stage, "/World/Table", spec.table_half_extents, physical_uvs=True
     )
     _set_cube(table, spec.table_position, spec.table_half_extents)
     UsdShade.MaterialBindingAPI.Apply(table.GetPrim()).Bind(table_material)
 
-    points = runtime.state_0.particle_q.numpy().astype(np.float32)
-    rest_vertices, triangles, _, _ = load_garment_mesh(plan.asset_path)
+    points = np.asarray(initial_points, dtype=np.float32)
+    rest_vertices, triangles, panel_vertices, panel_indices = load_garment_mesh(plan.asset_path)
     indices = np.asarray(triangles, dtype=np.int32).reshape(-1)
     cloth = UsdGeom.Mesh.Define(stage, "/World/Cloth")
     cloth.CreatePointsAttr(Vt.Vec3fArray.FromNumpy(points))
@@ -93,12 +116,18 @@ def build_render_stage(runtime, plan) -> Path:
     cloth.CreateFaceVertexIndicesAttr(Vt.IntArray.FromNumpy(indices))
     cloth.CreateDoubleSidedAttr(True)
     cloth.CreateSubdivisionSchemeAttr(UsdGeom.Tokens.catmullClark)
-    if len(rest_vertices) != len(points):
-        raise RuntimeError(
-            "teleoperation NOCS requires one rest vertex per cloth particle"
+    _write_st_primvar(cloth, panel_vertices[panel_indices])
+    if cloth_visual == "nocs":
+        if len(rest_vertices) != len(points):
+            raise RuntimeError(
+                "teleoperation NOCS requires one rest vertex per cloth particle"
+            )
+        _write_nocs_primvar(cloth, rest_vertices)
+        cloth_material = _nocs_material(stage, "/World/Looks/ClothNocs")
+    else:
+        cloth_material = _preview_material(
+            stage, "/World/Looks/Cloth", (0.13, 0.36, 0.78), 0.58
         )
-    _write_nocs_primvar(cloth, rest_vertices)
-    cloth_material = _nocs_material(stage, "/World/Looks/ClothNocs")
     UsdShade.MaterialBindingAPI.Apply(cloth.GetPrim()).Bind(cloth_material)
 
     ground_material = _preview_material(stage, "/World/Looks/Ground", (0.025, 0.027, 0.032), 0.82)

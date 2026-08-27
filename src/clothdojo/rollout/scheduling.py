@@ -56,7 +56,6 @@ def validate_policy_identities(
     identities: tuple[dict[str, Any], ...],
     *,
     execution: str,
-    exec_horizon: int,
     worlds_per_batch: int = 1,
 ) -> dict[str, Any]:
     if not identities:
@@ -69,12 +68,6 @@ def validate_policy_identities(
     if execution == "rtc":
         if not isinstance(first.get("rtc_guidance"), dict):
             raise ValueError("RTC rollout requires an RTC-capable policy server")
-        server_horizon = first.get("rtc_guidance", {}).get("execution_horizon")
-        if server_horizon != exec_horizon:
-            raise ValueError(
-                "RTC execution horizon differs between rollout and policy server: "
-                f"{exec_horizon} != {server_horizon}"
-            )
     return first
 
 

@@ -1,0 +1,30 @@
+schema: clothdojo_pi05_jax_matrix
+format_version: 1
+name: pi05_aloha_reviewed_good_lr_replication_20260825
+base_config: pi05_aloha_jax.yaml
+status_dir: ${oc.env:CLOTHDOJO_JAX_MATRIX_DIR}
+continue_on_error: true
+stages: [initialize, overfit, pilot, parity, full]
+
+# This queue fills the original baseline host after its 40k reference run. The
+# first trial completes the LR-scale bracket; the second measures seed variance
+# for the conservative slow-decay candidate.
+trials:
+  - name: decay40k_lr0p5x
+    overrides:
+      - experiment.profile=decay_40k_lr_0p5x
+      - optimizer.peak_lr=1.25e-5
+      - optimizer.decay_steps=40000
+      - optimizer.decay_lr=1.25e-6
+      - gates.pilot_steps=3000
+      - logging.run_name=shirt_flatten_reviewed_good_pi05_jax_decay40k_lr0p5x
+      - logging.wandb_group=pi05_sft_lr_matrix
+
+  - name: decay40k_lr1x_seed43
+    overrides:
+      - experiment.profile=decay_40k_lr_1x_seed43
+      - training.seed=43
+      - optimizer.decay_steps=40000
+      - gates.pilot_steps=3000
+      - logging.run_name=shirt_flatten_reviewed_good_pi05_jax_decay40k_lr1x_seed43
+      - logging.wandb_group=pi05_sft_lr_matrix

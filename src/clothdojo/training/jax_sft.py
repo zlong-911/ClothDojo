@@ -29,6 +29,8 @@ class JaxSftSpec:
     tuning_profile: str
     openpi_config: str
     video_backend: str
+    task: str
+    default_prompt: str
     dataset: Path
     norm_stats: Path
     base_params: Path
@@ -73,7 +75,6 @@ _CONTRACT: dict[str, Any] = {
     "openpi.config_name": "pi05_aloha_robotwin",
     "openpi.data.adapt_to_pi": False,
     "openpi.data.extra_delta_transform": True,
-    "openpi.data.default_prompt": "Flatten the shirt.",
     "openpi.data.video_backend": "pyav",
     "training.fsdp_devices": 8,
     "optimizer.adam_b1": 0.9,
@@ -129,6 +130,28 @@ _TUNING_PROFILES: dict[str, dict[str, float | int]] = {
         "optimizer.decay_steps": 40_000,
         "optimizer.decay_lr": 5.0e-6,
     },
+    "decay_60k_lr_2x_seed43": {
+        "training.seed": 43,
+        "training.batch_size": 64,
+        "training.num_train_steps": 60_000,
+        "training.log_interval": 100,
+        "training.save_interval": 10_000,
+        "optimizer.warmup_steps": 1_000,
+        "optimizer.peak_lr": 5.0e-5,
+        "optimizer.decay_steps": 60_000,
+        "optimizer.decay_lr": 5.0e-6,
+    },
+    "decay_60k_lr_3x": {
+        "training.seed": 42,
+        "training.batch_size": 64,
+        "training.num_train_steps": 60_000,
+        "training.log_interval": 100,
+        "training.save_interval": 10_000,
+        "optimizer.warmup_steps": 1_000,
+        "optimizer.peak_lr": 7.5e-5,
+        "optimizer.decay_steps": 60_000,
+        "optimizer.decay_lr": 7.5e-6,
+    },
     "batch_128_sample_equivalent": {
         "training.seed": 42,
         "training.batch_size": 128,
@@ -180,6 +203,18 @@ def compose_jax_sft_spec(
     tuning_profile = str(experiment["profile"])
     _validate_tuning_profile(raw, tuning_profile)
     openpi = _mapping(raw, "openpi")
+    openpi_data = _mapping(openpi, "data")
+    default_prompt = _nonempty_text(
+        openpi_data.get("default_prompt"), "openpi.data.default_prompt"
+    )
+    task = _nonempty_text(
+        openpi_data.get("task", _task_from_prompt(default_prompt)),
+        "openpi.data.task",
+    )
+    if _task_from_prompt(default_prompt) != task:
+        raise ValueError(
+            "openpi.data.default_prompt must express the configured openpi.data.task"
+        )
     paths = _mapping(raw, "paths")
     training = _mapping(raw, "training")
     optimizer = _mapping(raw, "optimizer")
@@ -190,7 +225,9 @@ def compose_jax_sft_spec(
         config_path=path,
         tuning_profile=tuning_profile,
         openpi_config=str(openpi["config_name"]),
-        video_backend=str(_mapping(openpi, "data")["video_backend"]),
+        video_backend=str(openpi_data["video_backend"]),
+        task=task,
+        default_prompt=default_prompt,
         dataset=_path(paths["dataset"]),
         norm_stats=_path(paths["norm_stats"]),
         base_params=_path(paths["base_params"]),
@@ -234,11 +271,11 @@ def inspect_jax_sft(spec: JaxSftSpec) -> dict[str, Any]:
         inspect_openpi_norm_stats,
     )
 
-    dataset = inspect_openpi_dataset(spec.dataset)
+    dataset = inspect_openpi_dataset(spec.dataset, expected_task=spec.task)
     data_kwargs = {
         "adapt_to_pi": False,
         "extra_delta_transform": True,
-        "default_prompt": "Flatten the shirt.",
+        "default_prompt": spec.default_prompt,
     }
     norm = inspect_openpi_norm_stats(
         spec.norm_stats,
@@ -262,7 +299,11 @@ def inspect_jax_sft(spec: JaxSftSpec) -> dict[str, Any]:
         "compatible": True,
         "host": platform.node(),
         "config_path": str(spec.config_path),
-        "contract": dict(_CONTRACT),
+        "contract": {
+            **_CONTRACT,
+            "openpi.data.task": spec.task,
+            "openpi.data.default_prompt": spec.default_prompt,
+        },
         "training": {
             "backend": "OpenPI/JAX",
             "tuning_profile": spec.tuning_profile,
@@ -345,7 +386,7 @@ def build_openpi_train_config(spec: JaxSftSpec) -> Any:
                 )
             ]
         ),
-        default_prompt="Flatten the shirt.",
+        default_prompt=spec.default_prompt,
         adapt_to_pi=False,
         use_delta_joint_actions=True,
         action_sequence_keys=("action",),
@@ -978,6 +1019,7 @@ def _validate_built_config(config: Any, spec: JaxSftSpec) -> None:
         "repo_id": config.data.repo_id,
         "adapt_to_pi": config.data.adapt_to_pi,
         "extra_delta_transform": config.data.use_delta_joint_actions,
+        "default_prompt": config.data.default_prompt,
         "batch_size": config.batch_size,
         "num_train_steps": config.num_train_steps,
         "log_interval": config.log_interval,
@@ -1000,6 +1042,7 @@ def _validate_built_config(config: Any, spec: JaxSftSpec) -> None:
         "repo_id": str(spec.dataset),
         "adapt_to_pi": False,
         "extra_delta_transform": True,
+        "default_prompt": spec.default_prompt,
         "batch_size": spec.batch_size,
         "num_train_steps": spec.num_train_steps,
         "log_interval": spec.log_interval,
@@ -1062,6 +1105,17 @@ def _mapping(mapping: Mapping[str, Any], name: str) -> Mapping[str, Any]:
 
 def _path(value: Any) -> Path:
     return Path(str(value)).expanduser().resolve()
+
+
+def _nonempty_text(value: Any, name: str) -> str:
+    text = str(value).strip() if value is not None else ""
+    if not text:
+        raise ValueError(f"{name} must not be empty")
+    return text
+
+
+def _task_from_prompt(prompt: str) -> str:
+    return prompt.strip().removesuffix(".").strip().lower()
 
 
 def _read_object(path: Path, label: str) -> dict[str, Any]:

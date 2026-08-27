@@ -10,7 +10,7 @@ import pyarrow.parquet as pq
 import pytest
 
 from clothdojo.training import rlinf_cfg
-from clothdojo.training.cfg import inspect_cfg_training
+from clothdojo.training.cfg import inspect_cfg_training, write_cfg_launch_manifest
 from clothdojo.training.rlinf import compose_config
 from clothdojo.training.rlinf_cfg import MODEL_TYPE, _openpi_config_kwargs
 
@@ -145,6 +145,7 @@ def test_cfg_preflight_validates_exact_mixture(monkeypatch, tmp_path: Path) -> N
 
     assert report["compatible"] is True
     assert report["model_type"] == MODEL_TYPE
+    assert report["inference_contract"]["positive_only_conditional"] is False
     assert report["sampling_probabilities"] == {"sft": 0.75, "rollout": 0.25}
     assert report["datasets"] == [
         {
@@ -186,6 +187,20 @@ def test_cfg_preflight_validates_exact_mixture(monkeypatch, tmp_path: Path) -> N
     ]
 
 
+def test_cfg_launch_manifest_binds_serving_contract(monkeypatch, tmp_path: Path) -> None:
+    _configure(monkeypatch, tmp_path)
+    config = Path(__file__).resolve().parents[1] / "configs/training/cfg_pi05_aloha.yaml"
+    report = inspect_cfg_training(config)
+    cfg = compose_config(config)
+
+    path = write_cfg_launch_manifest(cfg, report)
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["schema"] == "clothdojo_cfg_launch"
+    assert payload["inference_contract"] == report["inference_contract"]
+    assert payload["norm_stats"] == report["norm_stats"]
+
+
 def test_cfg_config_is_a_guarded_acceptance_run(monkeypatch, tmp_path: Path) -> None:
     _configure(monkeypatch, tmp_path)
     config = Path(__file__).resolve().parents[1] / "configs/training/cfg_pi05_aloha.yaml"
@@ -203,7 +218,7 @@ def test_cfg_config_is_a_guarded_acceptance_run(monkeypatch, tmp_path: Path) -> 
     assert cfg.actor.model.openpi.positive_only_conditional is False
     assert cfg.actor.model.openpi_data.adapt_to_pi is False
     assert cfg.data.balance_dataset_weights is False
-    assert cfg.data.train_data_paths[1].episodes_path.endswith("rollout_episodes.json")
+    assert cfg.data.train_data_paths[1].get("episodes_path") is None
 
 
 def test_cfg_one_expected_epoch_run(monkeypatch, tmp_path: Path) -> None:

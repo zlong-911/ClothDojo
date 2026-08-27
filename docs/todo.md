@@ -1,120 +1,18 @@
-# Deferred decisions
+# 待办与长期决策
 
-## Benchmark statistical reproducibility
+本文件不维护普通任务列表，也不预先规定功能路线或验收方式。
 
-GPU Style3D execution is not bitwise repeatable: parallel numerical reduction
-differences can be amplified by cloth contact dynamics. Before publishing the
-benchmark, define fixed scenario manifests and distribution-level tolerances
-for task metrics across repeated runs. Do not require exact particle-array
-identity or serialize one implementation-specific reduction order into the
-dataset contract.
+只有满足以下条件的事项才记录：
 
-## RLINF online environment registry
+- 用户明确要求暂缓处理；
+- 当前选择可能造成现实且重要的长期影响；
+- 后续需要保留背景、分歧或重新决策的触发条件。
 
-Current upstream RLINF 0.4.0 loads extension modules and supports registered
-models, but environment validation and action preparation still use a closed
-enum. Before online RLINF rollout is migrated, propose one small upstream
-registry covering environment construction and action preparation. Do not use
-an import-time monkey-patch as an interim architecture.
+每项内容应简短包含：
 
-The completed source-delta review and fork gate are in
-`docs/rlinf_delta_audit.md`.
+1. 当前事实；
+2. 暂缓原因；
+3. 未来重新决策的触发条件；
+4. 已由用户确定的方向（如果有）。
 
-## RLINF CFG OpenPI data arguments
-
-Pinned RLINF 0.4.0's CFG model builder calls `get_openpi_config` without the
-configured model path or `actor.model.openpi_data`; its CFG dataloader passes
-the model path but still drops `openpi_data`. That would silently restore the
-physical-ALOHA axis conversion and ignore ClothDojo's external normalization
-statistics.
-
-ClothDojo currently uses the public model registry, `RLINF_EXT_MODULE`, and one
-`FSDPCfgWorker.build_dataloader` subclass to pass the missing arguments while
-retaining upstream model, dataset, optimizer and checkpoint behavior. Recheck
-this gap whenever the RLINF pin moves. Remove the project extension once
-upstream CFG passes the same data arguments; do not turn it into a general
-compatibility layer.
-
-## Newton 1.5 cloth physics acceptance
-
-The old project implemented cloth self-friction by importing private Style3D
-kernels and replacing internal collision objects. The pinned Newton 1.5 fork
-now owns the same VF/EE term formally and ClothDojo configures it through public
-constructor parameters. Newton 1.5 also gives the old
-`shape_material_kf = 1e3` value a new MuJoCo friction-reference meaning, so
-carrying the numeric value would not preserve behavior.
-
-Before collecting new benchmark base data, compare the pinned fork against
-representative old episodes for contact stability, self-contact sliding, grasp
-retention and final cloth spread. If it cannot meet the measured requirement,
-produce a minimal upstream reproducer; do not restore private imports or
-setup-time patches. The API audit is in `docs/newton_15_audit.md`.
-
-## RTX renderer boundary
-
-Isaac Sim 6.0 embeds Newton 1.2 while ClothDojo targets Newton 1.5. Installing
-both into one Python environment would create an ambiguous physics stack. Before
-benchmark randomization is migrated, decide whether Newton's current renderer
-meets topology/texture benchmark needs. Retain Isaac only if its added rendering
-capability is measured to be necessary; then freeze it as an external container
-that exchanges trajectory and rendered datasets with ClothDojo.
-
-## Newton deformable smooth shading
-
-Newton 1.5 interpolates authored normals for static Mesh shapes, but its
-deformable triangle-mesh camera path still exposes only face normals. The same
-gap remains in the current upstream source. ClothDojo therefore maintains one
-small render adapter: a non-colliding visual garment Mesh follows the physics
-particles, recomputes vertex normals on the GPU and updates the tiled camera's
-copied normal buffer. Remove this adapter when Newton exposes deformable vertex
-normals through a released camera API.
-
-## Asset content identity
-
-The initial asset store intentionally uses readable asset IDs without a hash
-registry. This keeps curation and conversion small, but editing an installed
-USDC in place could make old data and current geometry share the same ID. Before
-publishing the first benchmark, decide whether immutability alone is sufficient
-or whether trajectory manifests should record the converted file hash. Do not add
-an asset-set or revision system before that concrete need exists.
-
-## Benchmark protocol calibration
-
-`configs/evaluation/shirt_flatten.yaml` is intentionally marked
-`stage: calibration`. Canonical targets are now generated independently for the
-full seen/unseen asset set by deterministic default-pose free settling; they do
-not depend on trajectories or candidate checkpoints. Before changing the
-protocol to `frozen`, use human/reference rollouts—not candidate checkpoints—to
-select the deformable threshold, cloth speed threshold, dwell window and hard
-horizon. Run sensitivity tables around each chosen value and verify that timeout
-failures are not dominated by a single garment topology. Once any candidate
-checkpoint has been scored, do not tune the protocol on that result; publish a
-new protocol ID for every later change.
-
-## OpenPI OpenCV package ownership
-
-The released `rlinf-openpi` dependency chain requires `opencv-python`, while
-OpenPI's pinned LeRobot revision requires `opencv-python-headless`. OpenPI's own
-resolved environment contains both at 4.11.0.86, so ClothDojo currently pins
-that same pair rather than allowing two independently changing `cv2` builds.
-The distributions still overlap file ownership. Before relying on OpenCV in a
-long-lived service environment, request that upstream OpenPI and LeRobot agree
-on one distribution and then remove the redundant package; do not solve this
-with a local shim package or fork.
-
-## RLINF FSDP tied-weight export
-
-The current Pi0.5 10k and 20k FSDP full-state checkpoints store the logically
-shared PaliGemma token embedding and language head as independent tensors. At
-20k, 4,965 of 526,647,296 BF16 elements differ, with a maximum absolute
-difference of 0.007171630859375. The legacy RLINF loader silently lets the
-later language-head key win. ClothDojo's serving boundary now records the
-divergence, canonicalizes both aliases to that same legacy value, and performs
-a strict final load.
-
-Before the next Pi0.5 SFT run, reproduce this with a minimal pinned-RLINF FSDP
-save/load test. PyTorch documents only limited shared-parameter support and
-requires shared parameters to remain in one FSDP instance. Verify the actual
-wrap tree and compare `use_orig_params=false` with `true`; change the training
-configuration or report an upstream issue only when that experiment proves
-which layer breaks the alias.
+当前没有需要在这里额外固定的事项。

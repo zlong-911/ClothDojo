@@ -80,9 +80,35 @@ def test_compose_jax_sft_spec_keeps_reference_contract(tmp_path: Path) -> None:
     assert spec.batch_size == 64
     assert spec.tuning_profile == "openpi_reference"
     assert spec.num_workers == 8
+    assert spec.task == "flatten the shirt"
+    assert spec.default_prompt == "Flatten the shirt."
     assert spec.base_params == tmp_path / "base/params"
     assert spec.checkpoint_dir == tmp_path / "checkpoints/pi05_aloha_robotwin/reference"
     assert gate_manifest_path(spec, "pilot") == tmp_path / "gates/reference/pilot.json"
+
+
+def test_compose_jax_sft_spec_accepts_explicit_fold_task(tmp_path: Path) -> None:
+    spec = compose_jax_sft_spec(
+        _config(tmp_path),
+        [
+            "openpi.data.task=fold the shirt",
+            "openpi.data.default_prompt=Fold the shirt.",
+        ],
+    )
+
+    assert spec.task == "fold the shirt"
+    assert spec.default_prompt == "Fold the shirt."
+
+
+def test_compose_jax_sft_spec_rejects_task_prompt_mismatch(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="must express"):
+        compose_jax_sft_spec(
+            _config(tmp_path),
+            [
+                "openpi.data.task=fold the shirt",
+                "openpi.data.default_prompt=Flatten the shirt.",
+            ],
+        )
 
 
 def test_compose_jax_sft_spec_rejects_baseline_drift(tmp_path: Path) -> None:
@@ -107,6 +133,41 @@ def test_compose_jax_sft_spec_accepts_reviewed_batch_profile(tmp_path: Path) -> 
     assert spec.tuning_profile == "batch_128_sample_equivalent"
     assert spec.batch_size * spec.num_train_steps == 2_560_000
     assert spec.batch_size * spec.log_interval == 6_400
+
+
+@pytest.mark.parametrize(
+    ("profile", "seed", "peak_lr", "decay_lr"),
+    [
+        ("decay_60k_lr_2x_seed43", 43, 5.0e-5, 5.0e-6),
+        ("decay_60k_lr_3x", 42, 7.5e-5, 7.5e-6),
+    ],
+)
+def test_compose_jax_sft_spec_accepts_reviewed_60k_profiles(
+    tmp_path: Path,
+    profile: str,
+    seed: int,
+    peak_lr: float,
+    decay_lr: float,
+) -> None:
+    spec = compose_jax_sft_spec(
+        _config(tmp_path),
+        [
+            f"experiment.profile={profile}",
+            f"training.seed={seed}",
+            "training.num_train_steps=60000",
+            f"optimizer.peak_lr={peak_lr}",
+            "optimizer.decay_steps=60000",
+            f"optimizer.decay_lr={decay_lr}",
+        ],
+    )
+
+    assert spec.tuning_profile == profile
+    assert spec.seed == seed
+    assert spec.num_train_steps == 60_000
+    assert spec.save_interval == 10_000
+    assert spec.peak_lr == peak_lr
+    assert spec.decay_steps == 60_000
+    assert spec.decay_lr == decay_lr
 
 
 def test_checkpoint_contract_distinguishes_ema_and_online(tmp_path: Path) -> None:

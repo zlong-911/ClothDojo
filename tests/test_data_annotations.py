@@ -51,6 +51,34 @@ def test_missing_annotation_defaults_to_complete_good_episode(tmp_path: Path) ->
     assert plan.segments[0].annotation_present is False
 
 
+def test_whole_trajectory_good_only_requires_explicit_complete_review(
+    tmp_path: Path,
+) -> None:
+    _trajectory(tmp_path, "good", 5)
+    _annotation(tmp_path, "good", [], review_status="complete")
+    _trajectory(tmp_path, "unreviewed", 6)
+    _trajectory(tmp_path, "bad", 7)
+    _annotation(
+        tmp_path,
+        "bad",
+        [{"start_frame": 2, "end_frame": 3, "label": "bad"}],
+        review_status="in_progress",
+    )
+
+    plan = build_good_segment_plan(
+        tmp_path,
+        min_segment_frames=1,
+        whole_trajectory_good_only=True,
+    )
+
+    assert [segment.source_trajectory for segment in plan.segments] == ["good"]
+    assert plan.whole_trajectory_good_only is True
+    assert plan.skipped_not_whole_trajectory_good == 2
+    assert plan.output_episodes == plan.full_trajectory_episodes == 1
+    assert plan.default_good_trajectories == 1
+    assert plan.trajectories_with_bad == 0
+
+
 def test_only_bad_ranges_split_and_good_label_does_not_select_data(tmp_path: Path) -> None:
     _trajectory(tmp_path, "reviewed", 12)
     _annotation(

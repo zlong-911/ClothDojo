@@ -1,26 +1,30 @@
 schema: clothdojo_evaluation_protocol
-format_version: 2
 protocol_id: shirt_flatten_calibration
 stage: calibration
 task: shirt_flatten
 
 timing:
   control_fps: 50
-  horizon_seconds: 36.0
+  # A 90 s hard ceiling leaves room for slower policy recovery/regrasping.
+  # Confirmed success time still distinguishes fast completion, and summaries
+  # may report success at the preregistered 30/45/60/75/90 s checkpoints.
+  horizon_seconds: 90.0
   metric_hz: 10
-  stable_seconds: 1.0
 
 metric:
+  # Planar translation is a nuisance variable for flattening. The rigid term
+  # retains orientation error only; NOCS vertex correspondence still detects
+  # flips, layering and incorrect 3-D shape. There is intentionally no separate
+  # tabletop/workspace containment gate.
   deformable_weight: 0.65
   symmetry: planar_180
 
 success:
-  # Normalized by the canonical target's planar scale. These calibration
-  # values must be frozen from reference-policy data before a public report.
-  deformable_distance_max: 0.08
-  rigid_distance_max: null
-  particle_speed_rms_max_m_s: 0.02
-  require_released: true
+  # Asset-equal one-sided 3-MAD fences over 690 compatible expert terminals
+  # from 135 assets. Both distances use the canonical planar scale; the rigid
+  # term is translation-invariant and therefore measures orientation only.
+  deformable_distance_max: 0.093
+  rigid_distance_max: 0.056
 
 target:
   method: default_free_settle

@@ -4,13 +4,22 @@ import warp as wp
 
 
 @wp.kernel(enable_backward=False)
-def _write_world_transforms(
+def _write_local_transforms(
     matrices: wp.fabricarray(dtype=wp.mat44d),
     indices: wp.fabricarray(dtype=wp.uint32),
     body_q: wp.array(dtype=wp.transformf),
+    body_parent: wp.array(dtype=wp.int32),
 ):
     i = wp.tid()
-    matrices[i] = wp.transpose(wp.mat44d(wp.transform_to_matrix(body_q[int(indices[i])])))
+    body = int(indices[i])
+    transform = body_q[body]
+    parent = body_parent[body]
+    if parent >= 0:
+        transform = wp.transform_multiply(
+            wp.transform_inverse(body_q[parent]),
+            transform,
+        )
+    matrices[i] = wp.transpose(wp.mat44d(wp.transform_to_matrix(transform)))
 
 
 @wp.kernel(enable_backward=False)
@@ -35,14 +44,14 @@ class NewtonFabricBridge:
     def __init__(self, model, usd_context, *, device: str) -> None:
         from usdrt import Rt, Sdf, Usd
 
-        if str(device) != "cuda:0":
-            raise ValueError("teleop Fabric requires logical device cuda:0")
+        if not str(device).startswith("cuda:"):
+            raise ValueError("teleop Fabric requires a CUDA device")
         self._device = device
         self._stage = Usd.Stage.Attach(usd_context.get_stage_id())
         self._requirements = [
             (
                 Sdf.ValueTypeNames.Matrix4d,
-                "omni:fabric:worldMatrix",
+                "_localMatrix",
                 Usd.Access.ReadWrite,
             ),
             (Sdf.ValueTypeNames.UInt, "newton:index", Usd.Access.Read),
@@ -59,9 +68,28 @@ class NewtonFabricBridge:
             prim.CreateAttribute("newton:index", Sdf.ValueTypeNames.UInt, True)
             prim.GetAttribute("newton:index").Set(index)
             xform = Rt.Xformable(prim)
+            if not xform.HasLocalXform():
+                xform.SetLocalXformFromUsd()
             if not xform.HasWorldXform():
                 xform.SetWorldXformFromUsd()
             mapped += 1
+
+        body_parent = [-1] * int(model.body_count)
+        for child, parent in zip(
+            model.joint_child.numpy().tolist(),
+            model.joint_parent.numpy().tolist(),
+            strict=True,
+        ):
+            body_parent[int(child)] = int(parent)
+        self._body_parent = wp.array(
+            body_parent,
+            dtype=wp.int32,
+            device=self._device,
+        )
+        # SelectPrims searches Fabric, not the source USD stage. Traversing the
+        # attached USDRT stage is the documented population step.
+        for _prim in self._stage.Traverse():
+            pass
 
         self._cloth_attr = None
         self._cloth_points = None
@@ -102,13 +130,24 @@ class NewtonFabricBridge:
             device=str(self._device),
         )
         if selection.GetCount() == 0:
-            raise RuntimeError("Isaac Fabric lost all Newton rigid-body mappings")
-        matrices = wp.fabricarray(selection, "omni:fabric:worldMatrix")
+            diagnostics = {
+                name: self._stage.SelectPrims(require_attrs=[requirement], device=device).GetCount()
+                for name, requirement, device in (
+                    ("index_cuda", self._requirements[1], str(self._device)),
+                    ("matrix_cuda", self._requirements[0], str(self._device)),
+                    ("index_cpu", self._requirements[1], "cpu"),
+                    ("matrix_cpu", self._requirements[0], "cpu"),
+                )
+            }
+            raise RuntimeError(
+                f"Isaac Fabric lost all Newton rigid-body mappings: {diagnostics}"
+            )
+        matrices = wp.fabricarray(selection, "_localMatrix")
         indices = wp.fabricarray(selection, "newton:index")
         wp.launch(
-            _write_world_transforms,
+            _write_local_transforms,
             dim=indices.shape[0],
-            inputs=[matrices, indices, state.body_q],
+            inputs=[matrices, indices, state.body_q, self._body_parent],
             device=self._device,
         )
 

@@ -16,6 +16,11 @@ _ATTACH_EXPAND_RINGS = 2
 _ATTACH_PATCH_MAX = 32
 _GRIPPER_JOINT_MARGIN = 0.025
 _CAPTURE_RADIUS = 0.01
+# Preserve simcloth-bench's five-frame release window at 30 Hz.  ClothDojo
+# evaluates release every physics substep, so express the same grace period in
+# seconds and derive the fixed substep count when the scene is built.
+_RELEASE_COLLISION_OFF_TIME_S = 5.0 / 30.0
+_GRIPPER_COLLISION_LINKS = ("link6", "link7", "link8")
 
 
 @wp.func
@@ -27,6 +32,24 @@ def _contains_pin(
         if pins[world, side, slot] == particle:
             found = True
     return found
+
+
+@wp.func
+def _set_gripper_particle_collision(
+    shape_flags: wp.array(dtype=int),
+    collision_shapes: wp.array3d(dtype=int),
+    collision_shape_count: wp.array2d(dtype=int),
+    world: int,
+    side: int,
+    collision_bit: int,
+    enabled: bool,
+):
+    for slot in range(collision_shape_count[world, side]):
+        shape = collision_shapes[world, side, slot]
+        if enabled:
+            shape_flags[shape] = shape_flags[shape] | collision_bit
+        else:
+            shape_flags[shape] = shape_flags[shape] & ~collision_bit
 
 
 @wp.kernel
@@ -47,6 +70,30 @@ def _reset_grasp(
     for slot in range(pins.shape[2]):
         pins[world, side, slot] = -1
         pin_local[world, side, slot] = wp.vec3(0.0)
+
+
+@wp.kernel
+def _reset_release_collision(
+    world_mask: wp.array(dtype=bool),
+    countdown: wp.array2d(dtype=int),
+    shape_flags: wp.array(dtype=int),
+    collision_shapes: wp.array3d(dtype=int),
+    collision_shape_count: wp.array2d(dtype=int),
+    collision_bit: int,
+):
+    world, side = wp.tid()
+    if not world_mask[world]:
+        return
+    countdown[world, side] = 0
+    _set_gripper_particle_collision(
+        shape_flags,
+        collision_shapes,
+        collision_shape_count,
+        world,
+        side,
+        collision_bit,
+        True,
+    )
 
 
 @wp.kernel
@@ -107,8 +154,14 @@ def _update_grasp(
     frontier: wp.array3d(dtype=int),
     next_frontier: wp.array3d(dtype=int),
     local_offsets: wp.array(dtype=wp.vec3),
+    release_collision_countdown: wp.array2d(dtype=int),
+    shape_flags: wp.array(dtype=int),
+    collision_shapes: wp.array3d(dtype=int),
+    collision_shape_count: wp.array2d(dtype=int),
     attach_threshold: float,
     release_threshold: float,
+    release_collision_off_substeps: int,
+    collision_bit: int,
     capture_radius_sq: float,
     seed_count: int,
     expand_rings: int,
@@ -128,10 +181,36 @@ def _update_grasp(
         1.0,
     )
 
+    countdown = release_collision_countdown[world, side]
+    if countdown > 0:
+        countdown -= 1
+        release_collision_countdown[world, side] = countdown
+        if countdown == 0:
+            _set_gripper_particle_collision(
+                shape_flags,
+                collision_shapes,
+                collision_shape_count,
+                world,
+                side,
+                collision_bit,
+                True,
+            )
+
     if attached[world, side] != 0:
         if openness > release_threshold:
             attached[world, side] = 0
             pin_count[world, side] = 0
+            if release_collision_off_substeps > 0:
+                release_collision_countdown[world, side] = release_collision_off_substeps
+                _set_gripper_particle_collision(
+                    shape_flags,
+                    collision_shapes,
+                    collision_shape_count,
+                    world,
+                    side,
+                    collision_bit,
+                    False,
+                )
         previous_open[world, side] = openness
         return
 
@@ -139,6 +218,19 @@ def _update_grasp(
     previous_open[world, side] = openness
     if not crossed:
         return
+
+    # Closing through the capture threshold ends any outstanding release grace,
+    # matching the legacy behavior even when no garment particle is captured.
+    release_collision_countdown[world, side] = 0
+    _set_gripper_particle_collision(
+        shape_flags,
+        collision_shapes,
+        collision_shape_count,
+        world,
+        side,
+        collision_bit,
+        True,
+    )
 
     transform = body_q[ee_body[world, side]]
     rotation = wp.transform_get_rotation(transform)
@@ -474,6 +566,27 @@ class ParticleGrasp:
         )
         self._particle_start, self._particle_end = self._particle_ranges()
         self._neighbor_offsets, self._neighbor_indices = self._particle_neighbors()
+        (
+            collision_shapes,
+            collision_shape_count,
+            self._particle_collision_bit,
+        ) = self._gripper_collision_shapes()
+        self._collision_shapes = wp.array(
+            collision_shapes, dtype=wp.int32, device=self.device
+        )
+        self._collision_shape_count = wp.array(
+            collision_shape_count, dtype=wp.int32, device=self.device
+        )
+        self.release_collision_countdown = wp.zeros(
+            shape2, dtype=wp.int32, device=self.device
+        )
+        physics_hz = float(scene.spec.control_fps * scene.spec.sim_substeps)
+        self._release_collision_off_substeps = int(
+            np.ceil(_RELEASE_COLLISION_OFF_TIME_S * physics_hz)
+        )
+        self._all_worlds = wp.ones(
+            self.world_count + 1, dtype=wp.bool, device=self.device
+        )
 
     def reset(self, world_mask) -> None:
         wp.launch(
@@ -489,18 +602,21 @@ class ParticleGrasp:
             ],
             device=self.device,
         )
+        self._reset_release_collision(world_mask)
 
-    def pre_step(self, state) -> None:
+    def update(self, particle_state, rigid_state) -> None:
+        """Update grasp lifecycle after the rigid solve of one physics substep."""
+
         wp.launch(
             _update_grasp,
             dim=(self.world_count, 2),
             inputs=[
-                self.scene.grippers.get_attribute("joint_q", state),
+                self.scene.grippers.get_attribute("joint_q", rigid_state),
                 self._gripper_lower,
                 self._gripper_upper,
                 self._ee_body,
-                state.body_q,
-                state.particle_q,
+                rigid_state.body_q,
+                particle_state.particle_q,
                 self._particle_start,
                 self._particle_end,
                 self._neighbor_offsets,
@@ -513,8 +629,14 @@ class ParticleGrasp:
                 self._frontier,
                 self._next_frontier,
                 self._local_offsets,
+                self.release_collision_countdown,
+                self.model.shape_flags,
+                self._collision_shapes,
+                self._collision_shape_count,
                 0.1,
                 0.7,
+                self._release_collision_off_substeps,
+                self._particle_collision_bit,
                 0.01**2,
                 _ATTACH_SEED_COUNT,
                 _ATTACH_EXPAND_RINGS,
@@ -582,6 +704,7 @@ class ParticleGrasp:
         self.pin_local.assign(restored_local[None])
         self._frontier.fill_(-1)
         self._next_frontier.fill_(-1)
+        self._reset_release_collision(self._all_worlds)
 
     def validate_restore_state(self, state) -> None:
         self._validated_restore_state(state)
@@ -664,6 +787,72 @@ class ParticleGrasp:
             wp.array(starts, dtype=wp.int32, device=self.device),
             wp.array(ends, dtype=wp.int32, device=self.device),
         )
+
+    def _reset_release_collision(self, world_mask) -> None:
+        wp.launch(
+            _reset_release_collision,
+            dim=(self.world_count, 2),
+            inputs=[
+                world_mask,
+                self.release_collision_countdown,
+                self.model.shape_flags,
+                self._collision_shapes,
+                self._collision_shape_count,
+                self._particle_collision_bit,
+            ],
+            device=self.device,
+        )
+
+    def _gripper_collision_shapes(self) -> tuple[np.ndarray, np.ndarray, int]:
+        """Resolve each world's cloth-colliding wrist and finger shapes."""
+
+        import newton
+
+        collision_bit = int(newton.ShapeFlags.COLLIDE_PARTICLES)
+        body_world = np.asarray(self.model.body_world.numpy(), dtype=np.int32)
+        shape_body = np.asarray(self.model.shape_body.numpy(), dtype=np.int32)
+        shape_world = np.asarray(self.model.shape_world.numpy(), dtype=np.int32)
+        shape_flags = np.asarray(self.model.shape_flags.numpy(), dtype=np.int32)
+        body_labels = tuple(str(label) for label in self.model.body_label)
+        selected: list[list[np.ndarray]] = []
+        for world in range(self.world_count):
+            world_sides = []
+            for side in ("left", "right"):
+                bodies = np.asarray(
+                    [
+                        body
+                        for body, label in enumerate(body_labels)
+                        if int(body_world[body]) == world
+                        and f"/{side}/" in label
+                        and any(
+                            label.endswith(f"/{link}")
+                            for link in _GRIPPER_COLLISION_LINKS
+                        )
+                    ],
+                    dtype=np.int32,
+                )
+                shapes = np.flatnonzero(
+                    (shape_world == world)
+                    & np.isin(shape_body, bodies)
+                    & ((shape_flags & collision_bit) != 0)
+                ).astype(np.int32)
+                world_sides.append(shapes)
+            selected.append(world_sides)
+
+        capacity = max(
+            1,
+            max(
+                (len(shapes) for world_sides in selected for shapes in world_sides),
+                default=0,
+            ),
+        )
+        indices = np.full((self.world_count, 2, capacity), -1, dtype=np.int32)
+        counts = np.zeros((self.world_count, 2), dtype=np.int32)
+        for world, world_sides in enumerate(selected):
+            for side, shapes in enumerate(world_sides):
+                counts[world, side] = len(shapes)
+                indices[world, side, : len(shapes)] = shapes
+        return indices, counts, collision_bit
 
     def _particle_neighbors(self):
         neighbors = [set() for _ in range(int(self.model.particle_count))]

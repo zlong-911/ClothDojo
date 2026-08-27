@@ -18,6 +18,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "clothdojo.collection" = ["static/*.html", "static/*.js", "static/*.css"]
+"clothdojo.data" = ["isaac_export.kit"]
 "clothdojo.teleop" = ["teleop.kit"]
 
 [tool.pytest.ini_options]

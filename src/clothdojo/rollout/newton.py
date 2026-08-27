@@ -11,7 +11,7 @@ import numpy as np
 
 from clothdojo.rollout.scenario import RolloutScenario
 from clothdojo.trajectory import SceneMetadata, TrajectoryWriter
-from clothdojo.trajectory.newton import capture_actions, capture_states, gripper_openness
+from clothdojo.trajectory.newton import NewtonTrajectoryRecorder, gripper_openness
 
 POLICY_ACTION_DIM = 14
 
@@ -38,14 +38,8 @@ def unpack_policy_actions(actions: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Split a policy batch into Newton's arm and gripper control arrays."""
 
     values = np.asarray(actions, dtype=np.float32)
-    if (
-        values.ndim != 2
-        or values.shape[1] != POLICY_ACTION_DIM
-        or not np.isfinite(values).all()
-    ):
-        raise ValueError(
-            f"policy actions must be finite float32[batch, 14], got {values.shape}"
-        )
+    if values.ndim != 2 or values.shape[1] != POLICY_ACTION_DIM or not np.isfinite(values).all():
+        raise ValueError(f"policy actions must be finite float32[batch, 14], got {values.shape}")
     arms = np.concatenate((values[:, :6], values[:, 7:13]), axis=1)
     grippers = values[:, [6, 13]]
     return np.ascontiguousarray(arms), np.ascontiguousarray(grippers)
@@ -81,9 +75,7 @@ class NewtonBatchEnvironment:
             scene.grippers.get_attribute("joint_limit_upper", model).numpy()[:, 0],
             dtype=np.float32,
         )
-        self._arm_device = wp.empty(
-            (self.world_count, 12), dtype=wp.float32, device=model.device
-        )
+        self._arm_device = wp.empty((self.world_count, 12), dtype=wp.float32, device=model.device)
         self._gripper_device = wp.empty(
             (self.world_count, 2), dtype=wp.float32, device=model.device
         )
@@ -135,7 +127,14 @@ class NewtonBatchEnvironment:
         self.runtime.step(self._arm_device, self._gripper_device)
         self._sample_index += 1
         self._cached_observation = None
-        return self._arm_device, self._gripper_device
+        return arms, grippers
+
+    def synchronize(self) -> None:
+        """Finish queued device work before end-to-end throughput is reported."""
+
+        import warp as wp
+
+        wp.synchronize_device(self.runtime.model.device)
 
 
 class NewtonTrajectoryEpisode(NewtonBatchEnvironment):
@@ -152,6 +151,9 @@ class NewtonTrajectoryEpisode(NewtonBatchEnvironment):
         assets_root: str | Path,
         observation_provider,
         trajectory_metadata: tuple[dict[str, Any], ...],
+        producer: str,
+        training_eligible: bool,
+        compressed: bool = True,
     ) -> None:
         super().__init__(runtime, observation_provider=observation_provider)
         self.scenarios = scenarios
@@ -171,25 +173,26 @@ class NewtonTrajectoryEpisode(NewtonBatchEnvironment):
             )
             for garment_id in {str(scenario.garment_id) for scenario in scenarios}
         }
-        initial_states = capture_states(runtime, 0)
-        if len(initial_states) != self.world_count:
-            raise RuntimeError("Newton state capture returned the wrong world count")
-
         writers: list[TrajectoryWriter | None] = []
         try:
-            for world, (output, scenario, extra) in enumerate(
-                zip(outputs, scenarios, trajectory_metadata, strict=True)
+            for output, scenario, extra in zip(
+                outputs, scenarios, trajectory_metadata, strict=True
             ):
                 if output is None:
                     writers.append(None)
                     continue
                 garment_id = str(scenario.garment_id)
+                overlap = {"producer", "training_eligible"} & set(extra)
+                if overlap:
+                    raise ValueError(
+                        f"trajectory metadata contains reserved fields: {sorted(overlap)}"
+                    )
                 metadata = {
-                    "producer": "clothdojo_rollout",
+                    "producer": str(producer),
                     "scenario_id": scenario.scenario_id,
                     "seed": scenario.seed,
                     "prompt": scenario.prompt,
-                    "training_eligible": True,
+                    "training_eligible": bool(training_eligible),
                     **extra,
                 }
                 writer = TrajectoryWriter(
@@ -207,31 +210,34 @@ class NewtonTrajectoryEpisode(NewtonBatchEnvironment):
                         config_fingerprints={"rtc_scenario": scenario.fingerprint},
                     ),
                     metadata=metadata,
+                    compressed=compressed,
                 )
                 writers.append(writer)
-                writer.write_initial_state(initial_states[world])
         except Exception:
             for writer in writers:
                 if writer is not None:
                     writer.abort()
             raise
         self.writers = tuple(writers)
+        self._recorder = NewtonTrajectoryRecorder(
+            runtime,
+            capacity=max(scenario.action_horizon for scenario in scenarios) + 1,
+        )
+        self._recorder.capture_state(0)
 
     def step(self, policy_actions: np.ndarray) -> None:
         sample_index = self.sample_index
-        arm_device, gripper_device = super().step(policy_actions)
-        actions = capture_actions(
-            self.runtime,
-            sample_index,
-            arm_device,
-            gripper_device,
-        )
-        states = capture_states(self.runtime, self.sample_index)
-        for writer, action, state in zip(self.writers, actions, states, strict=True):
-            if writer is not None:
-                writer.append_transition(action, state)
+        arms, grippers = super().step(policy_actions)
+        self._recorder.capture_action(sample_index, arms, grippers)
+        self._recorder.capture_state(self.sample_index)
+
+    def synchronize(self) -> None:
+        self._recorder.enqueue_readback()
+        super().synchronize()
+        self._recorder.drain(self.writers)
 
     def close(self) -> None:
+        self.synchronize()
         active = tuple(writer for writer in self.writers if writer is not None)
         if not active:
             return
@@ -243,6 +249,9 @@ class NewtonTrajectoryEpisode(NewtonBatchEnvironment):
                 future.result()
 
     def abort(self) -> None:
+        # Pinned buffers cannot be released while CUDA copies are in flight.
+        super().synchronize()
+        self._recorder.discard()
         for writer in self.writers:
             if writer is not None:
                 writer.abort()
