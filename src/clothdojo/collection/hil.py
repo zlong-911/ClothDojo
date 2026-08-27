@@ -266,15 +266,11 @@ class HILCatalog:
 
     @staticmethod
     def _video_path(root: Path, episode_index: int, camera: str) -> Path:
-        review = root / "review" / "videos" / camera / f"episode_{episode_index:06d}.mp4"
-        if review.is_file():
-            return review
         return (
             root
-            / "lerobot"
+            / "review"
             / "videos"
-            / f"observation.images.{camera}"
-            / "chunk-000"
+            / camera
             / f"episode_{episode_index:06d}.mp4"
         )
 

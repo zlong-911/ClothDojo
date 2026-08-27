@@ -193,6 +193,16 @@ def test_hil_plan_binds_rollout_and_trajectory_hashes(tmp_path: Path) -> None:
     (run / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
 
     catalog = HILCatalog(profile)
+    lerobot_video = (
+        run
+        / "lerobot/videos/observation.images.cam_high/chunk-000/episode_000000.mp4"
+    )
+    lerobot_video.parent.mkdir(parents=True)
+    lerobot_video.write_bytes(b"training export")
+    assert catalog.runs()[0]["episodes"][0]["cameras"] == []
+    with pytest.raises(FileNotFoundError):
+        catalog.video("run_a", "shirt_a_000000", "cam_high")
+
     review_video = run / "review/videos/cam_high/episode_000000.mp4"
     review_video.parent.mkdir(parents=True)
     review_video.write_bytes(b"review")

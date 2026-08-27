@@ -21,6 +21,19 @@ def test_review_stride_rejects_invalid_or_inexact_rates(fps: int) -> None:
         _review_stride(50.0, fps)
 
 
+def test_review_rejects_non_rollout_collection(tmp_path) -> None:
+    (tmp_path / "meta.json").write_text(
+        '{"schema":"clothdojo_evaluation_condition"}',
+        encoding="utf-8",
+    )
+
+    from clothdojo.data.rollout_review import render_rollout_review
+
+    with pytest.raises(ValueError, match="unsupported rollout schema"):
+        render_rollout_review(tmp_path)
+    assert not (tmp_path / "review").exists()
+
+
 def test_raw_video_encoder_streams_frames_without_image_files(tmp_path) -> None:
     output = tmp_path / "episode.mp4"
     encoder = _RawVideoEncoder(output, width=64, height=48, fps=10)

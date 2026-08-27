@@ -19,33 +19,27 @@ REVIEW_CAMERA = "cam_high"
 def render_rollout_review(
     source: str | Path,
     *,
-    output: str | Path | None = None,
     assets_root: str | Path = "assets",
     device: str = "cuda:0",
     fps: int = 10,
 ) -> dict[str, Any]:
     """Render one lightweight HIL review stream without building a solver."""
 
-    from clothdojo.data.rollout import (
-        _load_canonical_collection,
-        _restore_render_state,
-        _TrajectoryRenderState,
-    )
+    from clothdojo.data.rollout import _restore_render_state, _TrajectoryRenderState
+    from clothdojo.rollout.collection import load_rollout_collection
     from clothdojo.rollout.render import ShirtFlattenCameraObservation
     from clothdojo.sim.scene import ShirtFlattenSpec, build_shirt_flatten
     from clothdojo.trajectory import TrajectoryReader
 
     root = Path(source).expanduser().resolve()
-    destination = (
-        Path(output).expanduser().resolve() if output is not None else root / "review"
-    )
+    destination = root / "review"
     if destination.exists():
         raise FileExistsError(f"rollout review output already exists: {destination}")
     staging = destination.parent / f".{destination.name}.tmp"
     if staging.exists():
         raise FileExistsError(f"unfinished rollout review output exists: {staging}")
 
-    manifest, source_kind = _load_canonical_collection(root)
+    manifest = load_rollout_collection(root)
     trajectories = manifest["trajectories"]
     first_reader = TrajectoryReader(root / trajectories[0]["path"])
     source_fps = float(first_reader.manifest.control_fps)
@@ -59,75 +53,70 @@ def render_rollout_review(
     runtime = None
     camera = None
     episode_records = []
-    try:
-        for episode_index, episode in enumerate(trajectories):
-            asset_id = str(episode["asset_id"])
-            if asset_id != active_asset:
-                active_asset = asset_id
-                scene = build_shirt_flatten(
-                    assets_root,
-                    spec=ShirtFlattenSpec(garment_id=asset_id, world_count=1),
-                    device=device,
-                    visuals=True,
-                )
-                runtime = _TrajectoryRenderState(scene)
-                camera = ShirtFlattenCameraObservation(
-                    scene,
-                    camera_names=(REVIEW_CAMERA,),
-                )
-            reader = TrajectoryReader(root / episode["path"])
-            if float(reader.manifest.control_fps) != source_fps:
-                raise ValueError("rollout trajectories use different control rates")
-            action_count = int(reader.manifest.action_count)
-            if action_count != int(episode["action_count"]):
-                raise ValueError("rollout trajectory count differs from collection metadata")
-            encoder = _RawVideoEncoder(
-                videos / f"episode_{episode_index:06d}.mp4",
-                width=camera.width,
-                height=camera.height,
-                fps=fps,
+    for episode_index, episode in enumerate(trajectories):
+        asset_id = str(episode["asset_id"])
+        if asset_id != active_asset:
+            active_asset = asset_id
+            scene = build_shirt_flatten(
+                assets_root,
+                spec=ShirtFlattenSpec(garment_id=asset_id, world_count=1),
+                device=device,
+                visuals=True,
             )
-            frame_count = 0
-            try:
-                for sample_index in range(0, action_count, stride):
-                    _restore_render_state(runtime, reader.state_at(sample_index))
-                    image = camera(runtime)[f"observation.images.{REVIEW_CAMERA}"][0]
-                    encoder.write(image)
-                    frame_count += 1
-                encoder.close()
-            except Exception:
-                encoder.abort()
-                raise
-            episode_records.append(
-                {
-                    "episode_index": episode_index,
-                    "trajectory": episode["path"],
-                    "source_frames": action_count,
-                    "video_frames": frame_count,
-                }
+            runtime = _TrajectoryRenderState(scene)
+            camera = ShirtFlattenCameraObservation(
+                scene,
+                camera_names=(REVIEW_CAMERA,),
             )
-        review_meta = {
-            "schema": REVIEW_SCHEMA,
-            "format_version": REVIEW_FORMAT_VERSION,
-            "status": "complete",
-            "source": str(root),
-            "source_kind": source_kind,
-            "source_meta_sha256": source_meta_sha256,
-            "source_fps": source_fps,
-            "video_fps": fps,
-            "sample_stride": stride,
-            "camera_names": [REVIEW_CAMERA],
-            "episodes": episode_records,
-        }
-        (staging / "meta.json").write_text(
-            json.dumps(review_meta, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
+        reader = TrajectoryReader(root / episode["path"])
+        if float(reader.manifest.control_fps) != source_fps:
+            raise ValueError("rollout trajectories use different control rates")
+        action_count = int(reader.manifest.action_count)
+        if action_count != int(episode["action_count"]):
+            raise ValueError("rollout trajectory count differs from collection metadata")
+        encoder = _RawVideoEncoder(
+            videos / f"episode_{episode_index:06d}.mp4",
+            width=camera.width,
+            height=camera.height,
+            fps=fps,
         )
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        staging.rename(destination)
-    except Exception:
-        raise
-
+        frame_count = 0
+        try:
+            for sample_index in range(0, action_count, stride):
+                _restore_render_state(runtime, reader.state_at(sample_index))
+                image = camera(runtime)[f"observation.images.{REVIEW_CAMERA}"][0]
+                encoder.write(image)
+                frame_count += 1
+            encoder.close()
+        except Exception:
+            encoder.abort()
+            raise
+        episode_records.append(
+            {
+                "episode_index": episode_index,
+                "trajectory": episode["path"],
+                "source_frames": action_count,
+                "video_frames": frame_count,
+            }
+        )
+    review_meta = {
+        "schema": REVIEW_SCHEMA,
+        "format_version": REVIEW_FORMAT_VERSION,
+        "status": "complete",
+        "source": str(root),
+        "source_meta_sha256": source_meta_sha256,
+        "source_fps": source_fps,
+        "video_fps": fps,
+        "sample_stride": stride,
+        "camera_names": [REVIEW_CAMERA],
+        "episodes": episode_records,
+    }
+    (staging / "meta.json").write_text(
+        json.dumps(review_meta, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging.rename(destination)
     return {
         "source": str(root),
         "output": str(destination),

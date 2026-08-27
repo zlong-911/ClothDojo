@@ -599,7 +599,6 @@ def test_render_rollout_review_dispatches_lightweight_export(monkeypatch, capsys
     assert call == {
         "args": ("/data/rollouts/lr2x",),
         "kwargs": {
-            "output": None,
             "assets_root": "/data/assets",
             "device": "cuda:2",
             "fps": 10,

@@ -360,7 +360,6 @@ def main(argv: Sequence[str] | None = None) -> None:
 
         result = render_rollout_review(
             args.source,
-            output=args.output,
             assets_root=args.assets,
             device=args.device,
             fps=args.fps,
@@ -912,7 +911,6 @@ def _parser() -> argparse.ArgumentParser:
         help="directly encode lightweight rollout videos for HIL review",
     )
     rollout_review.add_argument("--source", required=True, help="canonical rollout root")
-    rollout_review.add_argument("--output", help="review directory; defaults to SOURCE/review")
     rollout_review.add_argument("--assets", default="assets", help="assets used for replay")
     rollout_review.add_argument("--device", default="cuda:0", help="Newton render device")
     rollout_review.add_argument(
