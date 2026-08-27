@@ -57,7 +57,7 @@ def _dataset(root: Path, *, prompt: str = "Flatten the shirt.") -> None:
 
 def test_advantage_spec_rejects_nonstandard_lerobot_version(tmp_path: Path) -> None:
     spec = _spec(tmp_path)
-    expert = spec.datasets[0].source_path
+    expert = spec.datasets[0].dataset_path
     info_path = expert / "meta" / "info.json"
     info = json.loads(info_path.read_text(encoding="utf-8"))
     info["codebase_version"] = "v3.0"
@@ -107,12 +107,10 @@ def _spec(tmp_path: Path):
                 f"work_dir: {tmp_path / 'work'}",
                 "datasets:",
                 "  - role: sft",
-                f"    source_path: {expert}",
-                f"    target_path: {expert}",
+                f"    dataset_path: {expert}",
                 "    positive_fraction: 0.5",
                 "  - role: rollout",
-                f"    source_path: {rollout}",
-                f"    target_path: {rollout}",
+                f"    dataset_path: {rollout}",
                 f"    episodes_path: {selection}",
                 "    positive_fraction: 0.25",
             ]
@@ -191,7 +189,7 @@ def test_publish_steam_labels_is_atomic_and_exact(tmp_path: Path) -> None:
 
 def test_advantage_spec_rejects_different_dataset_prompts(tmp_path: Path) -> None:
     spec = _spec(tmp_path)
-    rollout = spec.datasets[1].source_path
+    rollout = spec.datasets[1].dataset_path
     (rollout / "meta" / "tasks.jsonl").write_text(
         json.dumps({"task_index": 0, "task": "Fold the shirt."}) + "\n",
         encoding="utf-8",

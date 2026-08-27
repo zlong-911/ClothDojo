@@ -276,7 +276,7 @@ def _validate_advantage_manifest(
         raise ValueError(f"unsupported STEAM advantage provenance: {path}")
     if manifest.get("format_version") != 1 or manifest.get("tag") != tag:
         raise ValueError(f"STEAM advantage provenance does not match its tag: {path}")
-    if manifest.get("target_info_sha256") != _sha256(root / "meta" / "info.json"):
+    if manifest.get("dataset_info_sha256") != _sha256(root / "meta" / "info.json"):
         raise ValueError(f"STEAM advantages target a different dataset revision: {path}")
     if tuple(manifest.get("episodes", ())) != tuple(int(value) for value in selected):
         raise ValueError(f"STEAM advantage episode selection differs from CFG: {path}")

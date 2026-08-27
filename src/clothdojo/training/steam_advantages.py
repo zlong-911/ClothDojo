@@ -27,8 +27,7 @@ _TAG = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 @dataclass(frozen=True, slots=True)
 class SteamAdvantageDataset:
     role: str
-    source_path: Path
-    target_path: Path
+    dataset_path: Path
     positive_fraction: float
     episodes: tuple[int, ...]
     total_episodes: int
@@ -37,7 +36,7 @@ class SteamAdvantageDataset:
 
     def to_json_dict(self) -> dict[str, Any]:
         value = asdict(self)
-        for key in ("source_path", "target_path", "output_path"):
+        for key in ("dataset_path", "output_path"):
             value[key] = str(value[key])
         value["episodes"] = list(self.episodes)
         return value
@@ -111,9 +110,9 @@ def compose_steam_advantage_spec(config_path: str | Path) -> SteamAdvantageSpec:
     )
     if sorted(dataset.role for dataset in datasets) != ["rollout", "sft"]:
         raise ValueError("STEAM labeling requires dataset roles sft and rollout")
-    if len({dataset.target_path for dataset in datasets}) != len(datasets):
-        raise ValueError("STEAM labeling targets must be distinct")
-    prompts = {_dataset_prompt(dataset.source_path) for dataset in datasets}
+    if len({dataset.dataset_path for dataset in datasets}) != len(datasets):
+        raise ValueError("STEAM labeling datasets must be distinct")
+    prompts = {_dataset_prompt(dataset.dataset_path) for dataset in datasets}
     if len(prompts) != 1:
         raise ValueError("STEAM labeling datasets must contain the same single task prompt")
     return SteamAdvantageSpec(
@@ -216,7 +215,7 @@ def run_steam_advantages(spec: SteamAdvantageSpec) -> None:
     try:
         for dataset_index, entry in enumerate(spec.datasets):
             dataset = BinaryPairInferenceDataset(
-                dataset_path=str(entry.source_path),
+                dataset_path=str(entry.dataset_path),
                 camera_keys=list(spec.camera_keys),
                 k=spec.stride,
                 prompt=spec.prompt,
@@ -310,7 +309,7 @@ def smoke_steam_advantages(spec: SteamAdvantageSpec) -> dict[str, Any]:
     loaded_seconds = time.monotonic() - started
     entry = spec.datasets[0]
     dataset = BinaryPairInferenceDataset(
-        dataset_path=str(entry.source_path),
+        dataset_path=str(entry.dataset_path),
         camera_keys=list(spec.camera_keys),
         k=spec.stride,
         prompt=spec.prompt,
@@ -359,25 +358,22 @@ def _compose_dataset(
     role = str(value.get("role", ""))
     if role not in {"sft", "rollout"}:
         raise ValueError(f"unsupported STEAM dataset role: {role!r}")
-    source = Path(str(value.get("source_path", ""))).expanduser().resolve()
-    target = Path(str(value.get("target_path", ""))).expanduser().resolve()
-    source_info = _dataset_info(source)
-    target_info = _dataset_info(target)
-    _require_aligned_datasets(source, source_info, target, target_info)
-    features = source_info.get("features", {})
+    dataset = Path(str(value.get("dataset_path", ""))).expanduser().resolve()
+    info = _dataset_info(dataset)
+    features = info.get("features", {})
     missing = [key for key in camera_keys if key not in features]
     if missing:
-        raise ValueError(f"STEAM source is missing camera features {missing}: {source}")
+        raise ValueError(f"STEAM dataset is missing camera features {missing}: {dataset}")
     for key in camera_keys:
         if features[key].get("dtype") != "video":
-            raise ValueError(f"STEAM camera feature must be video: {source}: {key}")
+            raise ValueError(f"STEAM camera feature must be video: {dataset}: {key}")
     positive_fraction = float(value.get("positive_fraction", 0.0))
     if not np.isfinite(positive_fraction) or not 0.0 < positive_fraction < 1.0:
         raise ValueError("STEAM positive_fraction must be finite and in (0, 1)")
     episodes_path = value.get("episodes_path")
     if value.get("episodes") is not None and episodes_path is not None:
         raise ValueError("set only one of episodes or episodes_path")
-    total_episodes = _positive_int(source_info.get("total_episodes"), "total_episodes")
+    total_episodes = _positive_int(info.get("total_episodes"), "total_episodes")
     if episodes_path is not None:
         episodes = read_episode_selection(episodes_path, total_episodes=total_episodes)
     elif value.get("episodes") is not None:
@@ -386,13 +382,12 @@ def _compose_dataset(
         episodes = tuple(range(total_episodes))
     return SteamAdvantageDataset(
         role=role,
-        source_path=source,
-        target_path=target,
+        dataset_path=dataset,
         positive_fraction=positive_fraction,
         episodes=episodes,
         total_episodes=total_episodes,
-        total_frames=_positive_int(source_info.get("total_frames"), "total_frames"),
-        output_path=target / "meta" / f"advantages_{tag}.parquet",
+        total_frames=_positive_int(info.get("total_frames"), "total_frames"),
+        output_path=dataset / "meta" / f"advantages_{tag}.parquet",
     )
 
 
@@ -461,7 +456,7 @@ def _publish_dataset_labels(
     order = np.lexsort((frame, episode))
     episode, frame, score = episode[order], frame[order], score[order]
 
-    lengths = _episode_lengths(entry.target_path)
+    lengths = _episode_lengths(entry.dataset_path)
     terminal_episode = np.asarray(entry.episodes, dtype=np.int64)
     terminal_frame = lengths[terminal_episode] - 1
     episode = np.concatenate((episode, terminal_episode))
@@ -500,10 +495,8 @@ def _publish_dataset_labels(
         or _sha256(spec.checkpoint / "config.json"),
         "checkpoint_weights": str(weights_path),
         "checkpoint_weights_sha256": weights_sha256 or _sha256(weights_path),
-        "source_path": str(entry.source_path),
-        "source_info_sha256": _sha256(entry.source_path / "meta" / "info.json"),
-        "target_path": str(entry.target_path),
-        "target_info_sha256": _sha256(entry.target_path / "meta" / "info.json"),
+        "dataset_path": str(entry.dataset_path),
+        "dataset_info_sha256": _sha256(entry.dataset_path / "meta" / "info.json"),
         "episodes": list(entry.episodes),
         "stride": spec.stride,
         "camera_keys": list(spec.camera_keys),
@@ -541,27 +534,6 @@ def _require_exact_coverage(
     )
     if not np.array_equal(np.sort(keys), np.sort(expected_keys)):
         raise ValueError("STEAM label episode/frame keys differ from the selected dataset")
-
-
-def _require_aligned_datasets(
-    source: Path,
-    source_info: dict[str, Any],
-    target: Path,
-    target_info: dict[str, Any],
-) -> None:
-    for key in ("total_episodes", "total_frames", "fps"):
-        if source_info.get(key) != target_info.get(key):
-            raise ValueError(f"STEAM source/target {key} differs: {source} != {target}")
-    if _episode_rows(source) != _episode_rows(target):
-        raise ValueError(f"STEAM source/target episode metadata differs: {source} != {target}")
-    if source != target:
-        source_data = (source / "data").resolve()
-        target_data = (target / "data").resolve()
-        if source_data != target_data:
-            raise ValueError(
-                "separate STEAM source/target exports must share the exact "
-                f"frame table: {source_data} != {target_data}"
-            )
 
 
 def _episode_rows(root: Path) -> list[tuple[int, int]]:

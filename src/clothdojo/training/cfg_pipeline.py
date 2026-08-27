@@ -49,14 +49,13 @@ def inspect_cfg_pipeline(
     if set(cfg_entries) != {"sft", "rollout"}:
         raise ValueError("CFG pipeline requires one sft and one rollout entry")
     for dataset in spec.datasets:
-        _require_within(dataset.source_path, project_root / "data", "STEAM source")
-        _require_within(dataset.target_path, project_root / "data", "CFG dataset")
+        _require_within(dataset.dataset_path, project_root / "data", "CFG dataset")
         cfg_entry = cfg_entries[dataset.role]
         cfg_path = Path(str(cfg_entry.dataset_path)).expanduser().resolve()
-        if cfg_path != dataset.target_path:
+        if cfg_path != dataset.dataset_path:
             raise ValueError(
-                f"STEAM target and CFG {dataset.role} dataset differ: "
-                f"{dataset.target_path} != {cfg_path}"
+                f"STEAM and CFG {dataset.role} dataset differ: "
+                f"{dataset.dataset_path} != {cfg_path}"
             )
         selected = resolve_cfg_episode_selection(
             episodes=cfg_entry.get("episodes"),

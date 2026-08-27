@@ -78,7 +78,7 @@ def _dataset(root: Path, labels: list[bool]) -> None:
                 "checkpoint_step": 20000,
                 "checkpoint_config_sha256": "a" * 64,
                 "checkpoint_weights_sha256": "b" * 64,
-                "target_info_sha256": info_digest,
+                "dataset_info_sha256": info_digest,
                 "episodes": [0, 1],
                 "stride": 64,
                 "rows": len(labels),
