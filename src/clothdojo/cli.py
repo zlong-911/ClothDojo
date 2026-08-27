@@ -25,7 +25,23 @@ def main(argv: Sequence[str] | None = None) -> None:
         if not report["compatible"]:
             raise SystemExit(1)
         return
+    if args.command == "steam" and args.steam_command == "merge":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.training.steam import merge_steam_members
+
+        output = merge_steam_members(
+            args.member,
+            args.output,
+            overwrite=args.overwrite,
+        )
+        print(json.dumps({"checkpoint": str(output)}, indent=2, sort_keys=True))
+        return
     if args.command == "train":
+        if args.training_kind == "steam" and args.member_index is None:
+            parser.error("STEAM training requires --member-index")
+        if args.training_kind != "steam" and args.member_index is not None:
+            parser.error("--member-index is only valid for STEAM training")
         if args.advantages_config is not None and args.training_kind != "cfg":
             parser.error("--advantages-config is only valid for CFG training")
         if args.training_kind == "cfg" and args.advantages_config is not None:
@@ -95,6 +111,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 kind=args.training_kind,
                 config_path=args.config,
                 overrides=passthrough,
+                steam_member_index=args.member_index,
             )
             print(json.dumps(report, indent=2, sort_keys=True))
             return
@@ -104,6 +121,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             kind=args.training_kind,
             config_path=args.config,
             overrides=passthrough,
+            steam_member_index=args.member_index,
         )
         return
     if args.command == "policy" and args.policy_command == "serve-sft":
@@ -587,6 +605,30 @@ def _parser() -> argparse.ArgumentParser:
     train.add_argument(
         "--advantages-config",
         help="project-owned STEAM labeling config to run before CFG",
+    )
+    train.add_argument(
+        "--member-index",
+        type=int,
+        choices=(0, 1, 2),
+        help="independent STEAM ensemble member to train",
+    )
+
+    steam = commands.add_parser("steam", help="assemble STEAM evaluator checkpoints")
+    steam_commands = steam.add_subparsers(dest="steam_command")
+    steam_merge = steam_commands.add_parser(
+        "merge", help="merge three independently trained evaluator members"
+    )
+    steam_merge.add_argument(
+        "--member",
+        action="append",
+        required=True,
+        help="member actor checkpoint; repeat exactly three times",
+    )
+    steam_merge.add_argument("--output", required=True)
+    steam_merge.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="replace an existing output directory",
     )
 
     data = commands.add_parser("data", help="inspect and export offline datasets")

@@ -340,6 +340,8 @@ def test_training_command_calls_thin_rlinf_adapter(monkeypatch) -> None:
             "steam",
             "--config",
             "configs/training/steam.yaml",
+            "--member-index",
+            "1",
             "data.k=8",
         ]
     )
@@ -348,6 +350,7 @@ def test_training_command_calls_thin_rlinf_adapter(monkeypatch) -> None:
         "kind": "steam",
         "config_path": "configs/training/steam.yaml",
         "overrides": ["data.k=8"],
+        "steam_member_index": 1,
     }
 
 
@@ -377,8 +380,48 @@ def test_training_check_does_not_call_runner(monkeypatch, capsys) -> None:
         "kind": "pi05",
         "config_path": "configs/training/pi05_aloha.yaml",
         "overrides": ["runner.max_steps=2"],
+        "steam_member_index": None,
     }
     assert json.loads(capsys.readouterr().out) == {"runner": {"max_steps": 10000}}
+
+
+def test_steam_merge_calls_canonical_assembly(monkeypatch, capsys) -> None:
+    call = {}
+    monkeypatch.setattr(
+        "clothdojo.training.steam.merge_steam_members",
+        lambda *args, **kwargs: call.update(args=args, kwargs=kwargs)
+        or Path("/models/steam/actor"),
+    )
+
+    cli.main(
+        [
+            "steam",
+            "merge",
+            "--member",
+            "/models/member0/actor",
+            "--member",
+            "/models/member1/actor",
+            "--member",
+            "/models/member2/actor",
+            "--output",
+            "/models/steam/actor",
+        ]
+    )
+
+    assert call == {
+        "args": (
+            [
+                "/models/member0/actor",
+                "/models/member1/actor",
+                "/models/member2/actor",
+            ],
+            "/models/steam/actor",
+        ),
+        "kwargs": {"overwrite": False},
+    }
+    assert json.loads(capsys.readouterr().out) == {
+        "checkpoint": "/models/steam/actor"
+    }
 
 
 def test_norm_stats_command_calls_openpi_preparation(monkeypatch, capsys) -> None:

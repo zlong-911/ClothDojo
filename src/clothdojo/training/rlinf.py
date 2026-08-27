@@ -29,11 +29,16 @@ def run(
     kind: TrainingKind,
     config_path: str | Path,
     overrides: Sequence[str] = (),
+    steam_member_index: int | None = None,
 ) -> None:
     """Compose one ClothDojo config and run it through the selected RLINF worker."""
 
     cfg = compose_config(config_path, overrides)
-    run_config(kind=kind, cfg=cfg)
+    run_config(
+        kind=kind,
+        cfg=cfg,
+        steam_member_index=steam_member_index,
+    )
 
 
 def check(
@@ -41,6 +46,7 @@ def check(
     kind: TrainingKind,
     config_path: str | Path,
     overrides: Sequence[str] = (),
+    steam_member_index: int | None = None,
 ) -> dict[str, Any]:
     """Compose and validate a config without launching training workers."""
 
@@ -49,6 +55,12 @@ def check(
         from clothdojo.training.pi05_preflight import inspect_pi05_training
 
         return inspect_pi05_training(cfg)
+    if kind == "steam":
+        if steam_member_index is None:
+            raise ValueError("STEAM training requires a member index")
+        from clothdojo.training.steam import inspect_steam_training
+
+        return inspect_steam_training(cfg, steam_member_index)
     runtime = _load_runtime(kind)
     cfg = runtime.validate_cfg(cfg)
     resolved = runtime.omega_conf.to_container(cfg, resolve=True)
@@ -72,7 +84,12 @@ def compose_config(config_path: str | Path, overrides: Sequence[str] = ()) -> An
         return compose(config_name=path.stem, overrides=list(overrides))
 
 
-def run_config(*, kind: TrainingKind, cfg: Any) -> None:
+def run_config(
+    *,
+    kind: TrainingKind,
+    cfg: Any,
+    steam_member_index: int | None = None,
+) -> None:
     """Run an already composed config without modifying RLINF source code."""
 
     data_root = cfg.get("data", {}).get("data_root")
@@ -88,12 +105,27 @@ def run_config(*, kind: TrainingKind, cfg: Any) -> None:
         manifest = inspect_pi05_training(cfg)
         manifest_path = write_pi05_launch_manifest(cfg, manifest)
         logging.info("Pi0.5 launch manifest: %s", manifest_path)
+    elif kind == "steam":
+        if steam_member_index is None:
+            raise ValueError("STEAM training requires a member index")
+        from clothdojo.training.steam import (
+            inspect_steam_training,
+            write_steam_launch_manifest,
+        )
+
+        manifest = inspect_steam_training(cfg, steam_member_index)
+        manifest_path = write_steam_launch_manifest(cfg, manifest)
+        from clothdojo.training.rlinf_steam import prepare_steam_driver_runtime
+
+        prepare_steam_driver_runtime()
+        logging.info("STEAM launch manifest: %s", manifest_path)
 
     # Importing the scheduler initializes Ray on this RLINF revision, so keep
     # the runtime import strictly after the launch gate and manifest write.
     runtime = _load_runtime(kind)
     cfg = runtime.validate_cfg(cfg)
-    runtime.multiprocessing.set_start_method("spawn", force=True)
+    if kind != "steam":
+        runtime.multiprocessing.set_start_method("spawn", force=True)
     logging.info(
         "RLINF %s config:\n%s",
         kind,
@@ -101,6 +133,10 @@ def run_config(*, kind: TrainingKind, cfg: Any) -> None:
     )
 
     cluster = runtime.cluster_type(cluster_cfg=cfg.cluster)
+    if kind == "steam":
+        from clothdojo.training.rlinf_steam import configure_steam_cluster
+
+        configure_steam_cluster(cluster, cfg)
     placement = runtime.placement_type(cfg, cluster)
     actor_group = runtime.worker_type.create_group(cfg).launch(
         cluster,
@@ -126,9 +162,9 @@ def _load_runtime(kind: TrainingKind) -> _Runtime:
 
         worker_type = ClothDojoPi05SftWorker
     elif kind == "steam":
-        from rlinf.workers.sft.fsdp_steam_sft_worker import FSDPSteamSftWorker
+        from clothdojo.training.rlinf_steam import ClothDojoSteamSftWorker
 
-        worker_type = FSDPSteamSftWorker
+        worker_type = ClothDojoSteamSftWorker
     elif kind == "cfg":
         from clothdojo.training.rlinf_cfg import ClothDojoCfgWorker, enable
 

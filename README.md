@@ -158,6 +158,23 @@ data/
 
 ## 训练
 
+STEAM critic 使用三个独立的 8-GPU member 训练；`--member-index` 决定
+value-head seed、run seed 和 Ray actor 名称。正式配置固定使用 reviewed-good
+数据、state、全量 VLM、FP32 master、BF16 forward 和 global batch 512。
+
+```bash
+.venv/bin/clothdojo train steam \
+  --config configs/training/steam_value_shirt_flatten.yaml \
+  --member-index 0 --check
+.venv/bin/clothdojo train steam \
+  --config configs/training/steam_value_shirt_flatten.yaml \
+  --member-index 0
+
+.venv/bin/clothdojo steam merge \
+  --member /path/to/member{0,1,2}/actor \
+  --output /path/to/steam_ensemble/actor
+```
+
 ```bash
 # SFT 预检与启动
 .venv/bin/clothdojo train pi05 --config configs/training/pi05_aloha.yaml --check

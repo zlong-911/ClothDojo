@@ -5,6 +5,14 @@
 - `src/clothdojo/cli.py`: the only user-facing command dispatcher.
 - `src/clothdojo/diagnostics.py`: installation and runtime compatibility check.
 - `src/clothdojo/training/rlinf.py`: thin π0.5, STEAM and CFG SFT adapter.
+- `src/clothdojo/training/steam.py`: STEAM critic data/hyperparameter gates,
+  launch manifest and three-member checkpoint merge.
+- `src/clothdojo/training/rlinf_steam.py`: deterministic RLINF STEAM loader,
+  state/full-model training and FP32-master runtime adapter.
+- `src/clothdojo/training/steam_dataloader.py`: forkserver-safe loader entrypoint.
+- `configs/training/steam_value_shirt_flatten.yaml`: shared production contract
+  for three independent 8-GPU STEAM evaluator members.
+
 - `src/clothdojo/training/rlinf_cfg.py`: registered RLINF CFG model/worker
   extension that preserves ClothDojo's OpenPI data settings.
 - `src/clothdojo/training/cfg.py`: static two-dataset CFG compatibility and
