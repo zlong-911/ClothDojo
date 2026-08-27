@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from clothdojo.rendering import policy_observation_settings
-from clothdojo.rollout.collection import load_rollout_collection
+from clothdojo.rollout.collection import load_rollout_collection, run_rollout_collection
 from clothdojo.rollout.scheduling import (
     policy_endpoints_for_workers,
     select_assets,
@@ -109,6 +110,104 @@ def test_incomplete_rollout_is_not_loadable(tmp_path: Path) -> None:
 
     with pytest.raises(RuntimeError, match="not complete"):
         load_rollout_collection(tmp_path)
+
+
+def test_failed_rollout_resume_reports_running_and_keeps_completed_index(
+    tmp_path: Path, monkeypatch
+) -> None:
+    states = tmp_path / "states"
+    pool = states / "shirt/states.npz"
+    pool.parent.mkdir(parents=True)
+    pool.write_bytes(b"pool")
+    (states / "meta.json").write_text("{}\n", encoding="utf-8")
+    scenario = SimpleNamespace(
+        action_horizon=1,
+        steps=1,
+        to_json_dict=lambda: {"scenario_id": "test", "steps": 1},
+    )
+    identity = {
+        "backend": "openpi",
+        "checkpoint_sha256": "a" * 64,
+        "batched_inference": True,
+    }
+    monkeypatch.setattr(
+        "clothdojo.rollout.collection.load_initial_state_collection",
+        lambda _root: {"assets": [{"asset_id": "shirt", "split": "unseen"}]},
+    )
+    monkeypatch.setattr(
+        "clothdojo.rollout.collection.InitialStatePool.load",
+        lambda _path: SimpleNamespace(state_count=1),
+    )
+    monkeypatch.setattr(
+        "clothdojo.rollout.collection.load_rollout_scenario",
+        lambda _path: scenario,
+    )
+    monkeypatch.setattr(
+        "clothdojo.rollout.collection.RemotePolicy",
+        lambda *_args, **_kwargs: SimpleNamespace(identity=identity),
+    )
+    indexed = [
+        {
+            "asset_id": "shirt",
+            "initial_state_index": 0,
+            "path": "trajectories/shirt_000000",
+            "action_count": 1,
+        }
+    ]
+    failed = True
+
+    def collect_index(_jobs, *, spec, partial=False):
+        del spec
+        return [] if partial and failed else indexed
+
+    def fail_collection(*_args, **_kwargs):
+        raise RuntimeError("worker failed")
+
+    monkeypatch.setattr(
+        "clothdojo.rollout.collection.collect_trajectory_index",
+        collect_index,
+    )
+    monkeypatch.setattr(
+        "clothdojo.rollout.collection.collect_trajectories",
+        fail_collection,
+    )
+    output = tmp_path / "rollout"
+    arguments = (
+        tmp_path / "scenario.yaml",
+        states,
+        ("ws://policy:8080",),
+        output,
+    )
+    with pytest.raises(RuntimeError, match="worker failed"):
+        run_rollout_collection(
+            *arguments,
+            gpus=("0",),
+            batch_size=1,
+            exec_horizon=1,
+        )
+    assert json.loads((output / "meta.json").read_text())["status"] == "failed"
+
+    failed = False
+
+    def resume_collection(*_args, **_kwargs):
+        meta = json.loads((output / "meta.json").read_text())
+        assert meta["status"] == "running"
+        assert "error" not in meta
+        assert meta["trajectories"] == indexed
+
+    monkeypatch.setattr(
+        "clothdojo.rollout.collection.collect_trajectories",
+        resume_collection,
+    )
+    result = run_rollout_collection(
+        *arguments,
+        gpus=("0",),
+        batch_size=1,
+        exec_horizon=1,
+    )
+
+    assert result["trajectory_count"] == 1
+    assert json.loads((output / "meta.json").read_text())["status"] == "complete"
 
 
 def test_rollout_selects_a_fixed_seen_unseen_subset() -> None:

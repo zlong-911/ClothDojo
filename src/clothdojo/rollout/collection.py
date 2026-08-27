@@ -225,13 +225,19 @@ def run_rollout_collection(
         meta = {
             "schema": ROLLOUT_COLLECTION_SCHEMA,
             "format_version": ROLLOUT_COLLECTION_FORMAT_VERSION,
-            "status": "running",
             "camera_names": list(CAMERA_NAMES),
             "training_eligible": True,
-            "trajectories": [],
             **requested,
         }
-        atomic_write_json(meta_path, meta)
+
+    meta["status"] = "running"
+    meta.pop("error", None)
+    meta["trajectories"] = collect_trajectory_index(
+        asset_jobs,
+        spec=collection_spec,
+        partial=True,
+    )
+    atomic_write_json(meta_path, meta)
 
     try:
         collect_trajectories(
