@@ -51,6 +51,18 @@ def _dataset(root: Path) -> None:
     )
 
 
+def test_advantage_spec_rejects_nonstandard_lerobot_version(tmp_path: Path) -> None:
+    spec = _spec(tmp_path)
+    expert = spec.datasets[0].source_path
+    info_path = expert / "meta" / "info.json"
+    info = json.loads(info_path.read_text(encoding="utf-8"))
+    info["codebase_version"] = "v3.0"
+    info_path.write_text(json.dumps(info), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"standard LeRobot v2\.1"):
+        compose_steam_advantage_spec(spec.config_path)
+
+
 def _spec(tmp_path: Path):
     checkpoint = tmp_path / "checkpoint"
     (checkpoint / "model_state_dict").mkdir(parents=True)

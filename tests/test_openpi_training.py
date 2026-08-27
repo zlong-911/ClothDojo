@@ -4,7 +4,7 @@ import numpy as np
 import pyarrow as pa
 import pytest
 
-from clothdojo.training.openpi import _episode_ends, _float_matrix, compute_norm_stats
+from clothdojo.training.openpi import _dataset_prompt, _episode_ends, _float_matrix
 
 
 def test_float_matrix_keeps_fixed_size_list_layout() -> None:
@@ -30,6 +30,12 @@ def test_episode_ends_reject_non_contiguous_labels() -> None:
         _episode_ends(np.array([0, 0, 2], dtype=np.int64))
 
 
-def test_norm_stats_reject_empty_default_prompt(tmp_path) -> None:
-    with pytest.raises(ValueError, match="default_prompt"):
-        compute_norm_stats(tmp_path, tmp_path / "stats", default_prompt="  ")
+def test_norm_stats_reads_task_prompt_from_dataset_sidecar(tmp_path) -> None:
+    sidecar = tmp_path / "clothdojo.json"
+    sidecar.write_text('{"scenario":{"prompt":"Fold the shirt."}}', encoding="utf-8")
+
+    assert _dataset_prompt(sidecar) == "Fold the shirt."
+
+    sidecar.write_text('{"scenario":{}}', encoding="utf-8")
+    with pytest.raises(ValueError, match="no task prompt"):
+        _dataset_prompt(sidecar)

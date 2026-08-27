@@ -193,8 +193,8 @@ def inspect_steam_dataset(value: Any, *, cfg: Any) -> dict[str, Any]:
     provenance_path = root / "meta" / "clothdojo.json"
     info = _read_object(info_path, "LeRobot info")
     provenance = _read_object(provenance_path, "ClothDojo provenance")
-    if info.get("codebase_version") not in ("v2.1", "v3.0"):
-        raise ValueError(f"unsupported LeRobot runtime version: {info_path}")
+    if info.get("codebase_version") != "v2.1":
+        raise ValueError(f"STEAM requires pinned LeRobot v2.1: {info_path}")
     if (
         info.get("total_episodes"),
         info.get("total_frames"),

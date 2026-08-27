@@ -145,8 +145,6 @@ def main(argv: Sequence[str] | None = None) -> None:
         serve_sft_policy(
             args.checkpoint,
             args.norm_stats,
-            openpi_config=args.openpi_config,
-            action_horizon=args.action_horizon,
             num_steps=args.num_steps,
             rtc_guidance_horizon=args.rtc_guidance_horizon,
             rtc_max_guidance_weight=args.rtc_max_guidance_weight,
@@ -165,7 +163,6 @@ def main(argv: Sequence[str] | None = None) -> None:
             args.checkpoint,
             args.norm_stats,
             args.training_config,
-            action_horizon=args.action_horizon,
             num_steps=args.num_steps,
             host=args.host,
             port=args.port,
@@ -181,9 +178,6 @@ def main(argv: Sequence[str] | None = None) -> None:
             args.output,
             args.norm_stats,
             args.parity_config,
-            openpi_config=args.openpi_config,
-            action_horizon=args.action_horizon,
-            num_steps=args.num_steps,
             parity_batch_size=args.parity_batch_size,
             parity_execution_horizon=args.parity_execution_horizon,
         )
@@ -197,8 +191,6 @@ def main(argv: Sequence[str] | None = None) -> None:
         serve_cfg_policy(
             args.checkpoint,
             args.norm_stats,
-            openpi_config=args.openpi_config,
-            action_horizon=args.action_horizon,
             num_steps=args.num_steps,
             guidance_scale=args.guidance_scale,
             guidance_type=args.guidance_type,
@@ -350,15 +342,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         result = compute_norm_stats(
             args.dataset,
             args.output,
-            config_name=args.config_name,
             block_size=args.block_size,
         )
-        print(json.dumps(result, indent=2, sort_keys=True))
-        return
-    if args.command == "data" and args.data_command == "check-cfg":
-        from clothdojo.training.cfg import inspect_cfg_training
-
-        result = inspect_cfg_training(args.config, passthrough)
         print(json.dumps(result, indent=2, sort_keys=True))
         return
     if args.command == "collect" and args.collect_command == "serve":
@@ -611,9 +596,6 @@ def _parser() -> argparse.ArgumentParser:
         required=True,
         help="matching JAX SFT config used to draw real parity observations",
     )
-    convert_jax.add_argument("--openpi-config", default="pi05_aloha_robotwin")
-    convert_jax.add_argument("--action-horizon", type=int, default=50)
-    convert_jax.add_argument("--num-steps", type=int, default=10)
     convert_jax.add_argument("--parity-batch-size", type=int, default=4)
     convert_jax.add_argument("--parity-execution-horizon", type=int, default=10)
     serve_sft = policy_commands.add_parser(
@@ -622,8 +604,6 @@ def _parser() -> argparse.ArgumentParser:
     )
     serve_sft.add_argument("--checkpoint", required=True)
     serve_sft.add_argument("--norm-stats", required=True)
-    serve_sft.add_argument("--openpi-config", default="pi05_aloha_robotwin")
-    serve_sft.add_argument("--action-horizon", type=int, default=50)
     serve_sft.add_argument("--num-steps", type=int, default=10)
     serve_sft.add_argument("--rtc-guidance-horizon", type=int, default=10)
     serve_sft.add_argument("--rtc-max-guidance-weight", type=float, default=10.0)
@@ -642,7 +622,6 @@ def _parser() -> argparse.ArgumentParser:
     serve_jax.add_argument("--checkpoint", required=True)
     serve_jax.add_argument("--norm-stats", required=True)
     serve_jax.add_argument("--training-config", required=True)
-    serve_jax.add_argument("--action-horizon", type=int, default=50)
     serve_jax.add_argument("--num-steps", type=int, default=10)
     serve_jax.add_argument("--host", default="127.0.0.1")
     serve_jax.add_argument("--port", type=int, default=8080)
@@ -652,8 +631,6 @@ def _parser() -> argparse.ArgumentParser:
     )
     serve_cfg.add_argument("--checkpoint", required=True)
     serve_cfg.add_argument("--norm-stats", required=True)
-    serve_cfg.add_argument("--openpi-config", default="pi05_aloha_robotwin")
-    serve_cfg.add_argument("--action-horizon", type=int, default=50)
     serve_cfg.add_argument("--num-steps", type=int, default=5)
     serve_cfg.add_argument("--guidance-scale", type=float, default=1.0)
     serve_cfg.add_argument(
@@ -884,14 +861,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     norm_stats.add_argument("--dataset", required=True, help="good-only LeRobot root")
     norm_stats.add_argument("--output", required=True, help="new external stats directory")
-    norm_stats.add_argument("--config-name", default="pi05_aloha_robotwin")
     norm_stats.add_argument("--block-size", type=int, default=4096)
-    cfg = data_commands.add_parser(
-        "check-cfg",
-        help="validate labeled expert/rollout datasets referenced by a CFG config",
-    )
-    cfg.add_argument("--config", required=True, help="path to the CFG Hydra YAML config")
-
     collect = commands.add_parser(
         "collect",
         help="run teleoperation, review, HIL and asset-curation workflows",

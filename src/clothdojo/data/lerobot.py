@@ -21,6 +21,13 @@ def open_lerobot_dataset(repo_id: str, *, root: str | Path, **kwargs: Any) -> An
     from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 
     dataset_root = Path(root).expanduser().resolve()
+    info_path = dataset_root / "meta" / "info.json"
+    try:
+        info = json.loads(info_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"cannot read LeRobot dataset metadata: {info_path}: {exc}") from exc
+    if not isinstance(info, dict) or info.get("codebase_version") != "v2.1":
+        raise ValueError(f"ClothDojo requires standard LeRobot v2.1: {info_path}")
     if (dataset_root / "meta" / "clothdojo_video_index.jsonl").is_file():
         raise ValueError(
             "indexed-media datasets must be converted externally to ordinary LeRobot v2.1"

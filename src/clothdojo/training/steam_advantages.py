@@ -580,7 +580,11 @@ def _episode_lengths(root: Path) -> np.ndarray:
 def _dataset_info(root: Path) -> dict[str, Any]:
     if not root.is_dir():
         raise FileNotFoundError(f"STEAM dataset does not exist: {root}")
-    return _read_object(root / "meta" / "info.json", "LeRobot info")
+    path = root / "meta" / "info.json"
+    info = _read_object(path, "LeRobot info")
+    if info.get("codebase_version") != "v2.1":
+        raise ValueError(f"STEAM requires standard LeRobot v2.1: {path}")
+    return info
 
 
 def _checkpoint_weights(root: Path) -> Path:

@@ -15,6 +15,10 @@ from clothdojo.data.lerobot import (
 
 def test_regular_v21_reader_uses_validated_video_backend(monkeypatch, tmp_path: Path) -> None:
     call = {}
+    (tmp_path / "meta").mkdir()
+    (tmp_path / "meta" / "info.json").write_text(
+        '{"codebase_version":"v2.1"}', encoding="utf-8"
+    )
 
     class FakeLeRobotDataset:
         def __init__(self, repo_id, *, root, **kwargs):
@@ -39,8 +43,20 @@ def test_regular_v21_reader_rejects_indexed_media_extension(tmp_path: Path) -> N
     index = tmp_path / "meta" / "clothdojo_video_index.jsonl"
     index.parent.mkdir()
     index.write_text("{}\n", encoding="utf-8")
+    (index.parent / "info.json").write_text(
+        '{"codebase_version":"v2.1"}', encoding="utf-8"
+    )
 
     with pytest.raises(ValueError, match="converted externally"):
+        open_lerobot_dataset("local/test", root=tmp_path)
+
+
+def test_regular_v21_reader_rejects_other_versions(tmp_path: Path) -> None:
+    info = tmp_path / "meta" / "info.json"
+    info.parent.mkdir()
+    info.write_text('{"codebase_version":"v3.0"}', encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"standard LeRobot v2\.1"):
         open_lerobot_dataset("local/test", root=tmp_path)
 
 

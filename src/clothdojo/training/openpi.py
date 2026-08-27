@@ -9,22 +9,19 @@ from typing import Any
 
 import numpy as np
 
+OPENPI_CONFIG = "pi05_aloha_robotwin"
+
 
 def compute_norm_stats(
     dataset_root: str | Path,
     output_root: str | Path,
     *,
-    config_name: str = "pi05_aloha_robotwin",
-    default_prompt: str = "Flatten the shirt.",
     block_size: int = 4096,
 ) -> dict[str, Any]:
     """Compute exact state/action stats with the same transforms as training."""
 
     if isinstance(block_size, bool) or block_size < 1:
         raise ValueError("block_size must be positive")
-    default_prompt = default_prompt.strip()
-    if not default_prompt:
-        raise ValueError("default_prompt must not be empty")
     dataset = Path(dataset_root).expanduser().resolve()
     output = Path(output_root).expanduser().resolve()
     info_path = dataset / "meta/info.json"
@@ -40,7 +37,13 @@ def compute_norm_stats(
     import openpi.shared.normalize as normalize
     import pyarrow as pa
     import pyarrow.parquet as pq
-    from rlinf.models.embodiment.openpi.dataconfig import get_openpi_config
+    from openpi import transforms
+    from openpi.models import pi0_config
+    from openpi.training.config import (
+        AssetsConfig,
+        DataConfig,
+        LeRobotAlohaDataConfig,
+    )
 
     data_files = sorted((dataset / "data").glob("chunk-*/*.parquet"))
     if not data_files:
@@ -62,18 +65,40 @@ def compute_norm_stats(
         )
     episode_ends, episode_count = _episode_ends(episode_indices)
 
-    data_kwargs = {
+    prompt = _dataset_prompt(sidecar_path)
+    data_contract = {
         "adapt_to_pi": False,
         "extra_delta_transform": True,
-        "default_prompt": default_prompt,
+        "default_prompt": prompt,
     }
-    config = get_openpi_config(
-        config_name,
+    model_config = pi0_config.Pi0Config(pi05=True, discrete_state_input=True)
+    data_factory = LeRobotAlohaDataConfig(
         repo_id=str(dataset),
-        data_kwargs=data_kwargs,
+        assets=AssetsConfig(assets_dir=str(output.parent), asset_id=output.name),
+        base_config=DataConfig(prompt_from_task=True),
+        repack_transforms=transforms.Group(
+            inputs=[
+                transforms.RepackTransform(
+                    {
+                        "images": {
+                            "cam_high": "observation.images.cam_high",
+                            "cam_left_wrist": "observation.images.cam_left_wrist",
+                            "cam_right_wrist": "observation.images.cam_right_wrist",
+                        },
+                        "state": "observation.state",
+                        "actions": "action",
+                        "prompt": "prompt",
+                    }
+                )
+            ]
+        ),
+        default_prompt=prompt,
+        adapt_to_pi=False,
+        use_delta_joint_actions=True,
+        action_sequence_keys=("action",),
     )
-    data_config = config.data.create(config.assets_dirs, config.model)
-    horizon = int(config.model.action_horizon)
+    data_config = data_factory.create(output.parent, model_config)
+    horizon = int(model_config.action_horizon)
     action_offsets = np.arange(horizon, dtype=np.int64)
     dummy_images = {"cam_high": np.zeros((3, 1, 1), dtype=np.uint8)}
     running = {
@@ -105,8 +130,8 @@ def compute_norm_stats(
         "dataset_root": str(dataset),
         "dataset_info_sha256": _sha256(info_path),
         "dataset_sidecar_sha256": _sha256(sidecar_path),
-        "config_name": config_name,
-        "data_kwargs": data_kwargs,
+        "config_name": OPENPI_CONFIG,
+        "data_kwargs": data_contract,
         "action_horizon": horizon,
         "frames": len(states),
         "episodes": episode_count,
@@ -116,6 +141,20 @@ def compute_norm_stats(
         encoding="utf-8",
     )
     return {**provenance, "output_root": str(output)}
+
+
+def _dataset_prompt(sidecar_path: Path) -> str:
+    try:
+        sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            f"cannot read ClothDojo dataset metadata: {sidecar_path}: {exc}"
+        ) from exc
+    scenario = sidecar.get("scenario") if isinstance(sidecar, dict) else None
+    prompt = scenario.get("prompt") if isinstance(scenario, dict) else None
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError(f"dataset sidecar has no task prompt: {sidecar_path}")
+    return prompt.strip()
 
 
 def _float_matrix(column: Any, pa: Any) -> np.ndarray:

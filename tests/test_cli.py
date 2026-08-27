@@ -153,6 +153,7 @@ def test_training_rejects_removed_openpi_entries(legacy_kind: str) -> None:
         "import-legacy-collection",
         "append-legacy-collection",
         "migrate-v3-indexed-view",
+        "check-cfg",
     ],
 )
 def test_data_rejects_removed_migrations(removed_command: str) -> None:
@@ -318,8 +319,6 @@ def test_policy_serve_calls_rlinf_boundary(monkeypatch) -> None:
     assert call == {
         "args": ("/models/sft", "/data/norm"),
         "kwargs": {
-            "openpi_config": "pi05_aloha_robotwin",
-            "action_horizon": 50,
             "num_steps": 10,
             "rtc_guidance_horizon": 10,
             "rtc_max_guidance_weight": 10.0,
@@ -327,6 +326,38 @@ def test_policy_serve_calls_rlinf_boundary(monkeypatch) -> None:
             "device": "cuda:4",
             "host": "127.0.0.1",
             "port": 9000,
+        },
+    }
+
+
+def test_policy_serve_jax_keeps_the_original_reference_boundary(monkeypatch) -> None:
+    call = {}
+    monkeypatch.setattr(
+        "clothdojo.rollout.policy.serve_jax_policy",
+        lambda *args, **kwargs: call.update(args=args, kwargs=kwargs),
+    )
+
+    cli.main(
+        [
+            "policy",
+            "serve-jax",
+            "--checkpoint",
+            "/models/jax/40000",
+            "--norm-stats",
+            "/data/norm",
+            "--training-config",
+            "/configs/jax.yaml",
+            "--num-steps",
+            "5",
+        ]
+    )
+
+    assert call == {
+        "args": ("/models/jax/40000", "/data/norm", "/configs/jax.yaml"),
+        "kwargs": {
+            "num_steps": 5,
+            "host": "127.0.0.1",
+            "port": 8080,
         },
     }
 
@@ -354,8 +385,6 @@ def test_policy_serve_cfg_calls_composed_rollout_boundary(monkeypatch) -> None:
     assert call == {
         "args": ("/models/cfg", "/data/norm"),
         "kwargs": {
-            "openpi_config": "pi05_aloha_robotwin",
-            "action_horizon": 50,
             "num_steps": 5,
             "guidance_scale": 1.5,
             "guidance_type": "positive",
@@ -402,9 +431,6 @@ def test_policy_convert_jax_calls_checked_conversion_boundary(monkeypatch, capsy
             "/configs/jax.yaml",
         ),
         "kwargs": {
-            "openpi_config": "pi05_aloha_robotwin",
-            "action_horizon": 50,
-            "num_steps": 10,
             "parity_batch_size": 4,
             "parity_execution_horizon": 10,
         },
@@ -766,29 +792,6 @@ def test_norm_stats_command_calls_openpi_preparation(monkeypatch, capsys) -> Non
 
     assert call == {
         "args": ("/data/good", "/data/stats"),
-        "kwargs": {"config_name": "pi05_aloha_robotwin", "block_size": 128},
+        "kwargs": {"block_size": 128},
     }
     assert json.loads(capsys.readouterr().out) == {"frames": 12}
-
-
-def test_cfg_data_check_calls_static_preflight(monkeypatch, capsys) -> None:
-    call = {}
-    monkeypatch.setattr(
-        "clothdojo.training.cfg.inspect_cfg_training",
-        lambda *args: call.update(args=args) or {"compatible": True},
-    )
-
-    cli.main(
-        [
-            "data",
-            "check-cfg",
-            "--config",
-            "configs/training/cfg_pi05_aloha.yaml",
-            "data.seed=7",
-        ]
-    )
-
-    assert call == {
-        "args": ("configs/training/cfg_pi05_aloha.yaml", ["data.seed=7"]),
-    }
-    assert json.loads(capsys.readouterr().out) == {"compatible": True}
