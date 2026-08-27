@@ -1,9 +1,4 @@
-"""View models for the preserved collection-console interface.
-
-The browser contract deliberately lives here instead of leaking into the data
-catalogs.  This keeps the old, proven workspace free to evolve independently
-from ClothDojo's canonical storage formats.
-"""
+"""View models for the collection-console interface."""
 
 from __future__ import annotations
 
@@ -106,21 +101,10 @@ class CollectionWorkspace:
             for item in self._episodes(profile_id)
             if item["status"] == "complete" and item["asset_id"] is not None
         )
-        value["counts"] = {
-            **value["counts"],
-            "convertible": value["counts"]["accepted"] - value["counts"]["collectable"],
-            "converting": 0,
-        }
         value["assets"] = [
             {
                 **item,
                 "trajectory_count": trajectory_counts[item["id"]],
-                "conversion_status": None,
-                "conversion_error": None,
-                # Conversion is migrated as its own workflow; the preserved UI
-                # must not offer a button that launches an undefined command.
-                "conversion_available": False,
-                "deletion_available": False,
             }
             for item in value["assets"]
         ]

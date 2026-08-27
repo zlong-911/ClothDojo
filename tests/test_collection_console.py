@@ -271,7 +271,7 @@ def test_preserved_workspace_uses_canonical_catalogs(tmp_path: Path) -> None:
         page_size=48,
     )
     assert page["assets"][0]["trajectory_count"] == 1
-    assert page["assets"][0]["conversion_available"] is False
+    assert "conversion_available" not in page["assets"][0]
 
 
 def test_collection_console_preserves_old_workspace_design() -> None:

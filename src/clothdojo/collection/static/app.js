@@ -427,22 +427,19 @@
   document.addEventListener("keydown",e=>{const tag=(e.target&&e.target.tagName)||"";if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT"||tag==="VIDEO")return;const useHil=state.activePane==="hil"&&hilState.episode&&hilVideo();const v=useHil?hilVideo():paneVideo();if(!v)return;if(e.code==="ArrowLeft"){e.preventDefault();if(!e.repeat)scrubStart(-1)}else if(e.code==="ArrowRight"){e.preventDefault();if(!e.repeat)scrubStart(1)}else if(e.code==="Space"){e.preventDefault();scrubStop();useHil?hilTogglePlay():togglePanePlay()}});
   document.addEventListener("keyup",e=>{if(e.code==="ArrowLeft")scrubRelease(-1);else if(e.code==="ArrowRight")scrubRelease(1)});
   window.addEventListener("blur",scrubStop);
-  const asState={status:"pending",page:1,pageCount:1,pollTimer:null,searchTimer:null};
-  function asStateLabel(asset){if(asset.converted)return"已转换";return{queued:"等待中",running:"转换中",failed:"转换失败",deleted:"已删除"}[asset.conversion_status]||""}
+  const asState={status:"pending",page:1,pageCount:1,searchTimer:null};
+  function asStateLabel(asset){return asset.converted?"已转换":""}
   function asActions(asset){
-    const busy=["queued","running"].includes(asset.conversion_status);
     if(asState.status==="pending")return`<button class="action accept" data-action="accept">接受</button><button class="action reject" data-action="reject">拒绝</button>`;
     if(asState.status==="rejected")return`<button class="action accept" data-action="accept">接受</button>`;
-    const conversion=asset.converted?`<button class="action delete" data-action="delete" ${asset.trajectory_count||asset.deletion_available===false?`disabled title="${asset.trajectory_count?`已有 ${asset.trajectory_count} 条轨迹`:"转换删除尚未迁移"}"`:""}>删除</button>`:`<button class="action" data-action="convert" ${busy||asset.conversion_available===false?`disabled title="${asset.conversion_available===false?"资产转换尚未迁移":""}"`:""}>${busy?"转换中":"转换"}</button>`;
-    return`<button class="action reject" data-action="reject">拒绝</button>${conversion}`;
+    return`<button class="action reject" data-action="reject">拒绝</button>`;
   }
   function asCard(asset){
     const images=asset.preview?`<img loading="lazy" src="/api/assets/${encodeURIComponent(asset.id)}/preview/front" alt="正面"><img loading="lazy" src="/api/assets/${encodeURIComponent(asset.id)}/preview/back" alt="背面">`:`<div class="no-preview">暂无预览</div>`;
-    const label=asStateLabel(asset),error=asset.conversion_error?`<div class="error" title="${esc(asset.conversion_error)}">${esc(asset.conversion_error)}</div>`:"",trajectory=asState.status==="accepted"?`<span class="state trajectory">${asset.trajectory_count} 条轨迹</span>`:"";
-    return`<article class="as-card" data-id="${esc(asset.id)}"><div class="images">${images}</div><div class="meta"><div class="identity"><span class="id">${esc(asset.id)}</span>${trajectory}${label?`<span class="state ${asset.conversion_status==="failed"?"failed":""}">${label}</span>`:""}</div>${error}<div class="actions">${asActions(asset)}</div></div></article>`;
+    const label=asStateLabel(asset),trajectory=asState.status==="accepted"?`<span class="state trajectory">${asset.trajectory_count} 条轨迹</span>`:"";
+    return`<article class="as-card" data-id="${esc(asset.id)}"><div class="images">${images}</div><div class="meta"><div class="identity"><span class="id">${esc(asset.id)}</span>${trajectory}${label?`<span class="state">${label}</span>`:""}</div><div class="actions">${asActions(asset)}</div></div></article>`;
   }
   async function asLoad(){
-    clearTimeout(asState.pollTimer);
     const query=$("as-search").value.trim();
     try{
       const params=new URLSearchParams({status:asState.status,page:String(asState.page),page_size:"48",query});
@@ -459,11 +456,6 @@
       $("as-jump-page").placeholder=String(asState.page);
       $("as-prev").disabled=asState.page<=1;
       $("as-next").disabled=asState.page>=asState.pageCount;
-      const batch=$("as-batch-convert");
-      batch.hidden=asState.status!=="accepted";
-      batch.disabled=data.counts.convertible===0;
-      batch.textContent=data.counts.convertible?`批量转换 ${data.counts.convertible}`:data.counts.converting?`队列中 ${data.counts.converting}`:"全部已转换";
-      if(data.counts.converting>0)asState.pollTimer=setTimeout(asLoad,2000);
     }catch(error){toast(error.message,true)}
   }
   $("as-tabs").onclick=event=>{const tab=event.target.closest(".as-tab");if(!tab)return;asState.status=tab.dataset.status;asState.page=1;document.querySelectorAll("#as-tabs .as-tab").forEach(item=>item.classList.toggle("active",item===tab));asLoad()};
@@ -471,8 +463,7 @@
   $("as-prev").onclick=()=>{if(asState.page>1){asState.page--;asLoad()}};
   $("as-next").onclick=()=>{if(asState.page<asState.pageCount){asState.page++;asLoad()}};
   $("as-jump-form").onsubmit=event=>{event.preventDefault();const requested=Number.parseInt($("as-jump-page").value,10);if(!Number.isFinite(requested))return;asState.page=Math.max(1,Math.min(asState.pageCount,requested));$("as-jump-page").value="";asLoad()};
-  $("as-batch-convert").onclick=async()=>{const button=$("as-batch-convert"),count=Number(button.textContent.match(/\d+/)?.[0]||0);if(!count||!confirm(`转换全部 ${count} 件已接受但未转换的资产？`))return;try{button.disabled=true;const result=await request("/api/assets/conversions",{method:"POST"});toast(`已加入队列：${result.queued} 件`);await asLoad()}catch(error){button.disabled=false;toast(error.message,true)}};
-  $("as-grid").onclick=async event=>{const button=event.target.closest("button[data-action]");if(!button||button.disabled)return;const id=button.closest(".as-card").dataset.id,action=button.dataset.action;try{button.disabled=true;if(action==="accept"||action==="reject")await request(`/api/assets/${id}/decision`,{method:"PUT",body:JSON.stringify({decision:action==="accept"?"accepted":"rejected"})});else if(action==="convert")await request(`/api/assets/${id}/conversion`,{method:"POST"});else if(action==="delete"){if(!confirm(`删除 ${id} 的转换数据？原始数据会保留。`)){button.disabled=false;return}await request(`/api/assets/${id}/converted`,{method:"DELETE"})}toast(action==="convert"?"已加入转换队列":"已保存");await asLoad()}catch(error){button.disabled=false;toast(error.message,true)}};
+  $("as-grid").onclick=async event=>{const button=event.target.closest("button[data-action]");if(!button||button.disabled)return;const id=button.closest(".as-card").dataset.id,action=button.dataset.action;try{button.disabled=true;await request(`/api/assets/${id}/decision`,{method:"PUT",body:JSON.stringify({decision:action==="accept"?"accepted":"rejected"})});toast("已保存");await asLoad()}catch(error){button.disabled=false;toast(error.message,true)}};
   asLoad();
   const hilState={data:null,profile:null,asset:"all",run:null,episode:null,points:[],session:null,pending:false};
   function hilProfiles(){return hilState.data?.profiles||[]}
