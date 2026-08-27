@@ -95,7 +95,8 @@ def check_jax_pytorch_conversion(
         raise ValueError("parity execution and RTC guidance horizons exceed the model horizon")
 
     jax_model = config.model.load(
-        model_module.restore_params(source / "params", dtype=jnp.float32)
+        # Match the pinned OpenPI policy loader and ``policy serve-jax`` exactly.
+        model_module.restore_params(source / "params", dtype=jnp.bfloat16)
     )
     jax_model.eval()
     weights_sha256 = rlinf_openpi_weights_sha256(target)

@@ -17,6 +17,7 @@ import numpy as np
 from clothdojo.rendering import CAMERA_NAMES, POLICY_TRANSPORT_SIZE
 from clothdojo.rollout.artifacts import (
     validate_cfg_checkpoint_binding,
+    validate_jax_reference_binding,
     validate_sft_norm_binding,
 )
 from clothdojo.rollout.checkpoint import (
@@ -683,10 +684,7 @@ def serve_sft_policy(
         raise ValueError("RTC guidance horizon must not exceed the action horizon")
     checkpoint_manifest = inspect_rlinf_openpi_checkpoint(
         checkpoint_path,
-        openpi_config=openpi_config,
         action_horizon=action_horizon,
-        action_env_dim=POLICY_ACTION_DIM,
-        num_steps=num_steps,
     )
     norm_identity = validate_sft_norm_binding(
         checkpoint_path,
@@ -776,11 +774,17 @@ def serve_jax_policy(
         raise FileNotFoundError(f"normalization stats do not exist: {norm_file}")
 
     checkpoint_identity = _tree_sha256(checkpoint_path / "params")
+    artifact_identity = validate_jax_reference_binding(
+        checkpoint_path,
+        norm_path,
+        config_path,
+        action_horizon=action_horizon,
+    )
     identity = {
         "protocol_version": POLICY_PROTOCOL_VERSION,
         "backend": "openpi",
         "checkpoint_sha256": checkpoint_identity,
-        "norm_stats_sha256": _file_sha256(norm_file),
+        **artifact_identity,
         "openpi_config": "pi05_aloha_robotwin",
         "action_dim": POLICY_ACTION_DIM,
         "action_horizon": action_horizon,
@@ -798,6 +802,8 @@ def serve_jax_policy(
         action_horizon=action_horizon,
         num_steps=num_steps,
     )
+    if _tree_sha256(checkpoint_path / "params") != checkpoint_identity:
+        raise RuntimeError("JAX checkpoint changed while the model was loading")
     print(json.dumps({"clothdojo": identity}, sort_keys=True), flush=True)
     WebsocketPolicyServer(
         _PolicySessionRouter(policy),
@@ -970,17 +976,25 @@ def _validate_server_metadata(
     _require_sha256(identity.get("norm_stats_sha256"), "server norm stats")
     if not isinstance(identity.get("openpi_config"), str) or not identity["openpi_config"]:
         raise ValueError("policy server is missing openpi_config")
-    if backend in {"rlinf-sft", "rlinf-cfg"}:
+    if backend in {"rlinf-sft", "rlinf-cfg", "openpi"}:
         _require_sha256(identity.get("norm_provenance_sha256"), "server norm provenance")
         _require_sha256(identity.get("training_manifest_sha256"), "server training manifest")
-    if backend == "rlinf-sft":
+    if backend in {"rlinf-sft", "openpi"}:
         _require_sha256(identity.get("dataset_info_sha256"), "server dataset info")
         _require_sha256(identity.get("dataset_sidecar_sha256"), "server dataset sidecar")
         source_framework = identity.get("source_framework")
         if source_framework not in {"jax", "pytorch"}:
             raise ValueError("policy server has an unsupported SFT source framework")
+        if backend == "openpi" and source_framework != "jax":
+            raise ValueError("the OpenPI reference backend requires JAX artifacts")
         if source_framework == "jax":
-            _require_sha256(identity.get("parity_report_sha256"), "server conversion parity")
+            if backend == "rlinf-sft":
+                _require_sha256(identity.get("parity_report_sha256"), "server conversion parity")
+            else:
+                _require_sha256(
+                    identity.get("checkpoint_contract_sha256"),
+                    "server JAX checkpoint contract",
+                )
     if backend == "rlinf-cfg":
         _validate_cfg_guidance_metadata(identity.get("cfg_guidance"))
     if backend == "rlinf-sft" or identity.get("rtc_guidance") is not None:

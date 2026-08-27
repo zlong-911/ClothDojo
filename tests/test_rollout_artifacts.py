@@ -4,11 +4,13 @@ import hashlib
 import json
 from dataclasses import asdict
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from clothdojo.rollout.artifacts import (
     validate_cfg_checkpoint_binding,
+    validate_jax_reference_binding,
     validate_sft_norm_binding,
 )
 from clothdojo.rollout.parity import ConversionParityLimits
@@ -156,6 +158,72 @@ def test_accepts_converted_jax_launch_artifacts(tmp_path: Path) -> None:
     assert identity["training_manifest_sha256"] == hashlib.sha256(
         jax_manifest.read_bytes()
     ).hexdigest()
+
+
+def test_raw_jax_reference_binds_config_checkpoint_and_norm_stats(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checkpoint, norm, manifest = _fixture(tmp_path)
+    config = tmp_path / "jax.yaml"
+    config.write_text("schema: clothdojo_pi05_jax_sft\n", encoding="utf-8")
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload.update(
+        schema="clothdojo_pi05_jax_preflight",
+        config_path=str(config.resolve()),
+        contract={
+            "openpi.config_name": "pi05_aloha_robotwin",
+            "openpi.data.task": "flatten the shirt",
+            "openpi.data.default_prompt": "Flatten the shirt.",
+        },
+        dataset={"root": str((tmp_path / "dataset").resolve())},
+    )
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    contract = checkpoint / "clothdojo_weights.json"
+    contract.write_text(
+        json.dumps(
+            {
+                "schema": "clothdojo_openpi_jax_checkpoint",
+                "format_version": 1,
+                "step": 10_000,
+                "ema": {
+                    "path": "params",
+                    "purpose": "inference and JAX-to-PyTorch conversion",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "clothdojo.training.jax_sft.compose_jax_sft_spec",
+        lambda path: SimpleNamespace(
+            config_path=Path(path).resolve(),
+            norm_stats=norm.resolve(),
+            openpi_config="pi05_aloha_robotwin",
+            task="flatten the shirt",
+            default_prompt="Flatten the shirt.",
+            dataset=(tmp_path / "dataset").resolve(),
+        ),
+    )
+
+    identity = validate_jax_reference_binding(
+        checkpoint,
+        norm,
+        config,
+        action_horizon=50,
+    )
+
+    assert identity["checkpoint_step"] == 10_000
+    assert identity["checkpoint_contract_sha256"] == hashlib.sha256(
+        contract.read_bytes()
+    ).hexdigest()
+    with pytest.raises(ValueError, match="serving config differs"):
+        validate_jax_reference_binding(
+            checkpoint,
+            norm,
+            tmp_path / "other.yaml",
+            action_horizon=50,
+        )
 
 
 def test_converted_jax_serving_requires_bound_passing_parity(tmp_path: Path) -> None:

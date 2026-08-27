@@ -135,6 +135,76 @@ def validate_sft_norm_binding(
     return result
 
 
+def validate_jax_reference_binding(
+    checkpoint: str | Path,
+    norm_stats: str | Path,
+    training_config: str | Path,
+    *,
+    action_horizon: int,
+) -> dict[str, Any]:
+    """Bind raw JAX inference to its training config and normalization artifacts."""
+
+    checkpoint_path = Path(checkpoint).expanduser().resolve()
+    config_path = Path(training_config).expanduser().resolve()
+    identity = validate_sft_norm_binding(
+        checkpoint_path,
+        norm_stats,
+        openpi_config="pi05_aloha_robotwin",
+        action_horizon=action_horizon,
+    )
+    if identity["source_framework"] != "jax":
+        raise ValueError("raw JAX serving requires a JAX launch manifest")
+    manifest_file = find_training_manifest(checkpoint_path)
+    manifest = _read_json_object(manifest_file, "Pi0.5 JAX launch manifest")
+    configured_path = manifest.get("config_path")
+    if not isinstance(configured_path, str) or not configured_path:
+        raise ValueError(f"JAX launch manifest has no training config: {manifest_file}")
+    if Path(configured_path).expanduser().resolve() != config_path:
+        raise ValueError(
+            "JAX serving config differs from the checkpoint launch manifest: "
+            f"{config_path} != {configured_path}"
+        )
+    from clothdojo.training.jax_sft import compose_jax_sft_spec
+
+    spec = compose_jax_sft_spec(config_path)
+    if not spec.norm_stats.samefile(Path(norm_stats).expanduser().resolve()):
+        raise ValueError("JAX serving config norm_stats differs from the checkpoint")
+    contract = manifest.get("contract")
+    expected_contract = {
+        "openpi.config_name": spec.openpi_config,
+        "openpi.data.task": spec.task,
+        "openpi.data.default_prompt": spec.default_prompt,
+    }
+    if not isinstance(contract, dict) or any(
+        contract.get(key) != value for key, value in expected_contract.items()
+    ):
+        raise ValueError("JAX serving config semantics differ from the checkpoint")
+    dataset = manifest.get("dataset")
+    if (
+        not isinstance(dataset, dict)
+        or Path(str(dataset.get("root", ""))).resolve() != spec.dataset
+    ):
+        raise ValueError("JAX serving config dataset differs from the checkpoint")
+
+    contract_file = checkpoint_path / "clothdojo_weights.json"
+    contract = _read_json_object(contract_file, "OpenPI JAX checkpoint contract")
+    if (
+        contract.get("schema") != "clothdojo_openpi_jax_checkpoint"
+        or contract.get("format_version") != 1
+        or contract.get("ema")
+        != {"path": "params", "purpose": "inference and JAX-to-PyTorch conversion"}
+    ):
+        raise ValueError(f"unsupported OpenPI JAX checkpoint contract: {contract_file}")
+    step = contract.get("step")
+    if isinstance(step, bool) or not isinstance(step, int) or step < 0:
+        raise ValueError(f"OpenPI JAX checkpoint step is invalid: {contract_file}")
+    return {
+        **identity,
+        "checkpoint_contract_sha256": _file_sha256(contract_file),
+        "checkpoint_step": step,
+    }
+
+
 def validate_cfg_checkpoint_binding(
     checkpoint: str | Path,
     norm_stats: str | Path,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -11,7 +10,6 @@ from safetensors.torch import save_file
 from clothdojo.rollout.checkpoint import (
     ExpectedCheckpointLayout,
     TensorSpec,
-    _expected_legacy_openpi_layout,
     inspect_rlinf_openpi_checkpoint,
     resolve_rlinf_openpi_weights,
     strict_reload_matching_rlinf_openpi_checkpoint,
@@ -40,10 +38,7 @@ def _write_full_weights(root: Path, state_dict: dict[str, torch.Tensor]) -> Path
 def _inspect(root: Path) -> dict:
     return inspect_rlinf_openpi_checkpoint(
         root,
-        openpi_config="pi05_aloha_robotwin",
         action_horizon=50,
-        action_env_dim=14,
-        num_steps=5,
         expected_layout=_layout(),
     )
 
@@ -60,10 +55,7 @@ def test_strict_checkpoint_accepts_layout_without_tied_weights(tmp_path: Path) -
 
     manifest = inspect_rlinf_openpi_checkpoint(
         tmp_path,
-        openpi_config="pi05_aloha_robotwin",
         action_horizon=50,
-        action_env_dim=14,
-        num_steps=5,
         expected_layout=layout,
     )
 
@@ -106,10 +98,7 @@ def test_strict_checkpoint_accepts_exact_keys_dtypes_and_shared_alias(tmp_path: 
     reload_manifest = strict_reload_rlinf_openpi_checkpoint(
         model,
         tmp_path,
-        openpi_config="pi05_aloha_robotwin",
         action_horizon=50,
-        action_env_dim=14,
-        num_steps=5,
         expected_layout=_layout(),
     )
     torch.testing.assert_close(model.embedding.weight, torch.zeros(4, 2))
@@ -174,10 +163,7 @@ def test_safetensors_accepts_only_explicit_tied_alias_omission(tmp_path: Path) -
     reload_manifest = strict_reload_rlinf_openpi_checkpoint(
         model,
         tmp_path,
-        openpi_config="pi05_aloha_robotwin",
         action_horizon=50,
-        action_env_dim=14,
-        num_steps=5,
         expected_layout=_layout(),
     )
     torch.testing.assert_close(model.embedding.weight, torch.zeros(4, 2))
@@ -273,10 +259,7 @@ def test_full_weights_reports_and_canonicalizes_divergent_tied_copy(tmp_path: Pa
     reload_manifest = strict_reload_rlinf_openpi_checkpoint(
         model,
         tmp_path,
-        openpi_config="pi05_aloha_robotwin",
         action_horizon=50,
-        action_env_dim=14,
-        num_steps=5,
         expected_layout=_layout(),
     )
 
@@ -321,19 +304,3 @@ def test_resolver_rejects_dcp_only_checkpoint(tmp_path: Path) -> None:
 
     with pytest.raises(FileNotFoundError, match="inference weights do not exist"):
         resolve_rlinf_openpi_weights(tmp_path)
-
-
-def test_meta_layout_locks_pinned_pi05_keys_dtypes_and_alias() -> None:
-    layout = _expected_legacy_openpi_layout("pi05_aloha_robotwin", 50, 14, 5)
-
-    assert len(layout.tensors) == 813
-    assert Counter(spec.dtype for spec in layout.tensors.values()) == {
-        "bfloat16": 691,
-        "float32": 122,
-    }
-    assert layout.tied_groups == (
-        (
-            "paligemma_with_expert.paligemma.model.language_model.embed_tokens.weight",
-            "paligemma_with_expert.paligemma.lm_head.weight",
-        ),
-    )

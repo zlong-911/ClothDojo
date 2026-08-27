@@ -16,6 +16,7 @@ from clothdojo.rollout.policy import (
     _PolicySessionRouter,
     _rebase_delta_model_actions,
     checkpoint_sha256,
+    serve_jax_policy,
     serve_sft_policy,
 )
 from clothdojo.rollout.render import CAMERA_NAMES
@@ -27,6 +28,7 @@ MANIFEST_SHA = "ef" * 32
 DATASET_INFO_SHA = "12" * 32
 DATASET_SIDECAR_SHA = "34" * 32
 PARITY_SHA = "56" * 32
+CHECKPOINT_CONTRACT_SHA = "78" * 32
 
 
 def _metadata(**changes):
@@ -43,6 +45,7 @@ def _metadata(**changes):
         "dataset_info_sha256": DATASET_INFO_SHA,
         "dataset_sidecar_sha256": DATASET_SIDECAR_SHA,
         "parity_report_sha256": PARITY_SHA,
+        "checkpoint_contract_sha256": CHECKPOINT_CONTRACT_SHA,
         "openpi_config": "pi05_aloha_robotwin",
         "action_dim": 14,
         "action_horizon": 4,
@@ -462,6 +465,62 @@ def test_serve_validates_checkpoint_before_constructing_model(
     assert identity["checkpoint_validation"]["tensor_count"] == 813
     assert identity["checkpoint_validation"]["strict_reload"] is True
     assert identity["inference_precision"] == "native_bfloat16"
+
+
+def test_jax_serve_binds_artifacts_before_constructing_model(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    checkpoint = tmp_path / "checkpoint"
+    params = checkpoint / "params"
+    params.mkdir(parents=True)
+    (params / "_METADATA").write_text("{}", encoding="utf-8")
+    (params / "weights").write_bytes(b"jax weights")
+    norm = tmp_path / "norm"
+    norm.mkdir()
+    (norm / "norm_stats.json").write_text("{}", encoding="utf-8")
+    config = tmp_path / "jax.yaml"
+    config.write_text("schema: clothdojo_pi05_jax_sft\n", encoding="utf-8")
+    events: list[str] = []
+
+    def validate(*args, **kwargs):
+        del args, kwargs
+        events.append("validated")
+        return {
+            "source_framework": "jax",
+            "norm_stats_sha256": NORM_SHA,
+            "norm_provenance_sha256": PROVENANCE_SHA,
+            "training_manifest_sha256": MANIFEST_SHA,
+            "dataset_info_sha256": DATASET_INFO_SHA,
+            "dataset_sidecar_sha256": DATASET_SIDECAR_SHA,
+            "checkpoint_contract_sha256": CHECKPOINT_CONTRACT_SHA,
+            "checkpoint_step": 10_000,
+        }
+
+    class FakePolicy:
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
+            assert events == ["validated"]
+            events.append("model")
+
+    class FakeServer:
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
+
+        def serve_forever(self):
+            events.append("served")
+
+    import openpi.serving.websocket_policy_server as server_module
+
+    monkeypatch.setattr(policy_module, "validate_jax_reference_binding", validate)
+    monkeypatch.setattr(policy_module, "_OpenPIJAXPolicy", FakePolicy)
+    monkeypatch.setattr(server_module, "WebsocketPolicyServer", FakeServer)
+
+    identity = serve_jax_policy(checkpoint, norm, config)
+
+    assert events == ["validated", "model", "served"]
+    assert identity["source_framework"] == "jax"
+    assert identity["checkpoint_step"] == 10_000
 
 
 def test_rlinf_policy_publishes_only_physical_model_actions() -> None:

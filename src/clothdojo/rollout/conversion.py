@@ -16,7 +16,6 @@ from clothdojo.rollout.artifacts import (
     validate_sft_norm_binding,
 )
 from clothdojo.rollout.checkpoint import inspect_rlinf_openpi_checkpoint
-from clothdojo.rollout.newton import POLICY_ACTION_DIM
 
 
 def convert_jax_checkpoint(
@@ -27,7 +26,6 @@ def convert_jax_checkpoint(
     *,
     openpi_config: str = "pi05_aloha_robotwin",
     action_horizon: int = 50,
-    num_steps: int = 10,
     parity_batch_size: int = 4,
     parity_execution_horizon: int = 10,
     _converter: Callable[..., Any] | None = None,
@@ -43,8 +41,8 @@ def convert_jax_checkpoint(
         raise FileNotFoundError(f"JAX checkpoint has no EMA params directory: {source}")
     if destination.exists():
         raise FileExistsError(f"converted checkpoint output already exists: {destination}")
-    if action_horizon < 1 or num_steps < 1:
-        raise ValueError("action_horizon and num_steps must be positive")
+    if action_horizon < 1:
+        raise ValueError("action_horizon must be positive")
     if parity_batch_size < 1 or not 1 <= parity_execution_horizon <= action_horizon:
         raise ValueError("invalid conversion parity batch or execution horizon")
     if not parity_config_path.is_file():
@@ -82,10 +80,7 @@ def convert_jax_checkpoint(
         shutil.copy2(launch_manifest, staging / "clothdojo_launch.json")
         checkpoint_manifest = inspect_rlinf_openpi_checkpoint(
             staging,
-            openpi_config=openpi_config,
             action_horizon=action_horizon,
-            action_env_dim=POLICY_ACTION_DIM,
-            num_steps=num_steps,
         )
         norm_identity = validate_sft_norm_binding(
             staging,

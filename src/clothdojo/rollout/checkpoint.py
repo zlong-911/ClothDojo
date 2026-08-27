@@ -1,4 +1,4 @@
-"""Strict, allocation-free inspection of RLINF's legacy OpenPI weights."""
+"""Strict, allocation-free inspection of RLINF OpenPI weights."""
 
 from __future__ import annotations
 
@@ -91,10 +91,7 @@ def resolve_rlinf_openpi_weights(checkpoint: str | Path) -> ResolvedInferenceWei
 def inspect_rlinf_openpi_checkpoint(
     checkpoint: str | Path,
     *,
-    openpi_config: str,
     action_horizon: int,
-    action_env_dim: int,
-    num_steps: int,
     expected_layout: ExpectedCheckpointLayout | None = None,
 ) -> dict[str, Any]:
     """Prove that the selected checkpoint exactly fits the inference model.
@@ -142,7 +139,7 @@ def inspect_rlinf_openpi_checkpoint(
 
 
 def rlinf_openpi_weights_sha256(checkpoint: str | Path) -> str:
-    """Hash only the weights that the legacy RLINF OpenPI loader will execute."""
+    """Hash only the weights that the RLINF OpenPI loader will execute."""
 
     return _weights_sha256(resolve_rlinf_openpi_weights(checkpoint))
 
@@ -151,10 +148,7 @@ def strict_reload_rlinf_openpi_checkpoint(
     model: Any,
     checkpoint: str | Path,
     *,
-    openpi_config: str,
     action_horizon: int,
-    action_env_dim: int,
-    num_steps: int,
     expected_layout: ExpectedCheckpointLayout | None = None,
 ) -> dict[str, Any]:
     """Reload validated weights with strict keys and deterministic alias semantics.
@@ -177,7 +171,7 @@ def strict_reload_matching_rlinf_openpi_checkpoint(
     """Validate and strictly reload weights against an already-built OpenPI model.
 
     This is used by the CFG subclass, whose state-dict layout is owned by the
-    pinned RLINF implementation rather than the legacy SFT model constructor.
+    pinned RLINF implementation.
     """
 
     resolved = resolve_rlinf_openpi_weights(checkpoint)
@@ -297,47 +291,6 @@ def _expected_openpi_rlinf_layout(action_horizon: int) -> ExpectedCheckpointLayo
     }
     del model
     return ExpectedCheckpointLayout(tensors=tensors, tied_groups=())
-
-
-@lru_cache(maxsize=8)
-def _expected_legacy_openpi_layout(
-    openpi_config: str,
-    action_horizon: int,
-    action_env_dim: int,
-    num_steps: int,
-) -> ExpectedCheckpointLayout:
-    """Construct the same model as RLINF on the meta device."""
-
-    import torch
-    from rlinf.models.embodiment.openpi.dataconfig import get_openpi_config
-    from rlinf.models.embodiment.openpi.openpi_action_model import (
-        OpenPi0Config,
-        OpenPi0ForRLActionPrediction,
-    )
-
-    train_config = get_openpi_config(openpi_config, model_path="/clothdojo/meta-checkpoint")
-    config_values = {
-        **train_config.model.__dict__,
-        "config_name": openpi_config,
-        "num_images_in_input": 3,
-        "action_chunk": action_horizon,
-        "action_env_dim": action_env_dim,
-        "num_steps": num_steps,
-    }
-    model_config = OpenPi0Config(**config_values)
-    with torch.device("meta"):
-        model = OpenPi0ForRLActionPrediction(model_config)
-    model.paligemma_with_expert.to_bfloat16_for_selected_params("bfloat16")
-    tensors = {
-        key: TensorSpec(tuple(int(dim) for dim in value.shape), _torch_dtype_name(value.dtype))
-        for key, value in model.state_dict().items()
-    }
-    aliases: defaultdict[int, list[str]] = defaultdict(list)
-    for name, parameter in model.named_parameters(remove_duplicate=False):
-        aliases[id(parameter)].append(name)
-    tied_groups = tuple(tuple(names) for names in aliases.values() if len(names) > 1)
-    del model
-    return ExpectedCheckpointLayout(tensors=tensors, tied_groups=tied_groups)
 
 
 def _read_stored_tensors(resolved: ResolvedInferenceWeights) -> dict[str, _StoredTensor]:
