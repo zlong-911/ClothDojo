@@ -12,15 +12,12 @@ import numpy as np
 import pyarrow.parquet as pq
 
 MEMBER_INDICES = (0, 1, 2)
-EXPECTED_EPISODES = 622
-EXPECTED_FRAMES = 1_151_042
 EXPECTED_FPS = 50
 EXPECTED_STATE_DIM = 14
 EXPECTED_CAMERAS = (
     "observation.images.cam_high",
     "observation.images.cam_low",
 )
-EXPECTED_PROMPT = "flatten the shirt"
 RUN_SEED_BASE = 20_260_826
 
 _CONFIG_CONTRACT: tuple[tuple[str, Any], ...] = (
@@ -104,7 +101,7 @@ def configure_steam_member(cfg: Any, member_index: int) -> dict[str, int]:
 
 
 def inspect_steam_training(cfg: Any, member_index: int) -> dict[str, Any]:
-    """Validate the fixed Good-622, FP32-master STEAM training contract."""
+    """Validate the standard-v2.1, FP32-master STEAM training contract."""
 
     member = configure_steam_member(cfg, member_index)
     resolved = _resolved_config(cfg)
@@ -195,12 +192,10 @@ def inspect_steam_dataset(value: Any, *, cfg: Any) -> dict[str, Any]:
     provenance = _read_object(provenance_path, "ClothDojo provenance")
     if info.get("codebase_version") != "v2.1":
         raise ValueError(f"STEAM requires pinned LeRobot v2.1: {info_path}")
-    if (
-        info.get("total_episodes"),
-        info.get("total_frames"),
-        info.get("fps"),
-    ) != (EXPECTED_EPISODES, EXPECTED_FRAMES, EXPECTED_FPS):
-        raise ValueError("STEAM dataset totals or fps differ from the Good-622 export")
+    total_episodes = _positive_int(info.get("total_episodes"), "total_episodes")
+    total_frames = _positive_int(info.get("total_frames"), "total_frames")
+    if info.get("fps") != EXPECTED_FPS:
+        raise ValueError(f"STEAM dataset must use {EXPECTED_FPS} FPS: {info_path}")
 
     if (
         provenance.get("schema") != "clothdojo_lerobot_export"
@@ -214,10 +209,10 @@ def inspect_steam_dataset(value: Any, *, cfg: Any) -> dict[str, Any]:
         selection.get("rule") != "explicit_whole_trajectory_good"
         or selection.get("required_review_status") != "complete"
         or counts.get("whole_trajectory_good_only") is not True
-        or counts.get("output_episodes") != EXPECTED_EPISODES
-        or counts.get("output_frames") != EXPECTED_FRAMES
+        or counts.get("output_episodes") != total_episodes
+        or counts.get("output_frames") != total_frames
     ):
-        raise ValueError("STEAM dataset is not the complete whole-trajectory Good set")
+        raise ValueError("STEAM dataset is not a complete whole-trajectory Good export")
 
     features = info.get("features", {})
     if features.get("observation.state", {}).get("shape") != [EXPECTED_STATE_DIM]:
@@ -226,14 +221,15 @@ def inspect_steam_dataset(value: Any, *, cfg: Any) -> dict[str, Any]:
         if features.get(camera, {}).get("dtype") != "video":
             raise ValueError(f"STEAM camera is absent or not video: {camera}")
     tasks = _read_tasks(root)
-    if tasks != [EXPECTED_PROMPT]:
-        raise ValueError(f"STEAM prompt must be exactly {EXPECTED_PROMPT!r}")
+    if len(tasks) != 1 or not tasks[0].strip():
+        raise ValueError("STEAM dataset must contain exactly one non-empty prompt")
+    prompt = tasks[0].strip()
 
     episodes = provenance.get("episodes")
-    if not isinstance(episodes, list) or len(episodes) != EXPECTED_EPISODES:
+    if not isinstance(episodes, list) or len(episodes) != total_episodes:
         raise ValueError("STEAM provenance has an incomplete episode list")
     episodes = sorted(episodes, key=lambda row: row.get("episode_index", -1))
-    if [row.get("episode_index") for row in episodes] != list(range(EXPECTED_EPISODES)):
+    if [row.get("episode_index") for row in episodes] != list(range(total_episodes)):
         raise ValueError("STEAM episode indices must be contiguous and zero-based")
     if any(
         row.get("quality") != "good"
@@ -243,8 +239,8 @@ def inspect_steam_dataset(value: Any, *, cfg: Any) -> dict[str, Any]:
     ):
         raise ValueError("STEAM provenance contains a non-Good or incomplete episode")
     lengths = np.asarray([int(row["length"]) for row in episodes], dtype=np.int64)
-    if int(lengths.sum()) != EXPECTED_FRAMES:
-        raise ValueError("STEAM episode lengths do not sum to total_frames")
+    if np.any(lengths < 2) or int(lengths.sum()) != total_frames:
+        raise ValueError("STEAM episode lengths are invalid or do not sum to total_frames")
 
     episode_parts: list[np.ndarray] = []
     frame_parts: list[np.ndarray] = []
@@ -265,10 +261,10 @@ def inspect_steam_dataset(value: Any, *, cfg: Any) -> dict[str, Any]:
     episode_index = np.concatenate(episode_parts)
     frame_index = np.concatenate(frame_parts)
     states = np.concatenate(state_parts).astype(np.float64, copy=False)
-    if states.shape != (EXPECTED_FRAMES, EXPECTED_STATE_DIM) or not np.isfinite(states).all():
+    if states.shape != (total_frames, EXPECTED_STATE_DIM) or not np.isfinite(states).all():
         raise ValueError("STEAM state rows are missing, malformed, or non-finite")
     if not np.array_equal(
-        episode_index, np.repeat(np.arange(EXPECTED_EPISODES), lengths)
+        episode_index, np.repeat(np.arange(total_episodes), lengths)
     ):
         raise ValueError("STEAM episode_index is not contiguous")
     if not np.array_equal(
@@ -289,11 +285,11 @@ def inspect_steam_dataset(value: Any, *, cfg: Any) -> dict[str, Any]:
         "root": str(root),
         "info_sha256": _sha256(info_path),
         "provenance_sha256": _sha256(provenance_path),
-        "episodes": EXPECTED_EPISODES,
-        "frames": EXPECTED_FRAMES,
-        "pair_samples": 2 * (EXPECTED_FRAMES - EXPECTED_EPISODES),
+        "episodes": total_episodes,
+        "frames": total_frames,
+        "pair_samples": 2 * (total_frames - total_episodes),
         "fps": EXPECTED_FPS,
-        "prompt": EXPECTED_PROMPT,
+        "prompt": prompt,
         "camera_keys": list(EXPECTED_CAMERAS),
         "state_dim": EXPECTED_STATE_DIM,
         "state_mean": observed_mean.tolist(),
@@ -307,7 +303,7 @@ def inspect_steam_dataset(value: Any, *, cfg: Any) -> dict[str, Any]:
         "per_member_dataset_passes": (
             int(cfg.runner.max_steps)
             * int(cfg.actor.global_batch_size)
-            / (2 * (EXPECTED_FRAMES - EXPECTED_EPISODES))
+            / (2 * (total_frames - total_episodes))
         ),
     }
 
@@ -343,6 +339,12 @@ def _member_index(value: int) -> int:
     if index not in MEMBER_INDICES:
         raise ValueError(f"STEAM member_index must be one of {MEMBER_INDICES}")
     return index
+
+
+def _positive_int(value: Any, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(f"STEAM {name} must be a positive integer")
+    return value
 
 
 def _resolved_config(cfg: Any) -> dict[str, Any]:
