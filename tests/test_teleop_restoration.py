@@ -127,7 +127,6 @@ def test_hil_plan_cold_restores_hashed_breakpoint(tmp_path) -> None:
         scene="shirt_flatten",
         dataset_root=tmp_path / "dataset",
         rollout_root=tmp_path / "rollouts",
-        intervention_root=tmp_path / "interventions",
         max_actions=20,
     )
     run = profile.rollout_root / "run_a"
@@ -187,7 +186,6 @@ def test_continuation_plan_uses_only_terminal_unconsumed_sources(tmp_path) -> No
         scene="shirt_flatten",
         dataset_root=tmp_path / "flatten",
         rollout_root=tmp_path / "rollouts",
-        intervention_root=tmp_path / "interventions",
         max_actions=20,
     )
     destination = CollectionProfile(
@@ -196,7 +194,6 @@ def test_continuation_plan_uses_only_terminal_unconsumed_sources(tmp_path) -> No
         scene="shirt_fold",
         dataset_root=tmp_path / "fold",
         rollout_root=tmp_path / "fold-rollouts",
-        intervention_root=tmp_path / "fold-interventions",
         max_actions=20,
         continuation_source_profile=source.id,
     )
@@ -245,7 +242,6 @@ def test_continuation_inventory_refreshes_when_assets_change(tmp_path) -> None:
         scene="shirt_flatten",
         dataset_root=tmp_path / "flatten",
         rollout_root=tmp_path / "rollouts",
-        intervention_root=tmp_path / "interventions",
         max_actions=20,
     )
     destination = CollectionProfile(
@@ -254,7 +250,6 @@ def test_continuation_inventory_refreshes_when_assets_change(tmp_path) -> None:
         scene="shirt_fold",
         dataset_root=tmp_path / "fold",
         rollout_root=tmp_path / "fold-rollouts",
-        intervention_root=tmp_path / "fold-interventions",
         max_actions=20,
         continuation_source_profile=source.id,
     )

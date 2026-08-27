@@ -87,7 +87,7 @@ class HILCatalog:
         """Index completed HIL branches by rollout run and source episode."""
 
         result: dict[tuple[str, str], list[dict[str, Any]]] = {}
-        root = self.profile.intervention_root.resolve()
+        root = self.profile.trajectory_root.resolve()
         if not root.is_dir():
             return result
         for manifest_path in sorted(root.glob("*/manifest.json")):

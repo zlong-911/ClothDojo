@@ -159,9 +159,7 @@ class TeleopSupervisor:
                         leased_episode_ids=leased,
                     )
                     continuation_path = session_root / "continuation-plan.json"
-                output_root = (
-                    profile.trajectory_root if mode == "collection" else profile.intervention_root
-                )
+                output_root = profile.trajectory_root
                 plan = SessionPlan(
                     session_id=session_id,
                     mode=mode,

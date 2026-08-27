@@ -30,7 +30,6 @@ class CollectionProfile:
     scene: str
     dataset_root: Path
     rollout_root: Path
-    intervention_root: Path
     max_actions: int
     continuation_source_profile: str | None = None
 
@@ -107,7 +106,6 @@ def load_config(path: str | Path) -> CollectionConfig:
                 "scene",
                 "dataset_root",
                 "rollout_root",
-                "intervention_root",
                 "max_actions",
             },
             f"profiles.{profile_id}",
@@ -123,7 +121,6 @@ def load_config(path: str | Path) -> CollectionConfig:
             scene=scene,
             dataset_root=_path(profile["dataset_root"], project_root),
             rollout_root=_path(profile["rollout_root"], project_root),
-            intervention_root=_path(profile["intervention_root"], project_root),
             max_actions=_positive_integer(
                 profile["max_actions"], f"profiles.{profile_id}.max_actions"
             ),

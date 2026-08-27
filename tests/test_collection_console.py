@@ -61,7 +61,6 @@ def _profile(tmp_path: Path) -> CollectionProfile:
         scene="shirt_flatten",
         dataset_root=tmp_path / "dataset",
         rollout_root=tmp_path / "rollouts",
-        intervention_root=tmp_path / "interventions",
         max_actions=3600,
     )
 
@@ -86,7 +85,6 @@ profiles:
     scene: shirt_flatten
     dataset_root: data/collections/shirt_flatten
     rollout_root: data/rollouts/shirt_flatten
-    intervention_root: data/interventions/shirt_flatten
     max_actions: 3600
 """.strip(),
         encoding="utf-8",
@@ -214,7 +212,7 @@ def test_hil_plan_binds_rollout_and_trajectory_hashes(tmp_path: Path) -> None:
     assert len(plan["breakpoints"][0]["manifest_sha256"]) == 64
     assert catalog.set_good("run_a", "shirt_a_000000", good=True)["good"] is True
     assert catalog.runs()[0]["episodes"][0]["good"] is True
-    intervention = profile.intervention_root / "teleop_branch"
+    intervention = profile.trajectory_root / "teleop_branch"
     _manifest(intervention, actions=4)
     manifest_path = intervention / "manifest.json"
     value = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -390,7 +388,6 @@ profiles:
     scene: shirt_flatten
     dataset_root: data/collections/shirt_flatten
     rollout_root: data/rollouts/shirt_flatten
-    intervention_root: data/interventions/shirt_flatten
     max_actions: 3600
 """.strip(),
         encoding="utf-8",
@@ -471,8 +468,10 @@ def test_local_supervisor_leases_gpu_and_stops_process(tmp_path: Path) -> None:
     libraries.mkdir(parents=True)
     client.mkdir()
     installation = TeleopInstallation(runtime_root, python, libraries, client, None)
+    launched_plans = []
 
     def launch(plan, _plan_path, log_path):
+        launched_plans.append(plan)
         log = log_path.open("ab", buffering=0)
         try:
             return subprocess.Popen(
@@ -496,10 +495,11 @@ def test_local_supervisor_leases_gpu_and_stops_process(tmp_path: Path) -> None:
     assert session["status"] == "starting"
     with pytest.raises(NoAvailableSlotError):
         supervisor.start_session(profile_id=profile.id, asset_id="shirt_a")
-    assert (
-        SessionPlan.read(config.state_dir / f"sessions/{session['id']}/plan.json").asset_id
-        == "shirt_a"
+    session_plan = SessionPlan.read(
+        config.state_dir / f"sessions/{session['id']}/plan.json"
     )
+    assert session_plan.asset_id == "shirt_a"
+    assert session_plan.output_root == profile.trajectory_root
     SessionStatusWriter(
         config.state_dir / f"sessions/{session['id']}/status.json",
         session_id=session["id"],
@@ -527,6 +527,24 @@ def test_local_supervisor_leases_gpu_and_stops_process(tmp_path: Path) -> None:
         time.sleep(0.05)
     assert result["status"] == "stopped"
     assert supervisor.slots()[0]["status"] == "available"
+
+    intervention = supervisor.start_session(
+        profile_id=profile.id,
+        asset_id="shirt_a",
+        slot_id="gpu-0",
+        mode="intervention",
+        intervention_plan={"source": "test"},
+    )
+    assert launched_plans[-1].mode == "intervention"
+    assert launched_plans[-1].output_root == profile.trajectory_root
+    supervisor.stop_session(intervention["id"])
+    deadline = time.monotonic() + 5.0
+    while time.monotonic() < deadline:
+        result = supervisor.session(intervention["id"])
+        if result["status"] == "stopped":
+            break
+        time.sleep(0.05)
+    assert result["status"] == "stopped"
 
 
 def test_local_supervisor_ports_are_stable_for_physical_gpu_ids(tmp_path: Path) -> None:
