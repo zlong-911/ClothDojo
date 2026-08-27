@@ -33,7 +33,6 @@ class CfgDatasetReport:
     advantage_manifest_path: str
     positive_frames: int
     negative_frames: int
-    steam_checkpoint_step: int
     steam_checkpoint_config_sha256: str
     steam_checkpoint_weights_sha256: str
     steam_stride: int
@@ -228,9 +227,6 @@ def inspect_cfg_dataset(
         advantage_manifest_path=str(manifest_path),
         positive_frames=positive,
         negative_frames=negative,
-        steam_checkpoint_step=_nonnegative_int(
-            manifest.get("checkpoint_step"), "STEAM checkpoint_step"
-        ),
         steam_checkpoint_config_sha256=_require_sha256(
             manifest.get("checkpoint_config_sha256"), "STEAM checkpoint config"
         ),
@@ -412,7 +408,6 @@ def _require_compatible_datasets(reports: list[CfgDatasetReport]) -> None:
             if left.get(field) != right.get(field):
                 raise ValueError(f"CFG dataset feature differs: {key}.{field}")
     identity_fields = (
-        "steam_checkpoint_step",
         "steam_checkpoint_config_sha256",
         "steam_checkpoint_weights_sha256",
         "steam_stride",

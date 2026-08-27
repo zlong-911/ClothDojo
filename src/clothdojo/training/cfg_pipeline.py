@@ -99,7 +99,6 @@ def _validate_existing_label_manifests(
     common = {
         "tag": spec.tag,
         "prompt": spec.prompt,
-        "checkpoint_step": spec.checkpoint_step,
         "checkpoint_config_sha256": advantage["checkpoint_config_sha256"],
         "checkpoint_weights_sha256": advantage["checkpoint_weights_sha256"],
         "stride": spec.stride,
@@ -238,7 +237,6 @@ def _write_status(
         "stage": stage,
         "pid": os.getpid(),
         "updated_at": datetime.now(UTC).isoformat(),
-        "steam_checkpoint_step": spec.checkpoint_step,
         "advantage_tag": spec.tag,
     }
     if error is not None:

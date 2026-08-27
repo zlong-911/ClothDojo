@@ -46,7 +46,6 @@ class SteamAdvantageDataset:
 class SteamAdvantageSpec:
     config_path: Path
     checkpoint: Path
-    checkpoint_step: int
     tag: str
     prompt: str
     stride: int
@@ -83,7 +82,6 @@ def compose_steam_advantage_spec(config_path: str | Path) -> SteamAdvantageSpec:
 
     checkpoint = Path(str(raw.get("checkpoint", ""))).expanduser().resolve()
     _checkpoint_weights(checkpoint)
-    checkpoint_step = _nonnegative_int(raw.get("checkpoint_step"), "checkpoint_step")
     tag = str(raw.get("tag", ""))
     if not _TAG.fullmatch(tag):
         raise ValueError(f"invalid STEAM advantage tag: {tag!r}")
@@ -118,7 +116,6 @@ def compose_steam_advantage_spec(config_path: str | Path) -> SteamAdvantageSpec:
     return SteamAdvantageSpec(
         config_path=path,
         checkpoint=checkpoint,
-        checkpoint_step=checkpoint_step,
         tag=tag,
         prompt=prompts.pop(),
         stride=stride,
@@ -141,7 +138,6 @@ def inspect_steam_advantages(spec: SteamAdvantageSpec) -> dict[str, Any]:
         "schema": "clothdojo_steam_advantage_plan",
         "format_version": 1,
         "checkpoint": str(spec.checkpoint),
-        "checkpoint_step": spec.checkpoint_step,
         "checkpoint_weights": str(weights),
         "checkpoint_config_sha256": _sha256(spec.checkpoint / "config.json"),
         "checkpoint_weights_sha256": _sha256(weights),
@@ -490,7 +486,6 @@ def _publish_dataset_labels(
         "role": entry.role,
         "prompt": spec.prompt,
         "checkpoint": str(spec.checkpoint),
-        "checkpoint_step": spec.checkpoint_step,
         "checkpoint_config_sha256": config_sha256
         or _sha256(spec.checkpoint / "config.json"),
         "checkpoint_weights": str(weights_path),

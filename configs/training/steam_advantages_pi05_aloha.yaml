@@ -1,10 +1,7 @@
 schema: clothdojo_steam_advantages
 format_version: 1
 
-# This is the saved global_step_20000 artifact corresponding to the evaluator
-# trained through zero-based step 19999.
 checkpoint: ${oc.env:CLOTHDOJO_STEAM_CHECKPOINT}
-checkpoint_step: 20000
 tag: ${oc.env:CLOTHDOJO_CFG_ADVANTAGE_TAG}
 stride: 64
 camera_keys:

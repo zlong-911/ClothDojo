@@ -94,7 +94,6 @@ def _spec(tmp_path: Path):
                 "schema: clothdojo_steam_advantages",
                 "format_version: 1",
                 f"checkpoint: {checkpoint}",
-                "checkpoint_step: 20000",
                 "tag: steam_test",
                 "stride: 64",
                 "camera_keys:",
@@ -127,7 +126,6 @@ def test_steam_advantage_spec_is_owned_and_explicit(tmp_path: Path) -> None:
     report = inspect_steam_advantages(spec)
 
     assert report["compatible"] is True
-    assert report["checkpoint_step"] == 20000
     assert report["prompt"] == "Flatten the shirt."
     assert report["tag"] == "steam_test"
     assert report["camera_keys"] == [
@@ -183,7 +181,6 @@ def test_publish_steam_labels_is_atomic_and_exact(tmp_path: Path) -> None:
     assert manifest["rows"] == 4
     assert manifest["positive"] == 2
     assert manifest["negative"] == 2
-    assert manifest["checkpoint_step"] == 20000
     assert manifest["prompt"] == "Flatten the shirt."
 
 
@@ -207,7 +204,6 @@ def test_existing_labels_are_bound_to_current_advantage_config(tmp_path: Path) -
         "format_version": 1,
         "tag": spec.tag,
         "prompt": spec.prompt,
-        "checkpoint_step": spec.checkpoint_step,
         "checkpoint_config_sha256": report["checkpoint_config_sha256"],
         "checkpoint_weights_sha256": report["checkpoint_weights_sha256"],
         "stride": spec.stride,
