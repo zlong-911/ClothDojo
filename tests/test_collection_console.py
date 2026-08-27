@@ -145,25 +145,17 @@ def test_review_annotation_uses_revision_and_merges_adjacent_ranges(tmp_path: Pa
         )
 
 
-def test_review_source_index_is_cached_until_review_directory_changes(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_review_catalog_reads_id_addressed_review_video(tmp_path: Path) -> None:
     profile = _profile(tmp_path)
-    profile.review_root.mkdir(parents=True)
-    calls = []
-
-    def discover(_root):
-        calls.append(True)
-        return {"episode_a": object()}
-
-    monkeypatch.setattr("clothdojo.collection.review.discover_review_sources", discover)
+    _manifest(profile.trajectory_root / "episode_a")
     catalog = ReviewCatalog(profile)
-    assert catalog._review_sources() == {"episode_a": catalog._review_sources()["episode_a"]}
-    assert len(calls) == 1
+    assert catalog.episodes()["episodes"][0]["review_ready"] is False
 
-    (profile.review_root / "review-new").mkdir()
-    catalog._review_sources()
-    assert len(calls) == 2
+    video = profile.review_root / "videos" / "cam_high" / "episode_a.mp4"
+    video.parent.mkdir(parents=True)
+    video.write_bytes(b"review")
+    assert catalog.video("episode_a", "cam_high") == video
+    assert catalog.episodes()["episodes"][0]["cameras"] == ["cam_high"]
 
 
 def test_hil_plan_binds_rollout_and_trajectory_hashes(tmp_path: Path) -> None:
@@ -201,7 +193,7 @@ def test_hil_plan_binds_rollout_and_trajectory_hashes(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         catalog.video("run_a", "shirt_a_000000", "cam_high")
 
-    review_video = run / "review/videos/cam_high/episode_000000.mp4"
+    review_video = run / "review/videos/cam_high/shirt_a_000000.mp4"
     review_video.parent.mkdir(parents=True)
     review_video.write_bytes(b"review")
     assert catalog.video("run_a", "shirt_a_000000", "cam_high") == review_video

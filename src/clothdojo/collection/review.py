@@ -14,11 +14,10 @@ from typing import Any, Literal
 
 from clothdojo.collection.config import CollectionProfile
 from clothdojo.data.annotations import ANNOTATION_SCHEMA, KNOWN_LABELS
-from clothdojo.data.review_source import ReviewSource, discover_review_sources
+from clothdojo.data.rollout_review import REVIEW_CAMERA
 from clothdojo.trajectory.schema import TrajectoryManifest
 
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
-_CAMERA_PREFIX = "observation.images."
 ReviewStatus = Literal["in_progress", "complete"]
 
 
@@ -30,7 +29,6 @@ class ReviewCatalog:
     def __init__(self, profile: CollectionProfile):
         self.profile = profile
         self._lock = threading.RLock()
-        self._source_cache: tuple[tuple[int, int], dict[str, ReviewSource]] | None = None
         self._episode_cache: tuple[tuple[tuple[int, int], ...], list[dict[str, Any]]] | None = None
 
     def episodes(self, *, page: int = 1, page_size: int = 50) -> dict:
@@ -119,32 +117,10 @@ class ReviewCatalog:
     def video(self, episode_id: str, camera: str) -> Path:
         episode_id = _identity(episode_id, "episode id")
         camera = _identity(camera, "camera")
-        source = self._review_sources().get(episode_id)
-        key = f"{_CAMERA_PREFIX}{camera}"
-        if source is None or key not in source.video_keys:
+        path = self.profile.review_root / "videos" / camera / f"{episode_id}.mp4"
+        if not path.is_file() or path.is_symlink():
             raise FileNotFoundError(f"review camera is unavailable: {episode_id}/{camera}")
-        matches = sorted((source.root / "videos" / key).rglob("*.mp4"))
-        if len(matches) != 1 or matches[0].is_symlink():
-            raise RuntimeError(f"review camera must contain one video: {episode_id}/{camera}")
-        return matches[0]
-
-    def _review_sources(self) -> dict[str, ReviewSource]:
-        root = self.profile.review_root
-        if not root.is_dir():
-            return {}
-        stat = root.stat()
-        stamp = (stat.st_mtime_ns, stat.st_size)
-        with self._lock:
-            if self._source_cache is not None and self._source_cache[0] == stamp:
-                return self._source_cache[1]
-            try:
-                sources = discover_review_sources(self.profile.dataset_root)
-            except RuntimeError as exc:
-                if not str(exc).startswith("no review exports found"):
-                    raise
-                sources = {}
-            self._source_cache = (stamp, sources)
-            return sources
+        return path
 
     def _episode_items(self) -> list[dict[str, Any]]:
         root = self.profile.trajectory_root
@@ -153,12 +129,11 @@ class ReviewCatalog:
         stamp = (
             _file_set_stamp(root, "*/manifest.json"),
             _file_set_stamp(root / "annotations", "*.segments.json"),
-            (_directory_stamp(self.profile.review_root),),
+            _file_set_stamp(self.profile.review_root, "videos/*/*.mp4"),
         )
         with self._lock:
             if self._episode_cache is not None and self._episode_cache[0] == stamp:
                 return self._episode_cache[1]
-            sources = self._review_sources()
             items = []
             for manifest_path in root.glob("*/manifest.json"):
                 episode_id = manifest_path.parent.name
@@ -169,7 +144,8 @@ class ReviewCatalog:
                 except (OSError, RuntimeError, TypeError, ValueError):
                     continue
                 annotation = self.annotation(episode_id, manifest=manifest)
-                source = sources.get(episode_id)
+                video = self.profile.review_root / "videos" / REVIEW_CAMERA / f"{episode_id}.mp4"
+                review_ready = video.is_file() and not video.is_symlink()
                 items.append(
                     {
                         "id": episode_id,
@@ -178,10 +154,8 @@ class ReviewCatalog:
                         "control_fps": manifest.control_fps,
                         "asset_id": manifest.metadata.get("asset_id"),
                         "metadata": dict(manifest.metadata),
-                        "review_ready": source is not None,
-                        "cameras": []
-                        if source is None
-                        else [_camera_name(key) for key in source.video_keys],
+                        "review_ready": review_ready,
+                        "cameras": [REVIEW_CAMERA] if review_ready else [],
                         "review_status": annotation["review_status"],
                         "annotation": annotation,
                         "bad_segment_count": sum(
@@ -304,20 +278,8 @@ def _identity(value: object, name: str) -> str:
     return text
 
 
-def _camera_name(key: str) -> str:
-    return key.removeprefix(_CAMERA_PREFIX)
-
-
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
-
-
-def _directory_stamp(path: Path) -> tuple[int, int]:
-    try:
-        value = path.stat()
-    except FileNotFoundError:
-        return (0, 0)
-    return (value.st_mtime_ns, value.st_size)
 
 
 def _file_set_stamp(path: Path, pattern: str) -> tuple[tuple[str, int, int], ...]:

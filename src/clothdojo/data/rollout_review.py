@@ -1,133 +1,229 @@
-"""Fast, directly encoded review videos for canonical rollout trajectories."""
+"""Incremental lightweight review videos for canonical trajectories."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import av
 import numpy as np
 
-REVIEW_SCHEMA = "clothdojo_rollout_review"
-REVIEW_FORMAT_VERSION = 1
 REVIEW_CAMERA = "cam_high"
 
 
-def render_rollout_review(
+@dataclass(frozen=True, slots=True)
+class _ReviewTrajectory:
+    id: str
+    path: Path
+    asset_id: str
+    manifest_sha256: str
+
+
+def render_review(
     source: str | Path,
     *,
     assets_root: str | Path = "assets",
     device: str = "cuda:0",
     fps: int = 10,
 ) -> dict[str, Any]:
-    """Render one lightweight HIL review stream without building a solver."""
+    """Incrementally render the high camera used by trajectory review."""
 
     from clothdojo.data.rollout import _restore_render_state, _TrajectoryRenderState
-    from clothdojo.rollout.collection import load_rollout_collection
     from clothdojo.rollout.render import ShirtFlattenCameraObservation
     from clothdojo.sim.scene import ShirtFlattenSpec, build_shirt_flatten
     from clothdojo.trajectory import TrajectoryReader
 
     root = Path(source).expanduser().resolve()
+    trajectories = _review_trajectories(root)
     destination = root / "review"
-    if destination.exists():
-        raise FileExistsError(f"rollout review output already exists: {destination}")
-    staging = destination.parent / f".{destination.name}.tmp"
-    if staging.exists():
-        raise FileExistsError(f"unfinished rollout review output exists: {staging}")
+    videos = destination / "videos" / REVIEW_CAMERA
+    videos.mkdir(parents=True, exist_ok=True)
+    previous = _review_records(destination / "meta.json")
 
-    manifest = load_rollout_collection(root)
-    trajectories = manifest["trajectories"]
-    first_reader = TrajectoryReader(root / trajectories[0]["path"])
-    source_fps = float(first_reader.manifest.control_fps)
-    stride = _review_stride(source_fps, fps)
-    source_meta_sha256 = hashlib.sha256((root / "meta.json").read_bytes()).hexdigest()
-
-    videos = staging / "videos" / REVIEW_CAMERA
-    videos.mkdir(parents=True)
     active_asset = None
-    scene = None
-    runtime = None
     camera = None
-    episode_records = []
-    for episode_index, episode in enumerate(trajectories):
-        asset_id = str(episode["asset_id"])
-        if asset_id != active_asset:
-            active_asset = asset_id
-            scene = build_shirt_flatten(
-                assets_root,
-                spec=ShirtFlattenSpec(garment_id=asset_id, world_count=1),
-                device=device,
-                visuals=True,
-            )
-            runtime = _TrajectoryRenderState(scene)
-            camera = ShirtFlattenCameraObservation(
-                scene,
-                camera_names=(REVIEW_CAMERA,),
-            )
-        reader = TrajectoryReader(root / episode["path"])
-        if float(reader.manifest.control_fps) != source_fps:
-            raise ValueError("rollout trajectories use different control rates")
-        action_count = int(reader.manifest.action_count)
-        if action_count != int(episode["action_count"]):
-            raise ValueError("rollout trajectory count differs from collection metadata")
-        encoder = _RawVideoEncoder(
-            videos / f"episode_{episode_index:06d}.mp4",
-            width=camera.width,
-            height=camera.height,
-            fps=fps,
-        )
-        frame_count = 0
-        try:
-            for sample_index in range(0, action_count, stride):
-                _restore_render_state(runtime, reader.state_at(sample_index))
-                image = camera(runtime)[f"observation.images.{REVIEW_CAMERA}"][0]
-                encoder.write(image)
-                frame_count += 1
-            encoder.close()
-        except Exception:
-            encoder.abort()
-            raise
-        episode_records.append(
-            {
-                "episode_index": episode_index,
-                "trajectory": episode["path"],
+    runtime = None
+    records: list[dict[str, Any]] = []
+    rendered = 0
+    reused = 0
+    try:
+        for trajectory in trajectories:
+            reader = TrajectoryReader(trajectory.path)
+            source_fps = float(reader.manifest.control_fps)
+            stride = _review_stride(source_fps, fps)
+            action_count = int(reader.manifest.action_count)
+            video = videos / f"{trajectory.id}.mp4"
+            identity = {
+                "trajectory_id": trajectory.id,
+                "manifest_sha256": trajectory.manifest_sha256,
                 "source_frames": action_count,
-                "video_frames": frame_count,
+                "source_fps": source_fps,
+                "video_fps": fps,
+                "sample_stride": stride,
             }
-        )
-    review_meta = {
-        "schema": REVIEW_SCHEMA,
-        "format_version": REVIEW_FORMAT_VERSION,
-        "status": "complete",
-        "source": str(root),
-        "source_meta_sha256": source_meta_sha256,
-        "source_fps": source_fps,
-        "video_fps": fps,
-        "sample_stride": stride,
-        "camera_names": [REVIEW_CAMERA],
-        "episodes": episode_records,
-    }
-    (staging / "meta.json").write_text(
-        json.dumps(review_meta, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+            old = previous.get(trajectory.id)
+            if (
+                old is not None
+                and all(old.get(key) == value for key, value in identity.items())
+                and video.is_file()
+                and not video.is_symlink()
+                and isinstance(old.get("video_frames"), int)
+            ):
+                records.append(old)
+                reused += 1
+                continue
+
+            if trajectory.asset_id != active_asset:
+                _close_camera(camera)
+                scene = build_shirt_flatten(
+                    assets_root,
+                    spec=ShirtFlattenSpec(garment_id=trajectory.asset_id, world_count=1),
+                    device=device,
+                    visuals=True,
+                )
+                runtime = _TrajectoryRenderState(scene)
+                camera = ShirtFlattenCameraObservation(scene, camera_names=(REVIEW_CAMERA,))
+                active_asset = trajectory.asset_id
+
+            encoder = _RawVideoEncoder(
+                video,
+                width=camera.width,
+                height=camera.height,
+                fps=fps,
+            )
+            video_frames = 0
+            try:
+                for sample_index in range(0, action_count, stride):
+                    _restore_render_state(runtime, reader.state_at(sample_index))
+                    image = camera(runtime)[f"observation.images.{REVIEW_CAMERA}"][0]
+                    encoder.write(image)
+                    video_frames += 1
+                encoder.close()
+            except BaseException:
+                encoder.abort()
+                raise
+            records.append({**identity, "video_frames": video_frames})
+            rendered += 1
+    finally:
+        _close_camera(camera)
+
+    _atomic_json(
+        destination / "meta.json",
+        {
+            "source": str(root),
+            "camera": REVIEW_CAMERA,
+            "episodes": records,
+        },
     )
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    staging.rename(destination)
     return {
         "source": str(root),
         "output": str(destination),
-        "episodes": len(episode_records),
-        "source_frames": sum(item["source_frames"] for item in episode_records),
-        "video_frames": sum(item["video_frames"] for item in episode_records),
-        "source_fps": source_fps,
+        "episodes": len(records),
+        "rendered": rendered,
+        "reused": reused,
+        "source_frames": sum(int(item["source_frames"]) for item in records),
+        "video_frames": sum(int(item["video_frames"]) for item in records),
         "video_fps": fps,
-        "sample_stride": stride,
         "camera_names": [REVIEW_CAMERA],
     }
+
+
+def _review_trajectories(root: Path) -> list[_ReviewTrajectory]:
+    meta_path = root / "meta.json"
+    if meta_path.is_file():
+        try:
+            schema = json.loads(meta_path.read_text(encoding="utf-8")).get("schema")
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"cannot read source metadata: {meta_path}: {exc}") from exc
+        if schema == "clothdojo_rollout":
+            from clothdojo.rollout.collection import load_rollout_collection
+
+            manifest = load_rollout_collection(root)
+            return [
+                _review_trajectory(root / item["path"], asset_id=str(item["asset_id"]))
+                for item in manifest["trajectories"]
+            ]
+        raise ValueError(f"unsupported review source schema: {schema!r}")
+
+    trajectories_root = root / "trajectories"
+    if not trajectories_root.is_dir():
+        raise NotADirectoryError(f"trajectory directory is missing: {trajectories_root}")
+    result = []
+    for manifest_path in sorted(trajectories_root.glob("*/manifest.json")):
+        try:
+            value = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(value, dict) or value.get("status") != "complete":
+            continue
+        metadata = value.get("metadata")
+        asset_id = metadata.get("asset_id") if isinstance(metadata, dict) else None
+        if not isinstance(asset_id, str) or not asset_id:
+            raise RuntimeError(f"trajectory asset_id is missing: {manifest_path}")
+        result.append(_review_trajectory(manifest_path.parent, asset_id=asset_id))
+    if not result:
+        raise RuntimeError(f"no complete trajectories found in {trajectories_root}")
+    return result
+
+
+def _review_trajectory(path: Path, *, asset_id: str) -> _ReviewTrajectory:
+    manifest = path / "manifest.json"
+    return _ReviewTrajectory(
+        id=path.name,
+        path=path,
+        asset_id=asset_id,
+        manifest_sha256=hashlib.sha256(manifest.read_bytes()).hexdigest(),
+    )
+
+
+def _review_records(path: Path) -> dict[str, dict[str, Any]]:
+    if not path.is_file():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    episodes = value.get("episodes") if isinstance(value, dict) else None
+    if not isinstance(episodes, list):
+        return {}
+    return {
+        str(item["trajectory_id"]): item
+        for item in episodes
+        if isinstance(item, dict) and isinstance(item.get("trajectory_id"), str)
+    }
+
+
+def _close_camera(camera: Any | None) -> None:
+    if camera is not None and hasattr(camera, "close"):
+        camera.close()
+
+
+def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            json.dump(payload, stream, indent=2, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def _review_stride(source_fps: float, video_fps: int) -> int:
@@ -136,7 +232,7 @@ def _review_stride(source_fps: float, video_fps: int) -> int:
     ratio = source_fps / video_fps
     stride = round(ratio)
     if stride < 1 or abs(ratio - stride) > 1.0e-9:
-        raise ValueError("review fps must divide the rollout control rate exactly")
+        raise ValueError("review fps must divide the trajectory control rate exactly")
     return stride
 
 

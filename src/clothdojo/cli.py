@@ -303,62 +303,38 @@ def main(argv: Sequence[str] | None = None) -> None:
             return
         if args.isaac_seed is not None:
             parser.error("--isaac-seed is only supported for canonical rollout data")
-        from clothdojo.data.lerobot import (
-            export_review_dataset,
-            inspect_review_export,
-            republish_review_dataset,
+        from clothdojo.data.rollout import (
+            export_trajectory_dataset,
+            inspect_trajectory_dataset_export,
         )
 
         if args.plan_only:
-            plan, sources = inspect_review_export(
+            result = inspect_trajectory_dataset_export(
                 args.source,
                 min_segment_frames=args.min_segment_frames,
                 whole_trajectory_good_only=args.whole_trajectory_good_only,
             )
-            summary = plan.to_json_dict()
-            summary.pop("episodes")
-            summary.pop("source_action_counts")
-            reference = sources[sorted(sources)[0]]
-            summary.update(
-                {
-                    "review_exports": len(sources),
-                    "review_format": "LeRobot v3.0",
-                    "output_format": "LeRobot v2.1",
-                    "camera_names": [
-                        key.removeprefix("observation.images.") for key in reference.video_keys
-                    ],
-                }
-            )
-            print(json.dumps(summary, indent=2, sort_keys=True))
+            print(json.dumps(result, indent=2, sort_keys=True))
             return
-        if args.output is None:
-            parser.error("--output is required unless --plan-only is used")
-        if args.reuse_from is None:
-            result = export_review_dataset(
-                args.source,
-                args.output,
-                repo_id=args.repo_id,
-                image_writer_threads=args.image_writer_threads,
-                min_segment_frames=args.min_segment_frames,
-                whole_trajectory_good_only=args.whole_trajectory_good_only,
-            )
-        else:
-            result = republish_review_dataset(
-                args.source,
-                args.reuse_from,
-                args.output,
-                repo_id=args.repo_id,
-                min_segment_frames=args.min_segment_frames,
-                whole_trajectory_good_only=args.whole_trajectory_good_only,
-            )
-        print(json.dumps(result.to_json_dict(), indent=2, sort_keys=True))
+        output = args.output or str(source_root / "lerobot")
+        result = export_trajectory_dataset(
+            args.source,
+            output,
+            assets_root=args.assets,
+            device=args.device,
+            repo_id=args.repo_id,
+            image_writer_threads=args.image_writer_threads,
+            min_segment_frames=args.min_segment_frames,
+            whole_trajectory_good_only=args.whole_trajectory_good_only,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
         return
-    if args.command == "data" and args.data_command == "render-rollout-review":
+    if args.command == "data" and args.data_command == "render-review":
         if passthrough:
             parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
-        from clothdojo.data.rollout_review import render_rollout_review
+        from clothdojo.data.rollout_review import render_review
 
-        result = render_rollout_review(
+        result = render_review(
             args.source,
             assets_root=args.assets,
             device=args.device,
@@ -820,12 +796,12 @@ def _parser() -> argparse.ArgumentParser:
     data_commands = data.add_subparsers(dest="data_command")
     export = data_commands.add_parser(
         "export-lerobot",
-        help="remove bad ranges and export review data as LeRobot v2.1",
+        help="replay selected trajectories as standard LeRobot v2.1",
     )
     export.add_argument("--source", required=True, help="source dataset root")
     export.add_argument("--output", help="new LeRobot dataset directory")
-    export.add_argument("--assets", default="assets", help="assets used to replay rollout states")
-    export.add_argument("--device", default="cuda:0", help="render device for rollout replay")
+    export.add_argument("--assets", default="assets", help="assets used to replay states")
+    export.add_argument("--device", default="cuda:0", help="render device for state replay")
     export.add_argument(
         "--isaac-seed",
         type=int,
@@ -853,10 +829,6 @@ def _parser() -> argparse.ArgumentParser:
         ),
     )
     export.add_argument("--repo-id", help="LeRobot repository identity stored in metadata")
-    export.add_argument(
-        "--reuse-from",
-        help="completed ClothDojo v2.1 superset whose immutable videos can be reused",
-    )
     export.add_argument(
         "--image-writer-threads",
         type=int,
@@ -893,14 +865,14 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="also download the optional room assets",
     )
-    rollout_review = data_commands.add_parser(
-        "render-rollout-review",
-        help="directly encode lightweight rollout videos for HIL review",
+    review = data_commands.add_parser(
+        "render-review",
+        help="incrementally render lightweight trajectory review videos",
     )
-    rollout_review.add_argument("--source", required=True, help="canonical rollout root")
-    rollout_review.add_argument("--assets", default="assets", help="assets used for replay")
-    rollout_review.add_argument("--device", default="cuda:0", help="Newton render device")
-    rollout_review.add_argument(
+    review.add_argument("--source", required=True, help="collection or rollout root")
+    review.add_argument("--assets", default="assets", help="assets used for replay")
+    review.add_argument("--device", default="cuda:0", help="Newton render device")
+    review.add_argument(
         "--fps",
         type=int,
         default=10,

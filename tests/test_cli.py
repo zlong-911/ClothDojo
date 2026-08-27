@@ -473,6 +473,42 @@ def test_rollout_lerobot_defaults_inside_experiment(monkeypatch, tmp_path: Path)
     assert call["args"] == (str(source), str(source / "lerobot"))
 
 
+def test_trajectory_lerobot_uses_direct_replay_and_default_output(
+    monkeypatch, tmp_path: Path
+) -> None:
+    source = tmp_path / "collection"
+    (source / "trajectories").mkdir(parents=True)
+    call = {}
+    monkeypatch.setattr(
+        "clothdojo.data.rollout.export_trajectory_dataset",
+        lambda *args, **kwargs: call.update(args=args, kwargs=kwargs)
+        or {"compatible": True},
+    )
+
+    cli.main(
+        [
+            "data",
+            "export-lerobot",
+            "--source",
+            str(source),
+            "--min-segment-frames",
+            "1",
+        ]
+    )
+
+    assert call == {
+        "args": (str(source), str(source / "lerobot")),
+        "kwargs": {
+            "assets_root": "assets",
+            "device": "cuda:0",
+            "repo_id": None,
+            "image_writer_threads": 6,
+            "min_segment_frames": 1,
+            "whole_trajectory_good_only": False,
+        },
+    }
+
+
 def test_export_lerobot_dispatches_optional_isaac_backend(
     monkeypatch, capsys, tmp_path: Path
 ) -> None:
@@ -578,17 +614,17 @@ def test_isaac_none_randomization_is_not_replaced_by_default(
     assert json.loads(capsys.readouterr().out) == {"compatible": True}
 
 
-def test_render_rollout_review_dispatches_lightweight_export(monkeypatch, capsys) -> None:
+def test_render_review_dispatches_incremental_export(monkeypatch, capsys) -> None:
     call = {}
     monkeypatch.setattr(
-        "clothdojo.data.rollout_review.render_rollout_review",
+        "clothdojo.data.rollout_review.render_review",
         lambda *args, **kwargs: call.update(args=args, kwargs=kwargs) or {"episodes": 8},
     )
 
     cli.main(
         [
             "data",
-            "render-rollout-review",
+            "render-review",
             "--source",
             "/data/rollouts/lr2x",
             "--assets",

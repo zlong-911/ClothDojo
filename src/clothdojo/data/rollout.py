@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 
+from clothdojo.data.annotations import ExportPlan, build_good_segment_plan
 from clothdojo.data.lerobot import (
     EXPORT_FORMAT_VERSION,
     EXPORT_SCHEMA,
@@ -50,6 +51,7 @@ class RolloutLeRobotWriter:
         repo_id: str | None = None,
         image_writer_threads: int = 6,
         _writer_factory: Callable[..., Any] | None = None,
+        selection_plan: ExportPlan | None = None,
     ) -> None:
         self.output = Path(output).expanduser().resolve()
         if self.output.exists():
@@ -69,6 +71,7 @@ class RolloutLeRobotWriter:
         self.image_height = int(image_height)
         self.image_width = int(image_width)
         self.repo_id = repo_id or f"local/{self.output.name}"
+        self.selection_plan = selection_plan
         self._injected = _writer_factory is not None
         if self._injected:
             self.staging.mkdir()
@@ -149,6 +152,7 @@ class RolloutLeRobotWriter:
             source_kind=self.source_kind,
             episode_lengths=self._episode_lengths,
             rendering=self.rendering,
+            selection_plan=self.selection_plan,
         )
         self.staging.rename(self.output)
         self._closed = True
@@ -203,6 +207,101 @@ def export_rollout_collection(
     )
 
 
+def inspect_trajectory_dataset_export(
+    source: str | Path,
+    *,
+    min_segment_frames: int,
+    whole_trajectory_good_only: bool,
+) -> dict[str, Any]:
+    """Inspect annotation selection directly on canonical trajectories."""
+
+    root = Path(source).expanduser().resolve()
+    plan = build_good_segment_plan(
+        root,
+        min_segment_frames=min_segment_frames,
+        whole_trajectory_good_only=whole_trajectory_good_only,
+    )
+    fps, task_name, _assets = _trajectory_export_context(root, plan)
+    result = plan.to_json_dict()
+    result.pop("episodes")
+    result.pop("source_action_counts")
+    result.update(
+        {
+            "source_kind": "trajectory_collection",
+            "source": str(root),
+            "task": task_name,
+            "fps": fps,
+            "output_format": "LeRobot v2.1",
+            "camera_names": list(CAMERA_NAMES),
+            "renderer": "newton",
+        }
+    )
+    return result
+
+
+def export_trajectory_dataset(
+    source: str | Path,
+    output: str | Path,
+    *,
+    assets_root: str | Path = "assets",
+    device: str = "cuda:0",
+    repo_id: str | None = None,
+    image_writer_threads: int = 6,
+    min_segment_frames: int,
+    whole_trajectory_good_only: bool,
+) -> dict[str, Any]:
+    """Replay selected canonical trajectory ranges into standard LeRobot v2.1."""
+
+    root = Path(source).expanduser().resolve()
+    plan = build_good_segment_plan(
+        root,
+        min_segment_frames=min_segment_frames,
+        whole_trajectory_good_only=whole_trajectory_good_only,
+    )
+    fps, task_name, assets = _trajectory_export_context(root, plan)
+    prompt = _task_prompt(task_name)
+    trajectories = [
+        {
+            "path": f"trajectories/{segment.source_trajectory}",
+            "asset_id": assets[segment.source_trajectory],
+            "action_count": segment.length,
+            "action_start": segment.action_start,
+            "action_end_exclusive": segment.action_end_exclusive,
+            "source_episode_id": segment.source_trajectory,
+        }
+        for segment in plan.segments
+    ]
+    manifest = {
+        "scenario": {"scenario_id": task_name, "prompt": prompt},
+        "policy": {},
+        "training_eligible": True,
+        "trajectories": trajectories,
+    }
+
+    def camera_factory(asset_id: str, _initial_state: Any):
+        return _NewtonTrajectoryCamera(asset_id, assets_root=assets_root, device=device)
+
+    _export_collection_manifest(
+        root,
+        output,
+        manifest=manifest,
+        source_kind="trajectory_collection",
+        camera_factory=camera_factory,
+        rendering={"backend": "newton"},
+        repo_id=repo_id,
+        image_writer_threads=image_writer_threads,
+        selection_plan=plan,
+        fps=fps,
+    )
+    result = inspect_trajectory_dataset_export(
+        root,
+        min_segment_frames=min_segment_frames,
+        whole_trajectory_good_only=whole_trajectory_good_only,
+    )
+    result.update({"compatible": True, "output": str(Path(output).expanduser().resolve())})
+    return result
+
+
 class _NewtonTrajectoryCamera:
     """Render recorded states through the project's Newton camera backend."""
 
@@ -248,17 +347,54 @@ def _export_canonical_collection(
 ) -> dict[str, Any]:
     """Publish one canonical collection using a backend-specific camera."""
 
+    root = Path(source).expanduser().resolve()
+    manifest, source_kind = _load_canonical_collection(root)
+    _export_collection_manifest(
+        root,
+        output,
+        manifest=manifest,
+        source_kind=source_kind,
+        camera_factory=camera_factory,
+        rendering=rendering,
+        repo_id=repo_id,
+        image_writer_threads=image_writer_threads,
+    )
+    summary = inspect_rollout_collection_export(root)
+    summary.update(
+        {
+            "compatible": True,
+            "output": str(Path(output).expanduser().resolve()),
+            "renderer": rendering["backend"],
+        }
+    )
+    return summary
+
+
+def _export_collection_manifest(
+    root: Path,
+    output: str | Path,
+    *,
+    manifest: dict[str, Any],
+    source_kind: str,
+    camera_factory: Callable[[str, Any], Any],
+    rendering: dict[str, Any],
+    repo_id: str | None,
+    image_writer_threads: int,
+    selection_plan: ExportPlan | None = None,
+    fps: float | None = None,
+) -> None:
+    """Replay the ranges in one in-memory canonical collection manifest."""
+
     from clothdojo.rollout.newton import pack_policy_state
     from clothdojo.trajectory import TrajectoryReader
 
-    root = Path(source).expanduser().resolve()
-    manifest, source_kind = _load_canonical_collection(root)
     scenario = manifest["scenario"]
     trajectories = manifest["trajectories"]
     first_reader = TrajectoryReader(root / trajectories[0]["path"])
+    export_fps = float(first_reader.manifest.control_fps) if fps is None else float(fps)
     sink = RolloutLeRobotWriter(
         output,
-        fps=int(first_reader.manifest.control_fps),
+        fps=int(export_fps),
         prompt=scenario["prompt"],
         scenario=scenario,
         trajectory=str(root),
@@ -268,25 +404,35 @@ def _export_canonical_collection(
         rendering=rendering,
         repo_id=repo_id,
         image_writer_threads=image_writer_threads,
+        selection_plan=selection_plan,
     )
     try:
         active_asset = None
         camera = None
         for episode_index, episode in enumerate(trajectories):
             reader = TrajectoryReader(root / episode["path"])
-            if reader.manifest.control_fps != first_reader.manifest.control_fps:
-                raise ValueError("rollout trajectories use different control rates")
+            if float(reader.manifest.control_fps) != export_fps:
+                raise ValueError("trajectories use different control rates")
+            action_start = int(episode.get("action_start", 0))
+            action_end = int(
+                episode.get("action_end_exclusive", reader.manifest.action_count)
+            )
             if episode["asset_id"] != active_asset:
                 _close_camera(camera)
                 camera = None
                 active_asset = episode["asset_id"]
-                camera = camera_factory(active_asset, reader.state_at(0))
+                camera = camera_factory(active_asset, reader.state_at(action_start))
             if hasattr(camera, "begin_episode"):
                 camera.begin_episode(
                     episode_index,
-                    source_episode_id=Path(episode["path"]).name,
+                    source_episode_id=episode.get(
+                        "source_episode_id", Path(episode["path"]).name
+                    ),
                 )
-            for sample in reader.iter_samples():
+            for sample in reader.iter_samples(
+                action_start=action_start,
+                action_end_exclusive=action_end,
+            ):
                 arm_q = np.asarray(sample.state.joint_q, dtype=np.float32)[
                     np.asarray(_ARM_COORD_INDICES)
                 ][None, :]
@@ -310,15 +456,6 @@ def _export_canonical_collection(
         _close_camera(camera)
         sink.abort()
         raise
-    summary = inspect_rollout_collection_export(root)
-    summary.update(
-        {
-            "compatible": True,
-            "output": str(Path(output).expanduser().resolve()),
-            "renderer": rendering["backend"],
-        }
-    )
-    return summary
 
 
 def _close_camera(camera: Any | None) -> None:
@@ -346,6 +483,43 @@ def _load_canonical_collection(root: Path) -> tuple[dict[str, Any], str]:
             raise ValueError("evaluation condition trajectory index is incomplete")
         return condition.meta, "evaluation_condition"
     raise ValueError(f"unsupported canonical trajectory collection schema: {schema!r}")
+
+
+def _trajectory_export_context(
+    root: Path,
+    plan: ExportPlan,
+) -> tuple[float, str, dict[str, str]]:
+    from clothdojo.trajectory import TrajectoryReader
+
+    fps: float | None = None
+    task_name: str | None = None
+    assets: dict[str, str] = {}
+    for source_id, _action_count in plan.source_action_counts:
+        reader = TrajectoryReader(root / "trajectories" / source_id)
+        current_fps = float(reader.manifest.control_fps)
+        current_task = reader.manifest.scene.task_name
+        asset_id = reader.manifest.metadata.get("asset_id")
+        if not isinstance(asset_id, str) or not asset_id:
+            raise RuntimeError(f"trajectory asset_id is missing: {source_id}")
+        if fps is None:
+            fps = current_fps
+            task_name = current_task
+        elif current_fps != fps or current_task != task_name:
+            raise ValueError("one export cannot mix trajectory tasks or control rates")
+        assets[source_id] = asset_id
+    assert fps is not None and task_name is not None
+    return fps, task_name, assets
+
+
+def _task_prompt(task_name: str) -> str:
+    prompts = {
+        "shirt_flatten": "Flatten the shirt.",
+        "shirt_fold": "Fold the shirt.",
+    }
+    try:
+        return prompts[task_name]
+    except KeyError as exc:
+        raise ValueError(f"no training prompt is defined for task: {task_name}") from exc
 
 
 def _restore_render_state(runtime, state) -> None:
@@ -464,8 +638,20 @@ def _write_sidecar(
     source_kind: str,
     episode_lengths: list[int],
     rendering: dict[str, Any],
+    selection_plan: ExportPlan | None,
 ) -> None:
     episodes = len(episode_lengths)
+    if selection_plan is not None:
+        if episode_lengths != [segment.length for segment in selection_plan.segments]:
+            raise RuntimeError("exported episode lengths differ from the annotation plan")
+        _write_selected_sidecar(
+            root,
+            source_root=Path(trajectory),
+            plan=selection_plan,
+            scenario=scenario,
+            rendering=rendering,
+        )
+        return
     payload = {
         "schema": EXPORT_SCHEMA,
         "format_version": EXPORT_FORMAT_VERSION,
@@ -498,6 +684,80 @@ def _write_sidecar(
             }
             for index, length in enumerate(episode_lengths)
         ],
+    }
+    path = root / "meta" / "clothdojo.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _write_selected_sidecar(
+    root: Path,
+    *,
+    source_root: Path,
+    plan: ExportPlan,
+    scenario: dict[str, Any],
+    rendering: dict[str, Any],
+) -> None:
+    episodes = []
+    full = []
+    partial = []
+    annotation_present = []
+    review_complete = []
+    default_good = []
+    for index, segment in enumerate(plan.segments):
+        record = {
+            **segment.to_json_dict(episode_index=index),
+            "quality": "good",
+            "source_episode_complete": True,
+            "contains_source_terminal": (
+                segment.action_end_exclusive == segment.source_action_count
+            ),
+        }
+        episodes.append(record)
+        (full if segment.full_trajectory else partial).append(index)
+        (annotation_present if segment.annotation_present else default_good).append(index)
+        if segment.review_status == "complete":
+            review_complete.append(index)
+    payload = {
+        "schema": EXPORT_SCHEMA,
+        "format_version": EXPORT_FORMAT_VERSION,
+        "export_status": "complete",
+        "training_eligible": True,
+        "selection": {
+            "rule": (
+                "explicit_whole_trajectory_good"
+                if plan.whole_trajectory_good_only
+                else "bad_complement_with_minimum_length"
+            ),
+            "min_segment_frames": plan.min_segment_frames,
+        },
+        "source": {
+            "kind": "trajectory_collection",
+            "trajectory": str(source_root),
+            "output_format": "LeRobot v2.1",
+        },
+        "scenario": scenario,
+        "rendering": rendering,
+        "counts": {
+            key: value
+            for key, value in plan.to_json_dict().items()
+            if key
+            not in {
+                "episodes",
+                "source_action_counts",
+                "dropped_short_source_ids",
+                "dropped_short_ranges",
+            }
+        },
+        "episode_sets": {
+            "good": list(range(plan.output_episodes)),
+            "full_trajectory": full,
+            "partial_trajectory": partial,
+            "annotation_present": annotation_present,
+            "review_complete": review_complete,
+            "default_good": default_good,
+        },
+        "episodes": episodes,
     }
     path = root / "meta" / "clothdojo.json"
     path.parent.mkdir(parents=True, exist_ok=True)

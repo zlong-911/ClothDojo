@@ -32,7 +32,7 @@
 | `src/clothdojo/rendering.py` | Newton 与 Isaac 共用的四视角标定及策略观测 contract |
 | `src/clothdojo/trajectory/` | 遥操、rollout 与评测共用的轨迹格式、读写和 Newton capture |
 | `src/clothdojo/data/` | 数据转换与导出 |
-| `src/clothdojo/data/rollout_review.py` | canonical rollout 的无 solver 轻量 HIL 审查视频 |
+| `src/clothdojo/data/rollout_review.py` | canonical trajectory 的增量无 solver 轻量审查视频 |
 | `src/clothdojo/collection/` | 采集控制面 |
 | `src/clothdojo/teleop/` | 遥操运行时 |
 | `src/clothdojo/training/` | 训练与数据处理入口 |

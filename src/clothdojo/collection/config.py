@@ -39,7 +39,7 @@ class CollectionProfile:
 
     @property
     def review_root(self) -> Path:
-        return self.dataset_root / "reviews"
+        return self.dataset_root / "review"
 
 
 @dataclass(frozen=True, slots=True)

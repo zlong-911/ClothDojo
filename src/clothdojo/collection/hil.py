@@ -28,15 +28,11 @@ class HILCatalog:
     def __init__(self, profile: CollectionProfile):
         self.profile = profile
         self._lock = threading.RLock()
-        self._runs_cache: tuple[tuple[tuple[str, int, int], ...], list[dict[str, Any]]] | None = (
-            None
-        )
+        self._runs_cache: tuple[tuple[Any, ...], list[dict[str, Any]]] | None = None
 
     def runs(self) -> list[dict[str, Any]]:
         roots = self._run_roots()
-        stamp = tuple(
-            (str(root), root.stat().st_mtime_ns, root.stat().st_size) for root in roots
-        )
+        stamp = tuple(_run_stamp(root) for root in roots)
         with self._lock:
             if self._runs_cache is not None and self._runs_cache[0] == stamp:
                 return self._runs_cache[1]
@@ -48,14 +44,14 @@ class HILCatalog:
             except (OSError, RuntimeError, TypeError, ValueError):
                 continue
             episodes = []
-            for index, item in enumerate(metadata["trajectories"]):
+            for item in metadata["trajectories"]:
                 relative = Path(item["path"])
                 episode_id = relative.name
                 manifest = TrajectoryReader(root / relative).manifest
                 cameras = [
                     camera
                     for camera in metadata.get("camera_names", [])
-                    if self._video_path(root, index, str(camera)).is_file()
+                    if self._video_path(root, episode_id, str(camera)).is_file()
                 ]
                 episodes.append(
                     {
@@ -127,11 +123,11 @@ class HILCatalog:
         camera = _identity(camera, "camera")
         root = self._run_root(run_id)
         metadata = self._metadata(root)
-        for index, item in enumerate(metadata["trajectories"]):
+        for item in metadata["trajectories"]:
             if Path(item["path"]).name == episode_id:
                 if camera not in metadata.get("camera_names", []):
                     break
-                path = self._video_path(root, index, camera)
+                path = self._video_path(root, episode_id, camera)
                 if path.is_file() and not path.is_symlink():
                     return path
                 break
@@ -265,14 +261,8 @@ class HILCatalog:
         return matches[0]
 
     @staticmethod
-    def _video_path(root: Path, episode_index: int, camera: str) -> Path:
-        return (
-            root
-            / "review"
-            / "videos"
-            / camera
-            / f"episode_{episode_index:06d}.mp4"
-        )
+    def _video_path(root: Path, episode_id: str, camera: str) -> Path:
+        return root / "review" / "videos" / camera / f"{episode_id}.mp4"
 
     @staticmethod
     def _marks(root: Path) -> dict[str, dict[str, str]]:
@@ -324,3 +314,15 @@ def _sha256(path: Path) -> str:
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _run_stamp(root: Path) -> tuple[Any, ...]:
+    stat = root.stat()
+    videos = []
+    for path in root.glob("review/videos/*/*.mp4"):
+        try:
+            video_stat = path.stat()
+        except FileNotFoundError:
+            continue
+        videos.append((str(path.relative_to(root)), video_stat.st_mtime_ns, video_stat.st_size))
+    return str(root), stat.st_mtime_ns, stat.st_size, tuple(sorted(videos))

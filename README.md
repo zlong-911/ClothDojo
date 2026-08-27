@@ -82,20 +82,19 @@ Newton、训练、评测和默认数据导出都使用 `requirements.txt`。可�
 
 ## 审查与 LeRobot
 
-轻量 HIL 审查只回放主视角，不创建 LeRobot 数据集；回放直接恢复 Newton state，不初始化物理 solver：
+轻量审查只回放主视角，不创建 LeRobot 数据集；重复执行时只渲染新增或变化的 trajectory。它同时适用于连续采集目录和 rollout，且直接恢复 Newton state，不初始化物理 solver：
 
 ```bash
-.venv/bin/clothdojo data render-rollout-review \
-  --source data/rollouts/example --device cuda:0
+.venv/bin/clothdojo data render-review \
+  --source data/collections/shirt_flatten --device cuda:0
 .venv/bin/clothdojo collect serve --config configs/collection.yaml
 ```
 
-需要训练数据或完整回放时，从同一 canonical trajectory 导出 LeRobot v2.1：
+需要训练数据时，同一入口直接读取 canonical trajectory 和审查标注，回放四路视角并导出标准 LeRobot v2.1；审查视频不是训练输入：
 
 ```bash
 .venv/bin/clothdojo data export-lerobot \
-  --source data/rollouts/example --output data/datasets/example \
-  --repo-id local/example --device cuda:0
+  --source data/collections/shirt_flatten --device cuda:0
 ```
 
 Isaac RTX 外观随机化仍使用这个 `data export-lerobot` 入口。首次使用先准备固定的视觉资产集合：

@@ -193,7 +193,7 @@ def test_canonical_export_owns_backend_camera_lifecycle(monkeypatch, tmp_path) -
     sample = SimpleNamespace(state=state, action=action)
 
     class Reader:
-        manifest = SimpleNamespace(control_fps=50)
+        manifest = SimpleNamespace(control_fps=50, action_count=1)
 
         def __init__(self, _path) -> None:
             pass
@@ -202,7 +202,7 @@ def test_canonical_export_owns_backend_camera_lifecycle(monkeypatch, tmp_path) -
             assert index == 0
             return state
 
-        def iter_samples(self):
+        def iter_samples(self, **_kwargs):
             return iter((sample,))
 
     class Sink:
