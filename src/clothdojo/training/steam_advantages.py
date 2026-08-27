@@ -88,9 +88,6 @@ def compose_steam_advantage_spec(config_path: str | Path) -> SteamAdvantageSpec:
     tag = str(raw.get("tag", ""))
     if not _TAG.fullmatch(tag):
         raise ValueError(f"invalid STEAM advantage tag: {tag!r}")
-    prompt = str(raw.get("prompt", "")).strip()
-    if not prompt:
-        raise ValueError("STEAM advantage prompt must be non-empty")
     stride = _positive_int(raw.get("stride"), "stride")
     camera_keys = tuple(str(value) for value in raw.get("camera_keys", ()))
     if not camera_keys or len(set(camera_keys)) != len(camera_keys):
@@ -116,12 +113,15 @@ def compose_steam_advantage_spec(config_path: str | Path) -> SteamAdvantageSpec:
         raise ValueError("STEAM labeling requires dataset roles sft and rollout")
     if len({dataset.target_path for dataset in datasets}) != len(datasets):
         raise ValueError("STEAM labeling targets must be distinct")
+    prompts = {_dataset_prompt(dataset.source_path) for dataset in datasets}
+    if len(prompts) != 1:
+        raise ValueError("STEAM labeling datasets must contain the same single task prompt")
     return SteamAdvantageSpec(
         config_path=path,
         checkpoint=checkpoint,
         checkpoint_step=checkpoint_step,
         tag=tag,
-        prompt=prompt,
+        prompt=prompts.pop(),
         stride=stride,
         camera_keys=camera_keys,
         batch_size=batch_size,
@@ -585,6 +585,26 @@ def _dataset_info(root: Path) -> dict[str, Any]:
     if info.get("codebase_version") != "v2.1":
         raise ValueError(f"STEAM requires standard LeRobot v2.1: {path}")
     return info
+
+
+def _dataset_prompt(root: Path) -> str:
+    path = root / "meta" / "tasks.jsonl"
+    try:
+        rows = [
+            json.loads(line)
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"cannot read LeRobot task metadata: {path}: {exc}") from exc
+    prompts = {
+        row.get("task", "").strip()
+        for row in rows
+        if isinstance(row, dict) and isinstance(row.get("task"), str)
+    }
+    if len(prompts) != 1 or not next(iter(prompts), ""):
+        raise ValueError(f"STEAM dataset must contain one non-empty task prompt: {path}")
+    return prompts.pop()
 
 
 def _checkpoint_weights(root: Path) -> Path:

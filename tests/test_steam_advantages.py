@@ -17,7 +17,7 @@ from clothdojo.training.steam_advantages import (
 )
 
 
-def _dataset(root: Path) -> None:
+def _dataset(root: Path, *, prompt: str = "Flatten the shirt.") -> None:
     (root / "meta").mkdir(parents=True)
     (root / "data").mkdir()
     features = {
@@ -47,6 +47,10 @@ def _dataset(root: Path) -> None:
         + "\n"
         + json.dumps({"episode_index": 1, "length": 2})
         + "\n",
+        encoding="utf-8",
+    )
+    (root / "meta" / "tasks.jsonl").write_text(
+        json.dumps({"task_index": 0, "task": prompt}) + "\n",
         encoding="utf-8",
     )
 
@@ -92,7 +96,6 @@ def _spec(tmp_path: Path):
                 f"checkpoint: {checkpoint}",
                 "checkpoint_step: 20000",
                 "tag: steam_test",
-                "prompt: flatten the shirt",
                 "stride: 64",
                 "camera_keys:",
                 "  - observation.images.primary",
@@ -127,7 +130,7 @@ def test_steam_advantage_spec_is_owned_and_explicit(tmp_path: Path) -> None:
 
     assert report["compatible"] is True
     assert report["checkpoint_step"] == 20000
-    assert report["prompt"] == "flatten the shirt"
+    assert report["prompt"] == "Flatten the shirt."
     assert report["tag"] == "steam_test"
     assert report["camera_keys"] == [
         "observation.images.primary",
@@ -183,7 +186,19 @@ def test_publish_steam_labels_is_atomic_and_exact(tmp_path: Path) -> None:
     assert manifest["positive"] == 2
     assert manifest["negative"] == 2
     assert manifest["checkpoint_step"] == 20000
-    assert manifest["prompt"] == "flatten the shirt"
+    assert manifest["prompt"] == "Flatten the shirt."
+
+
+def test_advantage_spec_rejects_different_dataset_prompts(tmp_path: Path) -> None:
+    spec = _spec(tmp_path)
+    rollout = spec.datasets[1].source_path
+    (rollout / "meta" / "tasks.jsonl").write_text(
+        json.dumps({"task_index": 0, "task": "Fold the shirt."}) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="same single task prompt"):
+        compose_steam_advantage_spec(spec.config_path)
 
 
 def test_existing_labels_are_bound_to_current_advantage_config(tmp_path: Path) -> None:
