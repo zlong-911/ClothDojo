@@ -57,7 +57,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             parser.error("--member-index is only valid for STEAM training")
         if args.advantages_config is not None and args.training_kind != "cfg":
             parser.error("--advantages-config is only valid for CFG training")
-        if args.training_kind == "cfg" and args.advantages_config is not None:
+        if args.training_kind == "cfg" and args.advantages_config is None:
+            parser.error("CFG training requires --advantages-config")
+        if args.training_kind == "cfg":
             if args.gate is not None:
                 parser.error("--gate is only valid for openpi-jax training")
             from clothdojo.training.cfg_pipeline import (
@@ -742,7 +744,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     train.add_argument(
         "--advantages-config",
-        help="project-owned STEAM labeling config to run before CFG",
+        help="required STEAM labeling config for CFG training",
     )
     train.add_argument(
         "--member-index",

@@ -114,6 +114,11 @@ def test_jax_sft_run_requires_explicit_gate(monkeypatch) -> None:
         cli.main(["train", "openpi-jax", "--config", "jax.yaml"])
 
 
+def test_cfg_training_requires_labeling_pipeline() -> None:
+    with pytest.raises(SystemExit, match="2"):
+        cli.main(["train", "cfg", "--config", "cfg.yaml", "--check"])
+
+
 def test_jax_matrix_uses_the_same_training_entry(monkeypatch, capsys) -> None:
     matrix = object()
     monkeypatch.setattr(

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 TrainingKind = Literal["openpi-rlinf", "steam", "cfg"]
+DirectTrainingKind = Literal["openpi-rlinf", "steam"]
 
 
 @dataclass(frozen=True)
@@ -26,7 +27,7 @@ class _Runtime:
 
 def run(
     *,
-    kind: TrainingKind,
+    kind: DirectTrainingKind,
     config_path: str | Path,
     overrides: Sequence[str] = (),
     steam_member_index: int | None = None,
@@ -34,15 +35,9 @@ def run(
     """Compose one ClothDojo config and run it through the selected RLINF worker."""
 
     cfg = compose_config(config_path, overrides)
-    cfg_manifest = None
-    if kind == "cfg":
-        from clothdojo.training.cfg import inspect_cfg_training
-
-        cfg_manifest = inspect_cfg_training(config_path, list(overrides))
     run_config(
         kind=kind,
         cfg=cfg,
-        cfg_manifest=cfg_manifest,
         steam_member_index=steam_member_index,
         config_path=config_path,
     )
@@ -50,7 +45,7 @@ def run(
 
 def check(
     *,
-    kind: TrainingKind,
+    kind: DirectTrainingKind,
     config_path: str | Path,
     overrides: Sequence[str] = (),
     steam_member_index: int | None = None,
@@ -60,10 +55,6 @@ def check(
     cfg = compose_config(config_path, overrides)
     if kind == "openpi-rlinf":
         return inspect_openpi_rlinf_sft(cfg, config_path=config_path)
-    if kind == "cfg":
-        from clothdojo.training.cfg import inspect_cfg_training
-
-        return inspect_cfg_training(config_path, list(overrides))
     if kind == "steam":
         if steam_member_index is None:
             raise ValueError("STEAM training requires a member index")
