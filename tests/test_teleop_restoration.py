@@ -235,3 +235,47 @@ def test_continuation_plan_uses_only_terminal_unconsumed_sources(tmp_path) -> No
     assert runtime.restored.sample_index == 1
     retried = queue.restore_next(runtime, requeue_current=True)
     assert retried is not None and retried.source_episode_id == "episode_a"
+
+
+def test_continuation_inventory_refreshes_when_assets_change(tmp_path) -> None:
+    assets, garment, fingerprints = _context(tmp_path)
+    source = CollectionProfile(
+        id="shirt_flatten",
+        display_name="flatten",
+        scene="shirt_flatten",
+        dataset_root=tmp_path / "flatten",
+        rollout_root=tmp_path / "rollouts",
+        intervention_root=tmp_path / "interventions",
+        max_actions=20,
+    )
+    destination = CollectionProfile(
+        id="shirt_fold",
+        display_name="fold",
+        scene="shirt_fold",
+        dataset_root=tmp_path / "fold",
+        rollout_root=tmp_path / "fold-rollouts",
+        intervention_root=tmp_path / "fold-interventions",
+        max_actions=20,
+        continuation_source_profile=source.id,
+    )
+    _write_trajectory(
+        source.trajectory_root / "episode_a",
+        task=source.scene,
+        fingerprints=fingerprints,
+    )
+    config = CollectionConfig(
+        project_root=tmp_path,
+        assets_root=assets,
+        state_dir=tmp_path / "state",
+        host="127.0.0.1",
+        port=8000,
+        teleoperation=TeleoperationConfig(client_host="auto", gpu_ids=(0,)),
+        profiles={source.id: source, destination.id: destination},
+    )
+
+    assert build_continuation_plan(config, destination, asset_id="shirt_a")
+
+    garment.write_bytes(b"updated garment")
+
+    with pytest.raises(ValueError, match="no uncollected continuation"):
+        build_continuation_plan(config, destination, asset_id="shirt_a")
