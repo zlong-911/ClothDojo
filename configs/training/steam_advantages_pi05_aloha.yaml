@@ -22,8 +22,8 @@ master_port: 29531
 work_dir: ${oc.env:CLOTHDOJO_STEAM_OUTPUT}
 
 datasets:
-  # The project-owned indexed view contains both STEAM cameras and the three
-  # OpenPI cameras, so scoring and training share one exact frame table.
+  # Both ordinary v2.1 datasets contain the STEAM and OpenPI cameras, so
+  # scoring and training share one exact frame table.
   - role: sft
     source_path: ${oc.env:CLOTHDOJO_CFG_EXPERT_DATASET}
     target_path: ${oc.env:CLOTHDOJO_CFG_EXPERT_DATASET}

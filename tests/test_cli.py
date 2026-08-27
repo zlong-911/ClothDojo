@@ -149,9 +149,13 @@ def test_training_rejects_removed_openpi_entries(legacy_kind: str) -> None:
 
 @pytest.mark.parametrize(
     "removed_command",
-    ["import-legacy-collection", "append-legacy-collection"],
+    [
+        "import-legacy-collection",
+        "append-legacy-collection",
+        "migrate-v3-indexed-view",
+    ],
 )
-def test_data_rejects_removed_collection_migrations(removed_command: str) -> None:
+def test_data_rejects_removed_migrations(removed_command: str) -> None:
     with pytest.raises(SystemExit, match="2"):
         cli.main(["data", removed_command, "--source", "unused"])
 

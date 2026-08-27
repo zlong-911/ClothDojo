@@ -366,19 +366,6 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return
-    if args.command == "data" and args.data_command == "migrate-v3-indexed-view":
-        if passthrough:
-            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
-        from clothdojo.data.v3_indexed_view import (
-            compose_indexed_view_spec,
-            inspect_indexed_view,
-            publish_indexed_view,
-        )
-
-        spec = compose_indexed_view_spec(args.config)
-        result = inspect_indexed_view(spec) if args.check else publish_indexed_view(spec)
-        print(json.dumps(result, indent=2, sort_keys=True))
-        return
     if args.command == "data" and args.data_command == "compute-norm-stats":
         if passthrough:
             parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
@@ -919,12 +906,6 @@ def _parser() -> argparse.ArgumentParser:
         default=10,
         help="review frame rate; must divide the rollout control rate",
     )
-    indexed_view = data_commands.add_parser(
-        "migrate-v3-indexed-view",
-        help="publish immutable v3 media as a project-owned LeRobot v2.1 indexed view",
-    )
-    indexed_view.add_argument("--config", required=True)
-    indexed_view.add_argument("--check", action="store_true")
     norm_stats = data_commands.add_parser(
         "compute-norm-stats",
         help="compute OpenPI stats using the ALOHA transforms used by training",

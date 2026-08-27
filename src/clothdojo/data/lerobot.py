@@ -33,6 +33,20 @@ VIDEO_CRF = 23
 VIDEO_ENCODER_WORKERS = 4
 
 
+def open_lerobot_dataset(repo_id: str, *, root: str | Path, **kwargs: Any) -> Any:
+    """Open one ordinary LeRobot v2.1 dataset with the validated video backend."""
+
+    from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+
+    dataset_root = Path(root).expanduser().resolve()
+    if (dataset_root / "meta" / "clothdojo_video_index.jsonl").is_file():
+        raise ValueError(
+            "indexed-media datasets must be converted externally to ordinary LeRobot v2.1"
+        )
+    kwargs["video_backend"] = "pyav"
+    return LeRobotDataset(repo_id, root=dataset_root, **kwargs)
+
+
 class _Writer(Protocol):
     def add_frame(self, frame: dict[str, Any]) -> None: ...
 

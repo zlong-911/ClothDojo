@@ -17,7 +17,39 @@ from clothdojo.data.lerobot import (
     export_review_dataset,
     inspect_review_export,
     load_episode_indices,
+    open_lerobot_dataset,
 )
+
+
+def test_regular_v21_reader_uses_validated_video_backend(monkeypatch, tmp_path: Path) -> None:
+    call = {}
+
+    class FakeLeRobotDataset:
+        def __init__(self, repo_id, *, root, **kwargs):
+            call.update(repo_id=repo_id, root=root, kwargs=kwargs)
+
+    monkeypatch.setattr(
+        "lerobot.common.datasets.lerobot_dataset.LeRobotDataset",
+        FakeLeRobotDataset,
+    )
+
+    dataset = open_lerobot_dataset("local/test", root=tmp_path, download_videos=False)
+
+    assert isinstance(dataset, FakeLeRobotDataset)
+    assert call == {
+        "repo_id": "local/test",
+        "root": tmp_path.resolve(),
+        "kwargs": {"download_videos": False, "video_backend": "pyav"},
+    }
+
+
+def test_regular_v21_reader_rejects_indexed_media_extension(tmp_path: Path) -> None:
+    index = tmp_path / "meta" / "clothdojo_video_index.jsonl"
+    index.parent.mkdir()
+    index.write_text("{}\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="converted externally"):
+        open_lerobot_dataset("local/test", root=tmp_path)
 
 
 def _source_trajectory(root: Path, source_id: str, action_count: int) -> None:

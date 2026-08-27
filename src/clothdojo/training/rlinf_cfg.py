@@ -174,7 +174,7 @@ def _worker_type() -> type:
             from rlinf.data.storage.lerobot import resolve_lerobot_dataset_root
             from rlinf.models.embodiment.openpi.dataconfig import get_openpi_config
 
-            from clothdojo.data.indexed_lerobot import open_lerobot_dataset
+            from clothdojo.data.lerobot import open_lerobot_dataset
             from clothdojo.training.cfg import resolve_cfg_episode_selection
 
             data_cfg = self.cfg.get("data", {})

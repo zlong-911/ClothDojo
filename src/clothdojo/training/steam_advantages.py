@@ -222,9 +222,7 @@ def run_steam_advantages(spec: SteamAdvantageSpec) -> None:
                 prompt=spec.prompt,
                 dataset_type=entry.role,
             )
-            from clothdojo.data.indexed_lerobot import replace_pair_dataset_base
-
-            replace_pair_dataset_base(dataset)
+            _replace_pair_dataset_base(dataset)
             selected_indices = _selected_anchor_indices(dataset, entry.episodes)
             rank_indices = selected_indices[rank::world_size]
             loader = DataLoader(
@@ -302,8 +300,6 @@ def smoke_steam_advantages(spec: SteamAdvantageSpec) -> dict[str, Any]:
     )
     from torch.utils.data import DataLoader, Subset
 
-    from clothdojo.data.indexed_lerobot import replace_pair_dataset_base
-
     device = "cuda:0"
     started = time.monotonic()
     model = coerce_to_ensemble(
@@ -320,7 +316,7 @@ def smoke_steam_advantages(spec: SteamAdvantageSpec) -> dict[str, Any]:
         prompt=spec.prompt,
         dataset_type=entry.role,
     )
-    replace_pair_dataset_base(dataset)
+    _replace_pair_dataset_base(dataset)
     index = _selected_anchor_indices(dataset, (entry.episodes[0],))[0]
     collator = BinaryPairDataCollator(
         processor=model.members[0].processor,
@@ -414,6 +410,24 @@ def _selected_anchor_indices(dataset: Any, episodes: tuple[int, ...]) -> list[in
         unavailable = sorted(selected - set(dataset.eligible_episodes))
         raise ValueError(f"selected STEAM episodes cannot form frame pairs: {unavailable}")
     return indices
+
+
+def _replace_pair_dataset_base(pair_dataset: Any) -> None:
+    """Use the validated PyAV backend for an ordinary LeRobot v2.1 dataset."""
+
+    from rlinf.data.datasets.recap.utils import decode_image_struct_batch
+
+    from clothdojo.data.lerobot import open_lerobot_dataset
+
+    source = pair_dataset.source
+    root = Path(source.base.root)
+    replacement = open_lerobot_dataset(
+        root.name,
+        root=root,
+        download_videos=False,
+    )
+    replacement.hf_dataset.set_transform(decode_image_struct_batch)
+    source.base = replacement
 
 
 def _publish_dataset_labels(
