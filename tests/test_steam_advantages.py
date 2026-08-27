@@ -21,11 +21,11 @@ def _dataset(root: Path, *, prompt: str = "Flatten the shirt.") -> None:
     (root / "meta").mkdir(parents=True)
     (root / "data").mkdir()
     features = {
-        "observation.images.primary": {
+        "observation.images.cam_high": {
             "dtype": "video",
             "shape": [8, 8, 3],
         },
-        "observation.images.third_person": {
+        "observation.images.cam_third_person": {
             "dtype": "video",
             "shape": [8, 8, 3],
         },
@@ -94,10 +94,6 @@ def _spec(tmp_path: Path):
                 "schema: clothdojo_steam_advantages",
                 "format_version: 1",
                 f"checkpoint: {checkpoint}",
-                "stride: 64",
-                "camera_keys:",
-                "  - observation.images.primary",
-                "  - observation.images.third_person",
                 "batch_size: 16",
                 "num_workers: 1",
                 "num_processes: 2",
@@ -127,8 +123,8 @@ def test_steam_advantage_spec_is_owned_and_explicit(tmp_path: Path) -> None:
     assert report["compatible"] is True
     assert report["prompt"] == "Flatten the shirt."
     assert report["camera_keys"] == [
-        "observation.images.primary",
-        "observation.images.third_person",
+        "observation.images.cam_high",
+        "observation.images.cam_third_person",
     ]
     assert report["datasets"][0]["episodes"] == [0, 1]
     assert report["datasets"][1]["positive_fraction"] == 0.25

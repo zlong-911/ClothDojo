@@ -21,6 +21,12 @@ from clothdojo.training.episode_selection import (
     validate_episode_selection,
 )
 
+PAIR_STRIDE = 64
+CAMERA_KEYS = (
+    "observation.images.cam_high",
+    "observation.images.cam_third_person",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class SteamAdvantageDataset:
@@ -79,10 +85,6 @@ def compose_steam_advantage_spec(config_path: str | Path) -> SteamAdvantageSpec:
 
     checkpoint = Path(str(raw.get("checkpoint", ""))).expanduser().resolve()
     _checkpoint_weights(checkpoint)
-    stride = _positive_int(raw.get("stride"), "stride")
-    camera_keys = tuple(str(value) for value in raw.get("camera_keys", ()))
-    if not camera_keys or len(set(camera_keys)) != len(camera_keys):
-        raise ValueError("STEAM camera_keys must be non-empty and unique")
     batch_size = _positive_int(raw.get("batch_size"), "batch_size")
     num_workers = _nonnegative_int(raw.get("num_workers"), "num_workers")
     num_processes = _positive_int(raw.get("num_processes"), "num_processes")
@@ -96,10 +98,7 @@ def compose_steam_advantage_spec(config_path: str | Path) -> SteamAdvantageSpec:
     entries = raw.get("datasets")
     if not isinstance(entries, list) or len(entries) != 2:
         raise ValueError("STEAM labeling requires exactly one sft and one rollout dataset")
-    datasets = tuple(
-        _compose_dataset(entry, camera_keys=camera_keys)
-        for entry in entries
-    )
+    datasets = tuple(_compose_dataset(entry) for entry in entries)
     if sorted(dataset.role for dataset in datasets) != ["rollout", "sft"]:
         raise ValueError("STEAM labeling requires dataset roles sft and rollout")
     if len({dataset.dataset_path for dataset in datasets}) != len(datasets):
@@ -111,8 +110,8 @@ def compose_steam_advantage_spec(config_path: str | Path) -> SteamAdvantageSpec:
         config_path=path,
         checkpoint=checkpoint,
         prompt=prompts.pop(),
-        stride=stride,
-        camera_keys=camera_keys,
+        stride=PAIR_STRIDE,
+        camera_keys=CAMERA_KEYS,
         batch_size=batch_size,
         num_workers=num_workers,
         num_processes=num_processes,
@@ -337,8 +336,6 @@ def smoke_steam_advantages(spec: SteamAdvantageSpec) -> dict[str, Any]:
 
 def _compose_dataset(
     value: Any,
-    *,
-    camera_keys: tuple[str, ...],
 ) -> SteamAdvantageDataset:
     if not isinstance(value, dict):
         raise TypeError("STEAM dataset entry must be a mapping")
@@ -348,10 +345,10 @@ def _compose_dataset(
     dataset = Path(str(value.get("dataset_path", ""))).expanduser().resolve()
     info = _dataset_info(dataset)
     features = info.get("features", {})
-    missing = [key for key in camera_keys if key not in features]
+    missing = [key for key in CAMERA_KEYS if key not in features]
     if missing:
         raise ValueError(f"STEAM dataset is missing camera features {missing}: {dataset}")
-    for key in camera_keys:
+    for key in CAMERA_KEYS:
         if features[key].get("dtype") != "video":
             raise ValueError(f"STEAM camera feature must be video: {dataset}: {key}")
     positive_fraction = float(value.get("positive_fraction", 0.0))
