@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from clothdojo.robots import PIPER, robot_profile
 from clothdojo.sim.check import _gripper_openness
 from clothdojo.sim.runtime import (
     ShirtFlattenRuntime,
@@ -401,6 +402,7 @@ def test_piper_import_selects_only_expert_collision_envelope(load_visual_shapes:
         wp,
         builder,
         root / "piper.usda",
+        robot_profile(PIPER),
         load_visual_shapes=load_visual_shapes,
     )
 
@@ -455,6 +457,7 @@ def test_robot_cloth_ghost_mode_preserves_table_particle_collision() -> None:
         wp,
         builder,
         root / "piper.usda",
+        robot_profile(PIPER),
         load_visual_shapes=False,
         robot_cloth_collision=False,
     )
@@ -521,6 +524,7 @@ def test_piper_usd_authors_control_and_gripper_physics() -> None:
         wp,
         builder,
         root / "piper.usda",
+        robot_profile(PIPER),
         load_visual_shapes=False,
     )
     arm_joints, gripper_joints, arm_dofs = _select_piper_robot(builder)

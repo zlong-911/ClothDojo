@@ -236,7 +236,7 @@ def test_isaac_replay_requires_newton_root_poses_to_match_installations() -> Non
         _validate_robot_installations(body_q, environment)
 
 
-def test_ur5e_root_validation_includes_the_mjcf_root_rotation() -> None:
+def test_ur5e_root_validation_uses_the_asset_authored_root_rotation() -> None:
     profile = robot_profile(UR5E_2F85)
     body_q = np.zeros((len(profile.body_names), 7), dtype=np.float32)
     body_q[:, 6] = 1.0
@@ -250,68 +250,51 @@ def test_ur5e_root_validation_includes_the_mjcf_root_rotation() -> None:
 
     _validate_robot_installations(body_q, profile)
 
-    body_q[roots, 3:7] = np.asarray(
-        [frame.rotation_xyzw for frame in profile.installations]
-    )
+    body_q[roots, 3:7] = (0.0, 0.0, 0.0, 1.0)
     with pytest.raises(RuntimeError, match="installation frames"):
         _validate_robot_installations(body_q, profile)
 
 
-def test_isaac_fabric_parent_frames_use_the_shared_aloha_asset_frame() -> None:
+def test_isaac_fabric_parent_frames_use_asset_authored_root_frames() -> None:
     environment = robot_profile(ALOHA2)
     poses = _body_parent_world_poses(environment)
     roots = np.flatnonzero(np.asarray(environment.body_parents) == -1)
 
     np.testing.assert_allclose(
         poses[roots, :3],
-        (environment.asset_frame.position,) * 2,
+        [frame.position for frame in environment.root_body_frames],
     )
     np.testing.assert_allclose(
-        poses[roots, 3:7], (environment.asset_frame.rotation_xyzw,) * 2
+        poses[roots, 3:7],
+        [frame.rotation_xyzw for frame in environment.root_body_frames],
     )
     np.testing.assert_allclose(poses[1, :3], 0.0)
 
 
-def test_isaac_stage_authors_the_profile_asset_frame_and_menagerie_bodies() -> None:
-    from pxr import Usd, UsdGeom, UsdShade
+def test_isaac_stage_references_the_complete_aloha_workstation() -> None:
+    from pxr import Usd, UsdGeom
 
     environment = robot_profile(ALOHA2)
     stage = Usd.Stage.CreateInMemory()
     paths = _author_robot(stage, Path("assets").resolve(), environment)
 
     assert paths == ("/World/Robot",)
-    actual = tuple(
-        UsdGeom.Xformable(stage.GetPrimAtPath(paths[0]))
-        .GetLocalTransformation()
-        .ExtractTranslation()
-    )
-    np.testing.assert_allclose(actual, environment.asset_frame.position)
-    assert stage.GetPrimAtPath("/World/Robot/aloha/left/base_link")
-    assert stage.GetPrimAtPath("/World/Robot/aloha/right/base_link")
-    assert stage.GetPrimAtPath("/World/Robot/frame")
+    assert stage.GetPrimAtPath("/World/Robot/Bodies/body_000")
+    assert stage.GetPrimAtPath("/World/Robot/Bodies/body_010")
+    assert stage.GetPrimAtPath("/World/Robot/Installation")
     frame_meshes = [
         prim
         for prim in stage.Traverse()
-        if prim.GetPath().pathString.startswith("/World/Robot/frame/")
+        if prim.GetPath().pathString.startswith("/World/Robot/Installation/")
         and prim.IsA(UsdGeom.Mesh)
     ]
     assert len(frame_meshes) == 31
-    finger = stage.GetPrimAtPath(
-        "/World/Robot/aloha/left/base_link/shoulder_link/upper_arm_link/"
-        "upper_forearm_link/lower_forearm_link/wrist_link/gripper_link/"
-        "gripper_base/left_finger_link"
-    )
-    assert finger.GetParent().GetName() == "gripper_base"
-    shader = UsdShade.Shader(
-        stage.GetPrimAtPath("/World/Looks/Aloha2Black/Shader")
-    )
-    np.testing.assert_allclose(
-        tuple(shader.GetInput("diffuseColor").Get()), (0.01960665,) * 3
-    )
-    assert shader.GetInput("roughness").Get() == pytest.approx(0.35)
+    assert stage.GetPrimAtPath("/World/Robot/Bodies/body_008").GetAttribute(
+        "clothdojo:bodyLabel"
+    ).Get() == "left/left_finger_link"
 
 
-def test_isaac_stage_authors_two_standard_ur5e_2f85_visual_hierarchies() -> None:
+def test_isaac_stage_references_one_complete_ur5e_2f85_workstation() -> None:
     from pxr import Usd
 
     environment = robot_profile(UR5E_2F85)
@@ -319,14 +302,14 @@ def test_isaac_stage_authors_two_standard_ur5e_2f85_visual_hierarchies() -> None
 
     paths = _author_robot(stage, Path("assets").resolve(), environment)
 
-    assert paths == ("/World/Robot/left", "/World/Robot/right")
-    for side in ("left", "right"):
-        assert stage.GetPrimAtPath(f"/World/Robot/{side}/base")
-        assert stage.GetPrimAtPath(
-            f"/World/Robot/{side}/base/shoulder_link/upper_arm_link/"
-            "forearm_link/wrist_1_link/wrist_2_link/wrist_3_link/"
-            "gripper_base_mount/gripper_base"
-        )
+    assert paths == ("/World/Robot",)
+    bodies = [
+        prim
+        for prim in stage.Traverse()
+        if prim.GetPath().pathString.startswith("/World/Robot/Bodies/body_")
+        and prim.GetAttribute("clothdojo:bodyLabel")
+    ]
+    assert len(bodies) == 42
 
 
 def test_isaac_export_uses_the_canonical_collection_loop(monkeypatch, tmp_path) -> None:

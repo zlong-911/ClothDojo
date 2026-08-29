@@ -123,56 +123,29 @@ def _build_shirt_flatten(
     spec = spec or ShirtFlattenSpec()
     assets_root = Path(assets_root).expanduser().absolute()
     profile = robot_profile(robot_id)
-    robot_path = assets_root / profile.newton_asset
+    robot_path = assets_root / profile.asset
     if not robot_path.is_file():
         raise FileNotFoundError(f"missing {profile.robot_id} asset: {robot_path}")
-    robot_visual_path = assets_root / profile.newton_visual_asset
-    if visuals and not robot_visual_path.is_file():
-        raise FileNotFoundError(
-            f"missing {profile.robot_id} visual asset: {robot_visual_path}"
-        )
-    installation_path = (
-        assets_root / profile.installation_asset
-        if profile.installation_asset is not None
-        else None
-    )
-    if visuals and installation_path is not None and not installation_path.is_file():
-        raise FileNotFoundError(
-            f"missing {profile.robot_id} installation asset: {installation_path}"
-        )
     garment_path = GarmentLibrary(assets_root).converted(spec.garment_id)
 
     newton.use_coord_layout_targets = True
     template = newton.ModelBuilder(gravity=spec.gravity)
     _register_solver_attributes(newton, template)
-    if profile.robot_id == "piper":
-        _robot_body_count = _add_robot(
-            newton,
-            wp,
-            template,
-            robot_path,
-            load_visual_shapes=visuals,
-            robot_cloth_collision=robot_cloth_collision,
-        )
-        arm_joints, gripper_joints, arm_coords = _select_piper_robot(template)
-        end_effector_links = _body_indices(template, END_EFFECTOR_LINKS)
-    else:
-        (
-            _robot_body_count,
-            arm_joints,
-            gripper_joints,
-            arm_coords,
-            end_effector_links,
-        ) = _add_profile_robot(
-            newton,
-            wp,
-            template,
-            robot_path,
-            profile,
-            load_visual_shapes=visuals,
-        )
-    if visuals and installation_path is not None:
-        _add_installation_visual(newton, wp, template, installation_path, profile)
+    (
+        _robot_body_count,
+        arm_joints,
+        gripper_joints,
+        arm_coords,
+        end_effector_links,
+    ) = _add_robot(
+        newton,
+        wp,
+        template,
+        robot_path,
+        profile,
+        load_visual_shapes=visuals,
+        robot_cloth_collision=robot_cloth_collision,
+    )
     _add_table(newton, wp, template, spec)
     garment_mesh = load_garment_mesh(garment_path)
     particle_range = add_style3d_garment(template, garment_path, spec, mesh=garment_mesh)
@@ -213,7 +186,9 @@ def _build_shirt_flatten(
     arms = newton.selection.ArticulationView(model, "*", include_joints=arm_joints)
     grippers = newton.selection.ArticulationView(model, "*", include_joints=gripper_joints)
     end_effector_view_links = (
-        end_effector_links if profile.robot_id == "piper" else [end_effector_links[0]]
+        end_effector_links
+        if profile.body_parents.count(-1) == 1
+        else [end_effector_links[0]]
     )
     end_effectors = newton.selection.ArticulationView(
         model, "*", include_links=end_effector_view_links
@@ -269,77 +244,6 @@ def build_scene(
     )
 
 
-def _add_profile_robot(
-    newton,
-    wp,
-    builder,
-    kinematic_path: Path,
-    profile: RobotProfile,
-    *,
-    load_visual_shapes: bool,
-) -> tuple[int, list[int], list[int], list[int], list[int]]:
-    """Add one bimanual MJCF or a symmetric pair of single-arm MJCFs."""
-
-    body_start = int(builder.body_count)
-    if len(profile.installations) != 2:
-        raise RuntimeError("target robot profile must define two installations")
-    q_start = int(builder.joint_coord_count)
-    dof_start = int(builder.joint_dof_count)
-    frames = (
-        (profile.asset_frame,)
-        if profile.asset_instances == 1
-        else profile.installations
-    )
-    for frame in frames:
-        builder.add_mjcf(
-            str(kinematic_path),
-            xform=wp.transform(frame.position, frame.rotation_xyzw),
-            floating=False,
-            parse_meshes=load_visual_shapes,
-            parse_visuals=load_visual_shapes,
-            hide_visuals=not load_visual_shapes,
-            enable_self_collisions=False,
-            override_root_xform=False,
-        )
-    body_count = int(builder.body_count) - body_start
-    q_count = int(builder.joint_coord_count) - q_start
-    dof_count = int(builder.joint_dof_count) - dof_start
-    if (
-        body_count != len(profile.body_names)
-        or q_count != len(profile.home_joint_q)
-        or dof_count != profile.joint_dof_count
-    ):
-        raise RuntimeError(
-            f"pinned {profile.robot_id} MJCF topology differs from its robot profile"
-        )
-    for index, label in enumerate(profile.body_names, start=body_start):
-        builder.body_label[index] = label
-    builder.joint_q[q_start : q_start + q_count] = list(profile.home_joint_q)
-    _drop_replaced_mujoco_actuators(builder, profile)
-    _apply_position_drive_override(newton, builder, profile, dof_start=dof_start)
-    per_side = profile.arm_dofs_per_side
-    arm_joints = _joint_indices_for_coordinates(
-        newton,
-        builder,
-        [q_start + value for value in profile.arm_coord_indices[:per_side]],
-    )
-    gripper_joints = _joint_indices_for_coordinates(
-        newton,
-        builder,
-        [q_start + value for value in profile.gripper_coord_indices[:2]],
-    )
-    end_effectors = _body_indices(
-        builder, [frame.parent_body for frame in profile.attach_frames]
-    )
-    return (
-        body_count,
-        arm_joints,
-        gripper_joints,
-        [q_start + value for value in profile.arm_coord_indices],
-        end_effectors,
-    )
-
-
 def _joint_indices_for_coordinates(newton, builder, coordinates: list[int]) -> list[int]:
     result = []
     for coordinate in coordinates:
@@ -356,84 +260,6 @@ def _joint_indices_for_coordinates(newton, builder, coordinates: list[int]) -> l
             )
         result.append(matches[0])
     return result
-
-
-def _apply_position_drive_override(
-    newton, builder, profile: RobotProfile, *, dof_start: int
-) -> None:
-    drive = profile.position_drive_override
-    if drive is None:
-        return
-    arm_values = (
-        drive.arm_stiffness * 2,
-        drive.arm_damping * 2,
-        drive.arm_effort_limit * 2,
-    )
-    gripper_values = (
-        drive.gripper_stiffness * 2,
-        drive.gripper_damping * 2,
-        drive.gripper_effort_limit * 2,
-    )
-    for dofs, (stiffness, damping, effort) in (
-        (profile.arm_dof_indices, arm_values),
-        (profile.gripper_dof_indices, gripper_values),
-    ):
-        for dof, ke, kd, limit in zip(
-            dofs, stiffness, damping, effort, strict=True
-        ):
-            index = dof_start + dof
-            builder.joint_target_mode[index] = newton.JointTargetMode.POSITION
-            builder.joint_target_ke[index] = ke
-            builder.joint_target_kd[index] = kd
-            builder.joint_effort_limit[index] = limit
-
-
-def _drop_replaced_mujoco_actuators(builder, profile: RobotProfile) -> None:
-    """Remove upstream actuators replaced by Newton scalar position drives."""
-
-    if profile.position_drive_override is None:
-        return
-    frequency = "mujoco:actuator"
-    counts = getattr(builder, "_custom_frequency_counts", None)
-    attributes = getattr(builder, "custom_attributes", None)
-    if not isinstance(counts, dict) or not isinstance(attributes, dict):
-        raise RuntimeError("Newton 1.5 MuJoCo actuator metadata is unavailable")
-    counts[frequency] = 0
-    for attribute in attributes.values():
-        if attribute.frequency == frequency:
-            attribute.values.clear()
-
-
-def _add_installation_visual(
-    newton,
-    wp,
-    builder,
-    path: Path,
-    profile: RobotProfile,
-) -> None:
-    """Add the robot-owned static mounting structure without contact."""
-
-    body_count = int(builder.body_count)
-    joint_count = int(builder.joint_count)
-    shape_start = int(builder.shape_count)
-    frame = profile.asset_frame
-    builder.add_mjcf(
-        str(path),
-        xform=wp.transform(frame.position, frame.rotation_xyzw),
-        floating=False,
-        parse_meshes=True,
-        parse_visuals=True,
-        enable_self_collisions=False,
-    )
-    if int(builder.body_count) != body_count or int(builder.joint_count) != joint_count:
-        raise RuntimeError("installation visual must not add articulated bodies")
-    if int(builder.shape_count) - shape_start != 31:
-        raise RuntimeError("pinned ALOHA installation visual must contain 31 meshes")
-    collision_bits = int(newton.ShapeFlags.COLLIDE_SHAPES) | int(
-        newton.ShapeFlags.COLLIDE_PARTICLES
-    )
-    for shape in range(shape_start, int(builder.shape_count)):
-        builder.shape_flags[shape] &= ~collision_bits
 
 
 def _centered_world_offsets(
@@ -468,67 +294,184 @@ def _add_robot(
     wp,
     builder,
     path: Path,
+    profile: RobotProfile,
     *,
     load_visual_shapes: bool,
     robot_cloth_collision: bool = True,
-) -> int:
+) -> tuple[int, list[int], list[int], list[int], list[int]]:
     body_start = int(builder.body_count)
     shape_start = int(builder.shape_count)
-    collision_roles, contact, initial_joint_q = _robot_asset_contract(path)
-    imported = builder.add_usd(
-        source=str(path),
-        floating=False,
-        # The baked expert geometry owns its self-collision proxy filters below.
-        enable_self_collisions=True,
-        ignore_paths=[".*/root_joint"],
-        load_visual_shapes=load_visual_shapes,
-        xform=wp.transform_identity(),
+    q_start = int(builder.joint_coord_count)
+    dof_start = int(builder.joint_dof_count)
+    from pxr import Usd
+
+    stage = Usd.Stage.Open(str(path))
+    if stage is None or not stage.GetDefaultPrim():
+        raise RuntimeError(f"could not open robot USD: {path}")
+    embedded_shape_contract = any(
+        prim.GetAttribute("clothdojo:shapeFlags").HasAuthoredValue()
+        for prim in stage.Traverse()
+        if prim.GetAttribute("clothdojo:shapeFlags")
     )
+    import_options = {
+        "source": str(path),
+        "floating": False,
+        "enable_self_collisions": True,
+        "ignore_paths": [".*/root_joint"],
+        "load_visual_shapes": load_visual_shapes,
+        "xform": wp.transform_identity(),
+    }
+    if embedded_shape_contract:
+        import_options.update(
+            load_static_visual_shapes=load_visual_shapes,
+            skip_mesh_approximation=True,
+            schema_resolvers=[
+                newton.usd.SchemaResolverNewton(),
+                newton.usd.SchemaResolverPhysx(),
+            ],
+        )
+    imported = builder.add_usd(**import_options)
+    legacy_contract = None
+    if not embedded_shape_contract:
+        legacy_contract = _robot_asset_contract(path)
+        initial_joint_q = legacy_contract[2]
+        missing_joints = sorted(
+            set(initial_joint_q).difference(imported["path_joint_map"])
+        )
+        if missing_joints:
+            raise RuntimeError(
+                f"robot USD did not import {len(missing_joints)} authored joint states"
+            )
+        for joint_path, position in initial_joint_q.items():
+            joint = int(imported["path_joint_map"][joint_path])
+            builder.joint_q[int(builder.joint_q_start[joint])] = position
     body_end = int(builder.body_count)
+    body_count = body_end - body_start
+    q_count = int(builder.joint_coord_count) - q_start
+    if body_count != len(profile.body_names) or q_count != len(profile.home_joint_q):
+        raise RuntimeError(
+            f"{profile.robot_id} USD topology differs from its authored workstation semantics"
+        )
+    if not np.allclose(
+        np.asarray(builder.joint_q[q_start : q_start + q_count]),
+        np.asarray(profile.home_joint_q),
+        atol=2.0e-6,
+        rtol=0.0,
+    ):
+        raise RuntimeError(f"{profile.robot_id} USD initial joint state is inconsistent")
+
+    for prim_path, body in imported["path_body_map"].items():
+        attribute = stage.GetPrimAtPath(prim_path).GetAttribute("clothdojo:bodyLabel")
+        if attribute and attribute.HasAuthoredValue():
+            builder.body_label[int(body)] = str(attribute.Get())
+    # Piper's upstream layers predate bodyLabel. The ordered asset-authored
+    # body topology supplies the same labels without a robot-specific branch.
+    for offset, label in enumerate(profile.body_names):
+        builder.body_label[body_start + offset] = label
+    for prim_path, joint in imported["path_joint_map"].items():
+        attribute = stage.GetPrimAtPath(prim_path).GetAttribute("clothdojo:jointLabel")
+        if attribute and attribute.HasAuthoredValue():
+            builder.joint_label[int(joint)] = str(attribute.Get())
+
     path_shape_map = imported["path_shape_map"]
-    path_joint_map = imported["path_joint_map"]
-    missing_joints = sorted(set(initial_joint_q).difference(path_joint_map))
-    if missing_joints:
-        raise RuntimeError(
-            f"robot USD did not import {len(missing_joints)} authored joint states"
+    shape_flags = {
+        prim_path: stage.GetPrimAtPath(prim_path).GetAttribute("clothdojo:shapeFlags")
+        for prim_path in path_shape_map
+    }
+    if shape_flags and all(
+        attribute and attribute.HasAuthoredValue() for attribute in shape_flags.values()
+    ):
+        particle_bit = int(newton.ShapeFlags.COLLIDE_PARTICLES)
+        collision_shapes = []
+        for prim_path, shape in path_shape_map.items():
+            prim = stage.GetPrimAtPath(prim_path)
+            shape = int(shape)
+            flags = int(shape_flags[prim_path].Get())
+            if not robot_cloth_collision:
+                flags &= ~particle_bit
+            builder.shape_flags[shape] = flags
+            group = prim.GetAttribute("clothdojo:collisionGroup")
+            if group and group.HasAuthoredValue():
+                builder.shape_collision_group[shape] = int(group.Get())
+            material = prim.GetAttribute("clothdojo:material")
+            if material and material.HasAuthoredValue():
+                mu, ke, kd, kf = (float(value) for value in material.Get())
+                builder.shape_material_mu[shape] = mu
+                builder.shape_material_ke[shape] = ke
+                builder.shape_material_kd[shape] = kd
+                builder.shape_material_kf[shape] = kf
+            contact = prim.GetAttribute("clothdojo:contact")
+            if contact and contact.HasAuthoredValue():
+                margin, gap = (float(value) for value in contact.Get())
+                builder.shape_margin[shape] = margin
+                builder.shape_gap[shape] = gap
+            if flags & (
+                int(newton.ShapeFlags.COLLIDE_SHAPES)
+                | int(newton.ShapeFlags.COLLIDE_PARTICLES)
+            ):
+                collision_shapes.append(shape)
+    else:
+        if legacy_contract is None:
+            raise RuntimeError("robot USD has no complete collision contract")
+        collision_roles, contact, _initial_joint_q = legacy_contract
+        missing = sorted(set(collision_roles).difference(path_shape_map))
+        if missing:
+            raise RuntimeError(
+                f"robot USD did not import {len(missing)} authored collision-role shapes"
+            )
+        contact_shapes = tuple(
+            int(path_shape_map[item])
+            for item, role in collision_roles.items()
+            if role == "contact"
         )
-    for joint_path, position in initial_joint_q.items():
-        joint = int(path_joint_map[joint_path])
-        builder.joint_q[int(builder.joint_q_start[joint])] = position
-    missing = sorted(set(collision_roles).difference(path_shape_map))
-    if missing:
-        raise RuntimeError(
-            f"robot USD did not import {len(missing)} authored collision-role shapes"
+        proxy_shapes = tuple(
+            int(path_shape_map[item])
+            for item, role in collision_roles.items()
+            if role == "self_collision_proxy"
         )
-    contact_shapes = tuple(
-        int(path_shape_map[path])
-        for path, role in collision_roles.items()
-        if role == "contact"
+        collision_shapes = list(
+            _configure_robot_collision_geometry(
+                newton,
+                builder,
+                body_start=body_start,
+                body_end=body_end,
+                shape_start=shape_start,
+                contact_shapes=contact_shapes,
+                proxy_shapes=proxy_shapes,
+                robot_cloth_collision=robot_cloth_collision,
+                end_effector_links=tuple(
+                    frame.parent_body for frame in profile.attach_frames
+                ),
+            )
+        )
+        for shape in collision_shapes:
+            builder.shape_material_mu[shape] = contact.mu
+            builder.shape_material_ke[shape] = contact.ke
+            builder.shape_material_kd[shape] = contact.kd
+            builder.shape_material_kf[shape] = contact.kf
+            builder.shape_margin[shape] = contact.margin
+    if not collision_shapes or body_end == body_start:
+        raise RuntimeError("robot USD did not provide rigid bodies and collision shapes")
+
+    per_side = profile.arm_dofs_per_side
+    arm_coords = [q_start + value for value in profile.arm_coord_indices]
+    arm_joints = _joint_indices_for_coordinates(
+        newton, builder, arm_coords[:per_side]
     )
-    proxy_shapes = tuple(
-        int(path_shape_map[path])
-        for path, role in collision_roles.items()
-        if role == "self_collision_proxy"
-    )
-    collision_shapes = _configure_robot_collision_geometry(
+    gripper_joints = _joint_indices_for_coordinates(
         newton,
         builder,
-        body_start=body_start,
-        body_end=body_end,
-        shape_start=shape_start,
-        contact_shapes=contact_shapes,
-        proxy_shapes=proxy_shapes,
-        robot_cloth_collision=robot_cloth_collision,
+        [q_start + value for value in profile.gripper_coord_indices[:2]],
     )
-    for shape in collision_shapes:
-        builder.shape_material_mu[shape] = contact.mu
-        builder.shape_material_ke[shape] = contact.ke
-        builder.shape_material_kd[shape] = contact.kd
-        builder.shape_material_kf[shape] = contact.kf
-        builder.shape_margin[shape] = contact.margin
-    if not collision_shapes or body_end == body_start:
-        raise RuntimeError("Piper USD did not provide rigid bodies and collision shapes")
-    return body_end - body_start
+    end_effectors = _body_indices(
+        builder, tuple(frame.parent_body for frame in profile.attach_frames)
+    )
+    if any(dof_start + value >= int(builder.joint_dof_count) for value in (
+        *profile.arm_dof_indices,
+        *profile.gripper_dof_indices,
+    )):
+        raise RuntimeError(f"{profile.robot_id} USD control DOF layout is invalid")
+    return body_count, arm_joints, gripper_joints, arm_coords, end_effectors
 
 
 @dataclass(frozen=True, slots=True)
@@ -615,6 +558,7 @@ def _configure_robot_collision_geometry(
     contact_shapes: tuple[int, ...],
     proxy_shapes: tuple[int, ...],
     robot_cloth_collision: bool,
+    end_effector_links: tuple[str, ...],
 ) -> tuple[int, ...]:
     """Apply authored collision roles and reproduce topology-derived proxy filters."""
 
@@ -697,7 +641,7 @@ def _configure_robot_collision_geometry(
         child = int(child)
         if parent in robot_bodies and child in robot_bodies:
             children_by_parent.setdefault(parent, set()).add(child)
-    for root in _body_indices(builder, END_EFFECTOR_LINKS):
+    for root in _body_indices(builder, end_effector_links):
         subtree = {root}
         frontier = [root]
         while frontier:

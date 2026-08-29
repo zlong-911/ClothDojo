@@ -14,8 +14,22 @@
 
 over "piper_dual"
 {
+    custom string[] clothdojo:armJointNames = ["left/joint1", "left/joint2", "left/joint3", "left/joint4", "left/joint5", "left/joint6", "right/joint1", "right/joint2", "right/joint3", "right/joint4", "right/joint5", "right/joint6"]
+    custom int[] clothdojo:armCoordIndices = [0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13]
+    custom int[] clothdojo:armDofIndices = [0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13]
+    custom string[] clothdojo:bodyNames = ["world_base", "left/base_link", "left/link1", "left/link2", "left/link3", "left/link4", "left/link5", "left/link6", "left/camera", "left/link7", "left/link8", "right/base_link", "right/link1", "right/link2", "right/link3", "right/link4", "right/link5", "right/link6", "right/camera", "right/link7", "right/link8"]
+    custom int[] clothdojo:bodyParents = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 7, 7, 0, 11, 12, 13, 14, 15, 16, 17, 17, 17]
     custom float clothdojo:contactMargin = 0.0004
+    custom double[] clothdojo:gripperClosedPositions = [0, 0]
+    custom int[] clothdojo:gripperCoordIndices = [6, 7, 14, 15]
+    custom int[] clothdojo:gripperDofIndices = [6, 7, 14, 15]
+    custom double[] clothdojo:gripperOpenPositions = [0.04, -0.04]
+    custom double[] clothdojo:homeJointQ = [0, 0, 0, 0, 0, 0, 0.04, -0.04, 0, 0, 0, 0, 0, 0, 0.04, -0.04]
+    custom int clothdojo:jointDofCount = 16
     custom rel clothdojo:physicsMaterial = </piper_dual/Materials/RobotPhysics>
+    custom string clothdojo:robotId = "piper"
+    custom double[] clothdojo:rootBodyFrames = [0, 0, 0, 0, 0, 0, 1]
+    custom int clothdojo:workstationSchema = 1
     float3[] extentsHint = [(-0.07236801, -0.38289264, 0.8), (0.45379937, 0.38277414, 1.6602)]
     delete rel isaac:physics:robotJoints = [
         </piper_dual/Physics/left/clamp_mount>,

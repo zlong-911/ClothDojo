@@ -157,43 +157,8 @@ def _build_render_stage(
 
 
 def _author_robot(stage, assets_root: Path, robot_profile) -> tuple[str, ...]:
-    from pxr import Gf, UsdGeom
-
     robot_root = stage.DefinePrim("/World/Robot", "Xform")
-    robot_asset = str((assets_root / robot_profile.isaac_asset).resolve())
-    if robot_profile.robot_id == "aloha2":
-        asset_frame = robot_profile.asset_frame
-        xform = UsdGeom.Xformable(robot_root)
-        xform.AddTranslateOp().Set(Gf.Vec3d(*asset_frame.position))
-        rotation = asset_frame.rotation_xyzw
-        xform.AddOrientOp().Set(
-            Gf.Quatf(rotation[3], Gf.Vec3f(*rotation[:3]))
-        )
-        _author_aloha2_mjcf_visuals(stage, Path(robot_asset), robot_root)
-        if robot_profile.installation_asset is None:
-            raise RuntimeError("ALOHA robot profile has no installation asset")
-        installation_asset = assets_root / robot_profile.installation_asset
-        _author_aloha2_installation_visuals(stage, installation_asset, robot_root)
-        return (robot_root.GetPath().pathString,)
-
-    if robot_profile.asset_instances == 2 and Path(robot_asset).suffix == ".xml":
-        paths = []
-        for side, frame in zip(
-            ("left", "right"), robot_profile.installations, strict=True
-        ):
-            side_root = UsdGeom.Xform.Define(stage, f"{robot_root.GetPath()}/{side}")
-            xform = UsdGeom.Xformable(side_root)
-            xform.AddTranslateOp().Set(Gf.Vec3d(*frame.position))
-            rotation = frame.rotation_xyzw
-            xform.AddOrientOp().Set(
-                Gf.Quatf(rotation[3], Gf.Vec3f(*rotation[:3]))
-            )
-            _author_single_arm_mjcf_visuals(
-                stage, Path(robot_asset), side_root, material_prefix=side
-            )
-            paths.append(side_root.GetPath().pathString)
-        return tuple(paths)
-
+    robot_asset = str((assets_root / robot_profile.asset).resolve())
     robot_root.GetReferences().AddReference(robot_asset)
     physics = robot_root.GetVariantSet("Physics")
     if physics and "none" in physics.GetVariantNames():

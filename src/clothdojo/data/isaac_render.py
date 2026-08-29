@@ -613,12 +613,7 @@ def _body_parent_world_poses(profile: RobotProfile) -> np.ndarray:
     poses = np.zeros((len(profile.body_names), 7), dtype=np.float32)
     poses[:, 6] = 1.0
     roots = np.flatnonzero(np.asarray(profile.body_parents) == -1)
-    frames = (
-        (profile.asset_frame,) * len(roots)
-        if profile.robot_id == "aloha2"
-        else profile.installations
-    )
-    for root, frame in zip(roots, frames, strict=True):
+    for root, frame in zip(roots, profile.root_body_frames, strict=True):
         poses[root, :3] = frame.position
         poses[root, 3:7] = frame.rotation_xyzw
     return poses

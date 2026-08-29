@@ -104,6 +104,12 @@ _TARGET_ASSET_PINS = {
         ),
     ),
 }
+_TARGET_SOURCE_ASSETS = {
+    ALOHA2: ("robots/aloha2/aloha.xml", "robots/aloha2/frame.xml"),
+    PANDA: ("robots/panda/panda.xml", None),
+    UR5E_2F85: ("robots/ur5e_2f85/ur5e_2f85.xml", None),
+    X5: ("robots/x5/x5.xml", None),
+}
 
 
 class _Kinematics(Protocol):
@@ -182,7 +188,8 @@ def retarget(
     except KeyError as exc:
         raise ValueError(f"retarget does not support {target_robot!r}") from exc
     assets_root = Path(assets).expanduser().resolve()
-    mjcf = assets_root / target_profile.newton_asset
+    source_asset, source_installation = _TARGET_SOURCE_ASSETS[target_profile.robot_id]
+    mjcf = assets_root / source_asset
     if not mjcf.is_file() or _sha256(mjcf) != asset_pins.mjcf_sha256:
         raise FileNotFoundError(
             f"pinned {target_profile.robot_id} asset is missing or modified: {mjcf}"
@@ -195,9 +202,9 @@ def retarget(
             )
     installation = None
     if asset_pins.installation_sha256 is not None:
-        if target_profile.installation_asset is None:
+        if source_installation is None:
             raise RuntimeError("target robot does not define its installation asset")
-        installation = assets_root / target_profile.installation_asset
+        installation = assets_root / source_installation
         if not installation.is_file() or _sha256(installation) != asset_pins.installation_sha256:
             raise FileNotFoundError(
                 f"pinned installation asset is missing or modified: {installation}"
@@ -206,7 +213,11 @@ def retarget(
     staging = output_root.with_name(f".{output_root.name}.tmp-{uuid4().hex}")
     staging.mkdir(parents=True)
     try:
-        kinematics = _RobotKinematics(target_profile, mjcf, device=device)
+        kinematics = _RobotKinematics(
+            target_profile,
+            assets_root / target_profile.asset,
+            device=device,
+        )
         first_reader = TrajectoryReader(trajectories[0])
         if first_reader.manifest.scene.task_name != SHIRT_FLATTEN:
             raise RuntimeError(
@@ -744,12 +755,12 @@ def _set_gripper_positions(
 
 
 class _RobotKinematics:
-    def __init__(self, profile, mjcf: Path, *, device: str, iterations: int = 40) -> None:
+    def __init__(self, profile, asset: Path, *, device: str, iterations: int = 40) -> None:
         import newton
         import newton.ik as ik
         import warp as wp
 
-        from clothdojo.sim.scene import _add_profile_robot
+        from clothdojo.sim.scene import _add_robot
 
         self.newton = newton
         self.wp = wp
@@ -763,11 +774,11 @@ class _RobotKinematics:
         )
         self.gripper_open_positions = np.asarray(profile.gripper_open_positions, dtype=np.float32)
         builder = newton.ModelBuilder(gravity=wp.vec3(0.0))
-        _body_count, _arms, _grippers, _coords, end_effectors = _add_profile_robot(
+        _body_count, _arms, _grippers, _coords, end_effectors = _add_robot(
             newton,
             wp,
             builder,
-            mjcf,
+            asset,
             profile,
             load_visual_shapes=False,
         )

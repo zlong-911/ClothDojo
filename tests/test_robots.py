@@ -58,16 +58,26 @@ def test_piper_profile_reads_the_four_asset_authored_cameras() -> None:
     )
 
 
+def test_every_robot_uses_the_same_asset_authored_workstation_contract() -> None:
+    profiles = tuple(
+        robot_profile(robot_id)
+        for robot_id in (PIPER, ALOHA2, X5, PANDA, UR5E_2F85)
+    )
+
+    assert all(profile.asset.endswith(".usda") for profile in profiles)
+    assert all("newton_asset" not in profile.to_json_dict() for profile in profiles)
+    assert all("installation_asset" not in profile.to_json_dict() for profile in profiles)
+
+
 def test_aloha_static_cameras_frame_both_robots_and_table_workspace() -> None:
     profile = robot_profile(ALOHA2)
-    assert tuple(frame.position for frame in profile.installations) == (
-        (0.382, 0.559, 0.82),
-        (0.382, -0.559, 0.82),
+    np.testing.assert_allclose(
+        tuple(frame.position for frame in profile.root_body_frames),
+        ((0.382, 0.559, 0.82), (0.382, -0.559, 0.82)),
     )
     assert profile.gripper_closed_positions == (0.0079, 0.0079)
     assert profile.gripper_open_positions == (0.037, 0.037)
-    assert profile.newton_asset == "robots/aloha2/aloha.xml"
-    assert profile.installation_asset == "robots/aloha2/frame.xml"
+    assert profile.asset == "robots/aloha2/aloha2.usda"
     assert profile.body_parents[8:10] == (7, 7)
     assert profile.body_parents[18:20] == (17, 17)
     assert tuple(camera.name for camera in profile.cameras) == (
@@ -120,20 +130,18 @@ def test_aloha_wrist_cameras_frame_open_fingers_at_a_readable_distance() -> None
         assert np.all((300.0 <= projected[:, 1]) & (projected[:, 1] <= 370.0))
 
 
-def test_panda_profile_uses_two_pinned_standard_single_arm_assets() -> None:
+def test_panda_profile_uses_one_fixed_dual_arm_workstation() -> None:
     profile = robot_profile(PANDA)
 
-    assert profile.newton_asset == "robots/panda/panda.xml"
-    assert profile.asset_instances == 2
+    assert profile.asset == "robots/panda/panda.usda"
     assert profile.arm_dofs_per_side == 7
     assert len(profile.arm_coord_indices) == 14
     assert len(profile.home_joint_q) == 18
-    assert tuple(frame.position for frame in profile.installations) == (
-        (0.25, 0.6, 0.8),
-        (0.25, -0.6, 0.8),
+    np.testing.assert_allclose(
+        tuple(frame.position for frame in profile.root_body_frames),
+        ((0.25, 0.6, 0.8), (0.25, -0.6, 0.8)),
     )
     assert profile.body_parents.count(-1) == 2
-    assert profile.position_drive_override is not None
 
 
 def test_task_profiles_are_independent_of_robot_profiles() -> None:
@@ -149,25 +157,22 @@ def test_task_profiles_are_independent_of_robot_profiles() -> None:
 def test_x5_profile_reuses_the_old_validated_dual_installation() -> None:
     profile = robot_profile(X5)
 
-    assert profile.newton_asset == "robots/x5/x5.xml"
-    assert profile.asset_instances == 2
+    assert profile.asset == "robots/x5/x5.usda"
     assert profile.arm_dofs_per_side == 6
     assert len(profile.home_joint_q) == 16
-    assert tuple(frame.position for frame in profile.installations) == (
-        (0.25, 0.3, 0.8),
-        (0.25, -0.3, 0.8),
+    np.testing.assert_allclose(
+        tuple(frame.position for frame in profile.root_body_frames),
+        ((0.25, 0.3, 0.8), (0.25, -0.3, 0.8)),
     )
     assert profile.attach_frames[0].position == (0.152602, 0.0, -0.00014)
     assert profile.gripper_open_positions == (0.044, 0.044)
     assert profile.body_parents.count(-1) == 2
-    assert profile.position_drive_override is not None
 
 
 def test_ur5e_2f85_profile_keeps_closed_chain_coordinates_separate_from_dofs() -> None:
     profile = robot_profile(UR5E_2F85)
 
-    assert profile.newton_asset == "robots/ur5e_2f85/ur5e_2f85.xml"
-    assert profile.asset_instances == 2
+    assert profile.asset == "robots/ur5e_2f85/ur5e_2f85.usda"
     assert profile.arm_dofs_per_side == 6
     assert len(profile.home_joint_q) == 44
     assert profile.joint_dof_count == 40
@@ -176,4 +181,3 @@ def test_ur5e_2f85_profile_keeps_closed_chain_coordinates_separate_from_dofs() -
     assert profile.gripper_coord_indices == (6, 10, 28, 32)
     assert profile.gripper_dof_indices == (6, 10, 26, 30)
     assert profile.body_parents.count(-1) == 2
-    assert profile.position_drive_override is not None
