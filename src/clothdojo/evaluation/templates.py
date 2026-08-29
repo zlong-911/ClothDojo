@@ -199,7 +199,7 @@ def generate_asset_template(
     from clothdojo.assets import GarmentLibrary
     from clothdojo.evaluation.protocol import load_evaluation_protocol
     from clothdojo.sim.runtime import ShirtFlattenRuntime
-    from clothdojo.sim.scene import ShirtFlattenSpec, build_shirt_flatten
+    from clothdojo.sim.scene import ShirtFlattenSpec, build_scene
 
     if not asset_id:
         raise ValueError("asset_id must not be empty")
@@ -218,7 +218,7 @@ def generate_asset_template(
     ):
         raise ValueError("target symmetry center differs from the scene table center")
 
-    scene = build_shirt_flatten(
+    scene = build_scene(
         assets,
         spec=spec,
         device=device,

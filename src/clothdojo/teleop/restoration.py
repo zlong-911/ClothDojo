@@ -228,7 +228,7 @@ def _readers(
             raise ValueError("restore source trajectory is not complete")
         if manifest.scene.task_name != source_task:
             raise ValueError("restore source task does not match its plan")
-        if manifest.scene.robot_name != "piper":
+        if manifest.scene.robot_id != "piper":
             raise ValueError("restore source robot is not Piper")
         if not np.isclose(manifest.control_fps, runtime.spec.control_fps, rtol=0.0, atol=1e-9):
             raise ValueError("restore source control FPS differs from the runtime")
@@ -247,7 +247,7 @@ def _validate_runtime(plan, runtime, value: object, *, source_task: str) -> None
     task = value.get("task_name")
     if task not in {plan.scene, source_task}:
         raise ValueError("restore runtime task identity is incompatible")
-    if value.get("robot_name") != "piper":
+    if value.get("robot_id") != "piper":
         raise ValueError("restore runtime robot identity is incompatible")
     if not np.isclose(
         float(value.get("control_fps", -1)),

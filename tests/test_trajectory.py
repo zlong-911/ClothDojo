@@ -7,11 +7,70 @@ import numpy as np
 import pytest
 
 from clothdojo.trajectory import (
+    SceneMetadata,
     TrajectoryAction,
+    TrajectoryManifest,
     TrajectoryReader,
     TrajectoryState,
     TrajectoryWriter,
 )
+
+
+def test_manifest_reads_legacy_environment_without_reemitting_it() -> None:
+    manifest = TrajectoryManifest.from_json_dict(
+        {
+            "control_fps": 50,
+            "sim_substeps": 6,
+            "units": "m",
+            "coordinate_convention": "right_handed_z_up",
+            "max_actions": 1,
+            "scene": {
+                "task_name": "shirt_flatten",
+                "robot_name": "piper",
+                "environment_id": "piper_shirt_flatten_v1",
+                "environment_fingerprint": "obsolete",
+            },
+        }
+    )
+
+    assert manifest.scene.robot_id == "piper"
+    assert manifest.to_json_dict()["scene"] == {
+        "task_name": "shirt_flatten",
+        "robot_id": "piper",
+        "asset_fingerprints": {},
+        "config_fingerprints": {},
+    }
+
+
+def test_manifest_infers_legacy_task_when_it_is_missing() -> None:
+    scene = TrajectoryManifest.from_json_dict(
+        {
+            "control_fps": 50,
+            "sim_substeps": 6,
+            "units": "m",
+            "coordinate_convention": "right_handed_z_up",
+            "max_actions": 1,
+            "scene": {"environment_id": "piper_shirt_flatten_v1"},
+        }
+    ).scene
+
+    assert scene.robot_id == "piper"
+    assert scene.task_name == "shirt_flatten"
+
+
+def test_manifest_rejects_conflicting_legacy_task() -> None:
+    with pytest.raises(ValueError, match="conflicting task"):
+        SceneMetadata.from_json_dict(
+            {
+                "task_name": "shirt_fold",
+                "environment_id": "piper_shirt_flatten_v1",
+            }
+        )
+
+
+def test_manifest_rejects_unknown_legacy_environment() -> None:
+    with pytest.raises(ValueError, match="unknown legacy"):
+        SceneMetadata.from_json_dict({"environment_id": "unknown_scene_v1"})
 
 
 def _state(index: int) -> TrajectoryState:

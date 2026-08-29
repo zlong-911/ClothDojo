@@ -7,10 +7,24 @@ import warp as wp
 
 from clothdojo.sim.grasp import (
     ParticleGrasp,
+    _attach_local_offsets,
     _reset_grasp,
     _reset_release_collision,
     _update_grasp,
 )
+
+
+def test_particle_grasp_uses_robot_profile_attach_centers() -> None:
+    frames = (
+        SimpleNamespace(position=(0.13, 0.0, -0.003)),
+        SimpleNamespace(position=(0.14, 0.01, -0.004)),
+    )
+    scene = SimpleNamespace(robot_profile=SimpleNamespace(attach_frames=frames))
+
+    np.testing.assert_allclose(
+        _attach_local_offsets(scene),
+        ((0.13, 0.0, -0.003), (0.14, 0.01, -0.004)),
+    )
 
 
 def test_grasp_matches_expert_four_seed_two_ring_patch_and_release() -> None:

@@ -13,6 +13,11 @@ from clothdojo.data.rollout import (
     _restore_render_state,
     _TrajectoryRenderState,
 )
+from clothdojo.robots import (
+    ALOHA2,
+    PANDA,
+    robot_profile,
+)
 
 
 class _Writer:
@@ -91,7 +96,18 @@ def test_rollout_features_match_expert_policy_order() -> None:
     assert features["observation.state"]["names"][13] == "right_gripper_open_state"
     assert features["action"]["names"][6] == "left_gripper_open_cmd"
     assert features["action"]["names"][13] == "right_gripper_open_cmd"
-    assert "observation.images.cam_third_person" in features
+    assert "observation.images.cam_low" in features
+
+    aloha = robot_profile(ALOHA2)
+    aloha_features = _features(480, 640, arm_joint_names=aloha.arm_joint_names)
+    assert aloha_features["observation.state"]["names"][0] == "left/waist"
+    assert aloha_features["action"]["names"][7] == "right/waist_target"
+
+    panda = robot_profile(PANDA)
+    panda_features = _features(480, 640, arm_joint_names=panda.arm_joint_names)
+    assert panda_features["observation.state"]["shape"] == (16,)
+    assert panda_features["observation.state"]["names"][7] == "left_gripper_open_state"
+    assert panda_features["action"]["names"][8] == "right/joint1_target"
 
 
 def test_rollout_writer_can_publish_multiple_episodes(tmp_path) -> None:
@@ -136,12 +152,14 @@ def test_rollout_writer_can_publish_multiple_episodes(tmp_path) -> None:
     }
 
 
-def test_render_replay_restores_world_local_state_without_building_a_solver() -> None:
+def test_render_replay_restores_world_local_state_and_rebuilds_articulation(
+    monkeypatch,
+) -> None:
     state = SimpleNamespace(
-        joint_q=_Array((1, 1, 2)),
-        joint_qd=_Array((1, 1, 2)),
-        body_q=_Array((1, 1, 1, 7)),
-        body_qd=_Array((1, 1, 1, 6)),
+        joint_q=_Array((2,)),
+        joint_qd=_Array((2,)),
+        body_q=_Array((1, 7)),
+        body_qd=_Array((1, 6)),
         particle_q=_Array((2, 3)),
         particle_qd=_Array((2, 3)),
     )
@@ -160,15 +178,21 @@ def test_render_replay_restores_world_local_state_without_building_a_solver() ->
         particle_q=np.asarray([[1.0, 1.0, 0.0], [2.0, 1.0, 0.0]], dtype=np.float32),
         particle_qd=np.zeros((2, 3), dtype=np.float32),
     )
+    fk_calls = []
+    monkeypatch.setattr(
+        "newton.eval_fk",
+        lambda *args: fk_calls.append(args),
+    )
 
     _restore_render_state(replay, local)
 
-    np.testing.assert_allclose(state.joint_q.values[:, 0], [[0.0, 1.0]])
-    np.testing.assert_allclose(state.body_q.values[:, 0, 0, :3], [[11, 5, 5]])
+    np.testing.assert_allclose(state.joint_q.values, [0.0, 1.0])
+    np.testing.assert_allclose(state.body_q.values[:, :3], [[11, 5, 5]])
     np.testing.assert_allclose(
         state.particle_q.values,
         [[11, 3, 0], [12, 3, 0]],
     )
+    assert fk_calls == [(model, state.joint_q, state.joint_qd, state)]
 
 
 def test_canonical_export_owns_backend_camera_lifecycle(monkeypatch, tmp_path) -> None:
@@ -193,7 +217,14 @@ def test_canonical_export_owns_backend_camera_lifecycle(monkeypatch, tmp_path) -
     sample = SimpleNamespace(state=state, action=action)
 
     class Reader:
-        manifest = SimpleNamespace(control_fps=50, action_count=1)
+        manifest = SimpleNamespace(
+            control_fps=50,
+            action_count=1,
+            scene=SimpleNamespace(
+                robot_id="piper",
+                task_name="shirt_flatten",
+            ),
+        )
 
         def __init__(self, _path) -> None:
             pass
@@ -262,7 +293,7 @@ def test_canonical_export_owns_backend_camera_lifecycle(monkeypatch, tmp_path) -
     result = _export_canonical_collection(
         source,
         tmp_path / "output",
-        camera_factory=lambda asset_id, _state: Camera(asset_id),
+        camera_factory=lambda asset_id, _state, _environment: Camera(asset_id),
         rendering={"backend": "isaac_rtx", "layouts": []},
         repo_id=None,
         image_writer_threads=2,

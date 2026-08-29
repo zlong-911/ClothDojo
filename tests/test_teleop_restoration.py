@@ -54,7 +54,7 @@ def _write_trajectory(path, *, task: str, fingerprints: dict[str, str]) -> None:
         max_actions=2,
         scene=SceneMetadata(
             task_name=task,
-            robot_name="piper",
+            robot_id="piper",
             asset_fingerprints=fingerprints,
         ),
         metadata={"asset_id": "shirt_a"},

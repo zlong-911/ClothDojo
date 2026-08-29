@@ -14,6 +14,8 @@
 | `paper/` | 论文工程；中文初稿为 `paper/draft_zh.md`，LaTeX 入口为 `paper/main.tex` |
 | `configs/` | 运行与实验配置 |
 | `assets/` | 项目资产 |
+| `assets/robots/` | 固定机器人源资产、项目组合 MJCF、许可证与来源记录 |
+| `assets/robots/piper/piper.usda` | Piper 双臂、安装结构、物理、reset/attach 语义和四路相机的完整工作站入口 |
 | `configs/rendering/materials.json` | 高质量视觉材质与 HDRI 的固定选择清单 |
 | `data/` | 正式数据与模型产物 |
 | `data/visual-assets/polyhaven/` | Poly Haven CC0 材质的本地 2K 工作副本 |
@@ -29,9 +31,13 @@
 | `src/clothdojo/assets/` | 资产目录与元数据 |
 | `src/clothdojo/assets/materials.py` | Poly Haven 固定清单、下载校验与物理纹理尺度 |
 | `src/clothdojo/sim/` | 仿真场景与运行时 |
-| `src/clothdojo/rendering.py` | Newton 与 Isaac 共用的四视角标定及策略观测 contract |
+| `src/clothdojo/rendering.py` | 渲染视角接口、策略观测尺寸及非 USD 资产的相机 contract |
+| `src/clothdojo/robots.py` | 固定 robot profile：本体、安装、关节/回放拓扑、attach 与相机；Piper 的语义从工作站 USD 读取 |
+| `src/clothdojo/tasks.py` | 与机器人独立的任务身份及场景可用性 |
 | `src/clothdojo/trajectory/` | 遥操、rollout 与评测共用的轨迹格式、读写和 Newton capture |
 | `src/clothdojo/data/` | 数据转换与导出 |
+| `src/clothdojo/data/retarget.py` | Piper 到目标 robot profile 的几何参考、动力学 action 重建与门禁入口 |
+| `src/clothdojo/data/retarget_dynamics.py` | 目标机械臂刚体逆动力学、一步 shooting 与 action-only replay |
 | `src/clothdojo/data/rollout_review.py` | canonical trajectory 的增量无 solver 轻量审查视频 |
 | `src/clothdojo/collection/` | 采集控制面 |
 | `src/clothdojo/teleop/` | 遥操运行时 |
@@ -65,6 +71,7 @@
 
 - [`development.md`](development.md)：环境、工具和目录约定。
 - [`benchmark.md`](benchmark.md)：严重褶皱服装展平 benchmark 的数据路径与实验规划。
+- [`retargeting.md`](retargeting.md)：机械臂 retarget 的使用入口、产物语义与验证边界。
 - [`reference_index.md`](reference_index.md)：官方文档与源码入口。
 - [`compute_hosts.md`](compute_hosts.md)：远端计算节点。
 - [`experiments/rapid_iteration_evaluation.md`](experiments/rapid_iteration_evaluation.md)：

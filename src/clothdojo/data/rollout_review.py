@@ -13,6 +13,8 @@ from typing import Any
 import av
 import numpy as np
 
+from clothdojo.robots import PIPER
+
 REVIEW_CAMERA = "cam_high"
 
 
@@ -35,7 +37,7 @@ def render_review(
 
     from clothdojo.data.rollout import _restore_render_state, _TrajectoryRenderState
     from clothdojo.rollout.render import ShirtFlattenCameraObservation
-    from clothdojo.sim.scene import ShirtFlattenSpec, build_shirt_flatten
+    from clothdojo.sim.scene import ShirtFlattenSpec, build_scene
     from clothdojo.trajectory import TrajectoryReader
 
     root = Path(source).expanduser().resolve()
@@ -78,13 +80,19 @@ def render_review(
                 reused += 1
                 continue
 
+            robot_id = getattr(
+                getattr(reader.manifest, "scene", None),
+                "robot_id",
+                PIPER,
+            ) or PIPER
             if trajectory.asset_id != active_asset:
                 _close_camera(camera)
-                scene = build_shirt_flatten(
+                scene = build_scene(
                     assets_root,
                     spec=ShirtFlattenSpec(garment_id=trajectory.asset_id, world_count=1),
                     device=device,
                     visuals=True,
+                    robot_id=robot_id,
                 )
                 runtime = _TrajectoryRenderState(scene)
                 camera = ShirtFlattenCameraObservation(scene, camera_names=(REVIEW_CAMERA,))
@@ -144,6 +152,14 @@ def _review_trajectories(root: Path) -> list[_ReviewTrajectory]:
             from clothdojo.rollout.collection import load_rollout_collection
 
             manifest = load_rollout_collection(root)
+            return [
+                _review_trajectory(root / item["path"], asset_id=str(item["asset_id"]))
+                for item in manifest["trajectories"]
+            ]
+        if schema == "clothdojo_retarget_collection":
+            from clothdojo.data.retarget import load_retarget_collection
+
+            manifest = load_retarget_collection(root)
             return [
                 _review_trajectory(root / item["path"], asset_id=str(item["asset_id"]))
                 for item in manifest["trajectories"]

@@ -61,10 +61,17 @@ def build_render_stage(runtime, plan, *, cloth_visual: str = "nocs") -> Path:
         runtime.state_0.particle_q.numpy(),
         plan,
         cloth_visual=cloth_visual,
+        robot_profile=runtime.scene.robot_profile,
     )
 
 
-def build_replay_render_stage(initial_points, plan, *, cloth_visual: str = "normal") -> Path:
+def build_replay_render_stage(
+    initial_points,
+    plan,
+    *,
+    robot_profile,
+    cloth_visual: str = "normal",
+) -> Path:
     """Author the same stage directly from a recorded trajectory state."""
     from clothdojo.sim.scene import ShirtFlattenSpec
 
@@ -73,10 +80,18 @@ def build_replay_render_stage(initial_points, plan, *, cloth_visual: str = "norm
         initial_points,
         plan,
         cloth_visual=cloth_visual,
+        robot_profile=robot_profile,
     )
 
 
-def _build_render_stage(spec, initial_points, plan, *, cloth_visual: str) -> Path:
+def _build_render_stage(
+    spec,
+    initial_points,
+    plan,
+    *,
+    cloth_visual: str,
+    robot_profile,
+) -> Path:
     from pxr import Gf, Usd, UsdGeom, UsdLux, UsdShade, Vt
 
     from clothdojo.sim.cloth import load_garment_mesh
@@ -92,13 +107,7 @@ def _build_render_stage(spec, initial_points, plan, *, cloth_visual: str) -> Pat
     UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
     UsdGeom.SetStageMetersPerUnit(stage, 1.0)
 
-    robot = stage.DefinePrim("/World/Robot", "Xform")
-    robot.GetReferences().AddReference(
-        str((plan.assets_root / "robots/piper/piper.usda").resolve())
-    )
-    physics = robot.GetVariantSet("Physics")
-    if physics and "none" in physics.GetVariantNames():
-        physics.SetVariantSelection("none")
+    _author_robot(stage, plan.assets_root, robot_profile)
 
     table_material = _preview_material(stage, "/World/Looks/Table", (0.82, 0.84, 0.87), 0.38)
     table = _define_textured_cube(
@@ -145,6 +154,277 @@ def _build_render_stage(spec, initial_points, plan, *, cloth_visual: str) -> Pat
     UsdGeom.Xformable(key).AddRotateXYZOp().Set(Gf.Vec3f(-38.0, 24.0, -28.0))
     stage.GetRootLayer().Save()
     return output_path
+
+
+def _author_robot(stage, assets_root: Path, robot_profile) -> tuple[str, ...]:
+    from pxr import Gf, UsdGeom
+
+    robot_root = stage.DefinePrim("/World/Robot", "Xform")
+    robot_asset = str((assets_root / robot_profile.isaac_asset).resolve())
+    if robot_profile.robot_id == "aloha2":
+        asset_frame = robot_profile.asset_frame
+        xform = UsdGeom.Xformable(robot_root)
+        xform.AddTranslateOp().Set(Gf.Vec3d(*asset_frame.position))
+        rotation = asset_frame.rotation_xyzw
+        xform.AddOrientOp().Set(
+            Gf.Quatf(rotation[3], Gf.Vec3f(*rotation[:3]))
+        )
+        _author_aloha2_mjcf_visuals(stage, Path(robot_asset), robot_root)
+        if robot_profile.installation_asset is None:
+            raise RuntimeError("ALOHA robot profile has no installation asset")
+        installation_asset = assets_root / robot_profile.installation_asset
+        _author_aloha2_installation_visuals(stage, installation_asset, robot_root)
+        return (robot_root.GetPath().pathString,)
+
+    if robot_profile.asset_instances == 2 and Path(robot_asset).suffix == ".xml":
+        paths = []
+        for side, frame in zip(
+            ("left", "right"), robot_profile.installations, strict=True
+        ):
+            side_root = UsdGeom.Xform.Define(stage, f"{robot_root.GetPath()}/{side}")
+            xform = UsdGeom.Xformable(side_root)
+            xform.AddTranslateOp().Set(Gf.Vec3d(*frame.position))
+            rotation = frame.rotation_xyzw
+            xform.AddOrientOp().Set(
+                Gf.Quatf(rotation[3], Gf.Vec3f(*rotation[:3]))
+            )
+            _author_single_arm_mjcf_visuals(
+                stage, Path(robot_asset), side_root, material_prefix=side
+            )
+            paths.append(side_root.GetPath().pathString)
+        return tuple(paths)
+
+    robot_root.GetReferences().AddReference(robot_asset)
+    physics = robot_root.GetVariantSet("Physics")
+    if physics and "none" in physics.GetVariantNames():
+        physics.SetVariantSelection("none")
+    return (robot_root.GetPath().pathString,)
+
+
+def _author_single_arm_mjcf_visuals(
+    stage, mjcf_path: Path, robot_root, *, material_prefix: str
+) -> None:
+    """Author one pinned Menagerie arm while keeping project-owned installation."""
+
+    import mujoco
+    from pxr import UsdGeom
+
+    if not mjcf_path.is_file():
+        raise FileNotFoundError(f"missing Menagerie robot asset: {mjcf_path}")
+    model = mujoco.MjModel.from_xml_path(str(mjcf_path))
+    body_paths: dict[int, str] = {}
+    for body_id in range(1, model.nbody):
+        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body_id)
+        if not name or "/" in name:
+            raise RuntimeError(f"single-arm MJCF body name is invalid: {name!r}")
+        parent_id = int(model.body_parentid[body_id])
+        parent_path = (
+            robot_root.GetPath().pathString
+            if parent_id == 0
+            else body_paths[parent_id]
+        )
+        path = f"{parent_path}/{name}"
+        body = UsdGeom.Xform.Define(stage, path)
+        _set_mujoco_pose(body, model.body_pos[body_id], model.body_quat[body_id])
+        body_paths[body_id] = path
+
+    materials = {}
+    for material_id in range(model.nmat):
+        name = mujoco.mj_id2name(
+            model, mujoco.mjtObj.mjOBJ_MATERIAL, material_id
+        ) or f"material_{material_id}"
+        rgba = model.mat_rgba[material_id]
+        materials[material_id] = _preview_material(
+            stage,
+            f"/World/Looks/{material_prefix}_{name}",
+            _display_to_linear(tuple(float(value) for value in rgba[:3])),
+            0.35,
+        )
+    fallback = _preview_material(
+        stage,
+        f"/World/Looks/{material_prefix}_default",
+        _display_to_linear((0.6, 0.6, 0.6)),
+        0.35,
+    )
+    for geom_id in range(model.ngeom):
+        if int(model.geom_group[geom_id]) != 2:
+            continue
+        if int(model.geom_type[geom_id]) != int(mujoco.mjtGeom.mjGEOM_MESH):
+            raise RuntimeError("Menagerie visual geometry must be a mesh")
+        material_id = int(model.geom_matid[geom_id])
+        _author_mujoco_mesh(
+            stage,
+            model,
+            geom_id,
+            f"{body_paths[int(model.geom_bodyid[geom_id])]}/visual_{geom_id}",
+            materials.get(material_id, fallback),
+        )
+
+
+def _author_aloha2_mjcf_visuals(stage, mjcf_path: Path, robot_root) -> None:
+    """Author the pinned Menagerie meshes without importing its workbench."""
+
+    import mujoco
+    from pxr import UsdGeom
+
+    if not mjcf_path.is_file():
+        raise FileNotFoundError(f"missing ALOHA 2 Menagerie asset: {mjcf_path}")
+    model = mujoco.MjModel.from_xml_path(str(mjcf_path))
+    if model.nbody != 21 or model.nq != 16:
+        raise RuntimeError(
+            "pinned ALOHA 2 MJCF topology changed: expected 20 bodies and 16 coordinates"
+        )
+
+    aloha_root = UsdGeom.Xform.Define(stage, f"{robot_root.GetPath()}/aloha")
+    side_roots = {
+        side: UsdGeom.Xform.Define(stage, f"{aloha_root.GetPath()}/{side}")
+        for side in ("left", "right")
+    }
+    # Menagerie authors the plastic as display-space 0.15 gray. PreviewSurface
+    # consumes linear color, so use the corresponding linear value instead of
+    # making the robot appear middle gray under RTX color management.
+    official_black_linear = (0.01960665,) * 3
+    material = _preview_material(
+        stage, "/World/Looks/Aloha2Black", official_black_linear, 0.35
+    )
+    body_paths: dict[int, str] = {}
+    for body_id in range(1, model.nbody):
+        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_BODY, body_id)
+        if not name or "/" not in name:
+            raise RuntimeError(f"ALOHA 2 MJCF body has no side-qualified name: {name!r}")
+        side, body_name = name.split("/", 1)
+        parent_id = int(model.body_parentid[body_id])
+        parent_path = (
+            side_roots[side].GetPath().pathString
+            if parent_id == 0
+            else body_paths[parent_id]
+        )
+        path = f"{parent_path}/{body_name}"
+        body = UsdGeom.Xform.Define(stage, path)
+        _set_mujoco_pose(
+            body,
+            model.body_pos[body_id],
+            model.body_quat[body_id],
+        )
+        body_paths[body_id] = path
+
+    for geom_id in range(model.ngeom):
+        if int(model.geom_group[geom_id]) != 2:
+            continue
+        if int(model.geom_type[geom_id]) != int(mujoco.mjtGeom.mjGEOM_MESH):
+            raise RuntimeError("ALOHA 2 visual geometry must be a mesh")
+        body_path = body_paths[int(model.geom_bodyid[geom_id])]
+        _author_mujoco_mesh(
+            stage,
+            model,
+            geom_id,
+            f"{body_path}/visual_{geom_id}",
+            material,
+        )
+
+
+def _author_aloha2_installation_visuals(stage, mjcf_path: Path, robot_root) -> None:
+    """Author the pinned official frame on ClothDojo's existing workbench."""
+
+    import mujoco
+    from pxr import UsdGeom
+
+    if not mjcf_path.is_file():
+        raise FileNotFoundError(f"missing ALOHA 2 installation asset: {mjcf_path}")
+    model = mujoco.MjModel.from_xml_path(str(mjcf_path))
+    if model.nbody != 1 or model.ngeom != 31:
+        raise RuntimeError("pinned ALOHA 2 installation must contain 31 world meshes")
+
+    frame_root = UsdGeom.Xform.Define(stage, f"{robot_root.GetPath()}/frame")
+    black = _preview_material(
+        stage, "/World/Looks/Aloha2FrameBlack", _display_to_linear((0.15,) * 3), 0.42
+    )
+    metal = _preview_material(
+        stage,
+        "/World/Looks/Aloha2FrameMetal",
+        _display_to_linear((0.517, 0.529, 0.537)),
+        0.28,
+    )
+    for geom_id in range(model.ngeom):
+        if int(model.geom_group[geom_id]) != 1:
+            raise RuntimeError("ALOHA installation geometry must use visual group 1")
+        if int(model.geom_type[geom_id]) != int(mujoco.mjtGeom.mjGEOM_MESH):
+            raise RuntimeError("ALOHA installation geometry must be a mesh")
+        material_id = int(model.geom_matid[geom_id])
+        material_name = (
+            mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_MATERIAL, material_id)
+            if material_id >= 0
+            else None
+        )
+        _author_mujoco_mesh(
+            stage,
+            model,
+            geom_id,
+            f"{frame_root.GetPath()}/visual_{geom_id}",
+            metal if material_name == "metal" else black,
+        )
+
+
+def _author_mujoco_mesh(stage, model, geom_id: int, path: str, material) -> None:
+    import mujoco
+    from pxr import UsdGeom, UsdShade, Vt
+
+    mesh_id = int(model.geom_dataid[geom_id])
+    vertex_start = int(model.mesh_vertadr[mesh_id])
+    vertex_count = int(model.mesh_vertnum[mesh_id])
+    face_start = int(model.mesh_faceadr[mesh_id])
+    face_count = int(model.mesh_facenum[mesh_id])
+    points = np.asarray(
+        model.mesh_vert[vertex_start : vertex_start + vertex_count],
+        dtype=np.float32,
+    )
+    faces = np.asarray(
+        model.mesh_face[face_start : face_start + face_count], dtype=np.int32
+    )
+    normal_start = int(model.mesh_normaladr[mesh_id])
+    normal_count = int(model.mesh_normalnum[mesh_id])
+    normals = np.asarray(
+        model.mesh_normal[normal_start : normal_start + normal_count],
+        dtype=np.float32,
+    )
+    face_normals = np.asarray(
+        model.mesh_facenormal[face_start : face_start + face_count], dtype=np.int32
+    )
+    mesh_name = mujoco.mj_id2name(
+        model, mujoco.mjtObj.mjOBJ_MESH, mesh_id
+    ) or f"mesh_{mesh_id}"
+    mesh = UsdGeom.Mesh.Define(stage, f"{path}_{mesh_name}")
+    mesh.CreatePointsAttr(Vt.Vec3fArray.FromNumpy(points))
+    mesh.CreateFaceVertexCountsAttr(Vt.IntArray([3] * face_count))
+    mesh.CreateFaceVertexIndicesAttr(Vt.IntArray.FromNumpy(faces.reshape(-1)))
+    mesh.CreateNormalsAttr(
+        Vt.Vec3fArray.FromNumpy(normals[face_normals].reshape(-1, 3))
+    )
+    mesh.SetNormalsInterpolation(UsdGeom.Tokens.faceVarying)
+    mesh.CreateSubdivisionSchemeAttr(UsdGeom.Tokens.none)
+    _set_mujoco_pose(mesh, model.geom_pos[geom_id], model.geom_quat[geom_id])
+    UsdShade.MaterialBindingAPI.Apply(mesh.GetPrim()).Bind(material)
+
+
+def _display_to_linear(color: tuple[float, float, float]) -> tuple[float, float, float]:
+    return tuple(
+        value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+        for value in color
+    )
+
+
+def _set_mujoco_pose(xformable, position, quaternion_wxyz) -> None:
+    from pxr import Gf, UsdGeom
+
+    quaternion = np.asarray(quaternion_wxyz, dtype=np.float64)
+    matrix = Gf.Matrix4d(1.0)
+    matrix.SetRotateOnly(
+        Gf.Quatd(float(quaternion[0]), Gf.Vec3d(*quaternion[1:4]))
+    )
+    matrix.SetTranslateOnly(
+        Gf.Vec3d(*(float(value) for value in position))
+    )
+    UsdGeom.Xformable(xformable).AddTransformOp().Set(matrix)
 
 
 def configure_xr(

@@ -17,5 +17,11 @@ checkpoints/
 # Collection deployment settings are copied from the tracked example.
 /configs/collection.yaml
 
-# Complete project-local assets are managed outside Git.
-/assets/
+# Complete project-local payloads are managed outside Git. The lightweight
+# Piper workstation entry is source because it owns project physics semantics.
+/assets/*
+!/assets/robots/
+/assets/robots/*
+!/assets/robots/piper/
+/assets/robots/piper/*
+!/assets/robots/piper/piper.usda

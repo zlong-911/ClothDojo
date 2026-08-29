@@ -21,14 +21,17 @@ def pack_policy_state(arm_q: np.ndarray, gripper_open: np.ndarray) -> np.ndarray
 
     arms = np.asarray(arm_q, dtype=np.float32)
     grippers = np.asarray(gripper_open, dtype=np.float32)
-    if arms.ndim != 2 or arms.shape[1] != 12:
-        raise ValueError(f"arm state must have shape (batch, 12), got {arms.shape}")
+    if arms.ndim != 2 or arms.shape[1] == 0 or arms.shape[1] % 2:
+        raise ValueError(
+            f"arm state must contain equal non-empty left/right arms, got {arms.shape}"
+        )
     if grippers.shape != (arms.shape[0], 2):
         raise ValueError(
             f"gripper state must have shape {(arms.shape[0], 2)}, got {grippers.shape}"
         )
+    side = arms.shape[1] // 2
     return np.concatenate(
-        (arms[:, :6], grippers[:, :1], arms[:, 6:], grippers[:, 1:]),
+        (arms[:, :side], grippers[:, :1], arms[:, side:], grippers[:, 1:]),
         axis=1,
         dtype=np.float32,
     )
@@ -202,7 +205,7 @@ class NewtonTrajectoryEpisode(NewtonBatchEnvironment):
                     max_actions=scenario.steps,
                     scene=SceneMetadata(
                         task_name=scenario.task_name,
-                        robot_name="piper",
+                        robot_id="piper",
                         asset_fingerprints={
                             "garment_usdc": garment_sha256[garment_id],
                             "piper_entry_usda": robot_sha256,

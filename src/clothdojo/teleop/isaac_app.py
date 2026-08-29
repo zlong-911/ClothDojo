@@ -85,10 +85,10 @@ def _build_newton_runtime(plan: SessionPlan):
             f"expected cuda:{plan.gpu_id}, got {device}"
         )
     from clothdojo.sim.runtime import ShirtFlattenRuntime
-    from clothdojo.sim.scene import ShirtFlattenSpec, build_shirt_flatten
+    from clothdojo.sim.scene import ShirtFlattenSpec, build_scene
 
     with wp.ScopedDevice(device):
-        scene = build_shirt_flatten(
+        scene = build_scene(
             plan.assets_root,
             spec=ShirtFlattenSpec(garment_id=plan.asset_id, world_count=1),
             device=device,

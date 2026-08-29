@@ -221,7 +221,7 @@ class TeleopRecorder:
             max_actions=self.plan.max_actions,
             scene=SceneMetadata(
                 task_name=self.plan.scene,
-                robot_name="piper",
+                robot_id="piper",
                 asset_fingerprints={
                     "garment_usdc": _sha256(self.plan.asset_path),
                     "piper_entry_usda": _sha256(robot),

@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from clothdojo.sim.runtime import ShirtFlattenRuntime
-from clothdojo.sim.scene import ShirtFlattenSpec, build_shirt_flatten
+from clothdojo.sim.scene import ShirtFlattenSpec, build_scene
 
 
 def run_shirt_flatten_check(
@@ -21,7 +21,7 @@ def run_shirt_flatten_check(
     try:
         import warp as wp
 
-        scene = build_shirt_flatten(
+        scene = build_scene(
             assets_root,
             spec=ShirtFlattenSpec(world_count=world_count),
             device=device,

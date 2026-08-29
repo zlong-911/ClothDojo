@@ -25,7 +25,7 @@ from clothdojo.assets.materials import (
     prepare_polyhaven_assets,
     require_polyhaven_assets,
 )
-from clothdojo.rendering import DATASET_CAMERAS
+from clothdojo.robots import RobotProfile
 
 ROBODOJO_REVISION = "c037c1b3183a030724e694d69a08cb62369ed285"
 _ISAAC_MAJOR_MINOR = (5, 0)
@@ -37,31 +37,6 @@ VISUAL_COMPONENTS: tuple[VisualComponent, ...] = (
     "ground",
     "lighting",
 )
-_PIPER_BODY_LABELS = (
-    "/piper_dual/Geometry/world_base",
-    *(
-        f"/piper_dual/Geometry/world_base/{side}/base_link{suffix}"
-        for side in ("left", "right")
-        for suffix in (
-            "",
-            "/link1",
-            "/link1/link2",
-            "/link1/link2/link3",
-            "/link1/link2/link3/link4",
-            "/link1/link2/link3/link4/link5",
-            "/link1/link2/link3/link4/link5/link6",
-            "/link1/link2/link3/link4/link5/link6/camera",
-            "/link1/link2/link3/link4/link5/link6/link7",
-            "/link1/link2/link3/link4/link5/link6/link8",
-        )
-    ),
-)
-_PIPER_BODY_PARENTS = (
-    -1,
-    0, 1, 2, 3, 4, 5, 6, 7, 7, 7,
-    0, 11, 12, 13, 14, 15, 16, 17, 17, 17,
-)
-
 _ROOMS = tuple(
     f"Simple_Room_{color}"
     for color in (
@@ -361,7 +336,7 @@ def export_isaac_rollout_collection(
     portable.mkdir(parents=True, exist_ok=True)
     app = _start_isaac_app(gpu_id, portable)
 
-    def camera_factory(asset_id: str, initial_state):
+    def camera_factory(asset_id: str, initial_state, profile):
         return IsaacRandomizedCamera(
             app,
             initial_state,
@@ -379,6 +354,7 @@ def export_isaac_rollout_collection(
             include_room=include_room,
             randomize=randomize,
             layouts=rendering["layouts"],
+            robot_profile=profile,
         )
 
     try:
@@ -416,17 +392,19 @@ class IsaacRandomizedCamera:
         include_room: bool,
         randomize: tuple[VisualComponent, ...],
         layouts: list[dict[str, Any]],
+        robot_profile: RobotProfile,
     ) -> None:
         import omni.usd
         import warp as wp
 
         body_q = np.asarray(initial_state.body_q, dtype=np.float32)
         particle_q = np.asarray(initial_state.particle_q, dtype=np.float32)
-        if body_q.shape != (len(_PIPER_BODY_LABELS), 7):
+        if body_q.shape != (len(robot_profile.body_names), 7):
             raise ValueError(
-                "Isaac randomized export requires Piper body_q shape "
-                f"{(len(_PIPER_BODY_LABELS), 7)}, got {body_q.shape}"
+                f"Isaac randomized export requires {robot_profile.robot_id} body_q shape "
+                f"{(len(robot_profile.body_names), 7)}, got {body_q.shape}"
             )
+        _validate_robot_installations(body_q, robot_profile)
         if particle_q.ndim != 2 or particle_q.shape[1] != 3:
             raise ValueError(
                 "Isaac randomized export requires particle_q shape (particles, 3), "
@@ -438,6 +416,7 @@ class IsaacRandomizedCamera:
         self._randomize = randomize
         self._visual_assets_root = visual_assets_root
         self._layouts = layouts
+        self._cameras = robot_profile.cameras
         self._closed = False
         self._episode_warmup = False
         self._temporary = tempfile.TemporaryDirectory(prefix="clothdojo-isaac-export-")
@@ -452,6 +431,7 @@ class IsaacRandomizedCamera:
             particle_q,
             plan,
             cloth_visual="normal",
+            robot_profile=robot_profile,
         )
         context = omni.usd.get_context()
         if not context.open_stage(str(stage_path)):
@@ -468,11 +448,12 @@ class IsaacRandomizedCamera:
 
         self._rep = rep
         self._model = SimpleNamespace(
-            body_label=_PIPER_BODY_LABELS,
-            body_count=len(_PIPER_BODY_LABELS),
+            body_label=robot_profile.body_names,
+            body_count=len(robot_profile.body_names),
             particle_count=int(particle_q.shape[0]),
-            joint_child=_ArrayMetadata(np.arange(len(_PIPER_BODY_LABELS))),
-            joint_parent=_ArrayMetadata(np.asarray(_PIPER_BODY_PARENTS)),
+            joint_child=_ArrayMetadata(np.arange(len(robot_profile.body_names))),
+            joint_parent=_ArrayMetadata(np.asarray(robot_profile.body_parents)),
+            body_parent_world_q=_body_parent_world_poses(robot_profile),
         )
         self._state = SimpleNamespace(
             body_q=wp.array(body_q, dtype=wp.transformf, device=device),
@@ -481,7 +462,11 @@ class IsaacRandomizedCamera:
         self._usd_context = context
         self._device = device
         self._bridge = None
-        self._camera_paths = _author_cameras(self._stage, self._model.body_label)
+        self._camera_paths = _author_cameras(
+            self._stage,
+            self._model.body_label,
+            self._cameras,
+        )
         rep.settings.set_render_rtx_realtime(antialiasing="DLAA")
         self._render_product = rep.create.render_product_tiled(
             cameras=list(self._camera_paths),
@@ -495,6 +480,7 @@ class IsaacRandomizedCamera:
         self._annotator.attach(self._render_product)
         for _ in range(4):
             app.update()
+
     def begin_episode(self, episode_index: int, *, source_episode_id: str | None) -> None:
         layout = sample_visual_layout(
             self._base_seed,
@@ -532,7 +518,7 @@ class IsaacRandomizedCamera:
         images = self._capture()
         return {
             f"observation.images.{camera.name}": image[None, ...]
-            for camera, image in zip(DATASET_CAMERAS, images, strict=True)
+            for camera, image in zip(self._cameras, images, strict=True)
         }
 
     def _capture(self) -> list[np.ndarray]:
@@ -584,10 +570,75 @@ class _ArrayMetadata:
         return self._values
 
 
-def _author_cameras(stage, body_labels) -> tuple[str, ...]:
+def _validate_robot_installations(
+    body_q: np.ndarray, profile: RobotProfile
+) -> None:
+    """Fail before rendering if Newton roots disagree with the robot profile."""
+
+    roots = np.flatnonzero(np.asarray(profile.body_parents) == -1)
+    expected_positions = np.asarray(
+        [frame.position for frame in profile.root_body_frames], dtype=np.float32
+    )
+    expected_rotations = np.asarray(
+        [frame.rotation_xyzw for frame in profile.root_body_frames], dtype=np.float32
+    )
+    actual = np.asarray(body_q, dtype=np.float32)[roots]
+    position_error = np.linalg.norm(actual[:, :3] - expected_positions, axis=1)
+    actual_rotation = actual[:, 3:7]
+    actual_norms = np.linalg.norm(actual_rotation, axis=1, keepdims=True)
+    expected_norms = np.linalg.norm(expected_rotations, axis=1, keepdims=True)
+    if (
+        not np.isfinite(actual).all()
+        or np.any(actual_norms <= 1.0e-8)
+        or np.any(expected_norms <= 1.0e-8)
+    ):
+        raise RuntimeError(
+            f"Newton {profile.robot_id} root body poses disagree with its "
+            "installation frames"
+        )
+    actual_rotation /= actual_norms
+    expected_rotations /= expected_norms
+    rotation_alignment = np.abs(np.sum(actual_rotation * expected_rotations, axis=1))
+    if (
+        np.any(position_error > 1.0e-5)
+        or np.any(rotation_alignment < 1.0 - 1.0e-6)
+    ):
+        raise RuntimeError(
+            f"Newton {profile.robot_id} root body poses disagree with its "
+            "installation frames"
+        )
+
+
+def _body_parent_world_poses(profile: RobotProfile) -> np.ndarray:
+    poses = np.zeros((len(profile.body_names), 7), dtype=np.float32)
+    poses[:, 6] = 1.0
+    roots = np.flatnonzero(np.asarray(profile.body_parents) == -1)
+    frames = (
+        (profile.asset_frame,) * len(roots)
+        if profile.robot_id == "aloha2"
+        else profile.installations
+    )
+    for root, frame in zip(roots, frames, strict=True):
+        poses[root, :3] = frame.position
+        poses[root, 3:7] = frame.rotation_xyzw
+    return poses
+
+
+def _author_cameras(stage, body_labels, cameras) -> tuple[str, ...]:
     from pxr import Gf, UsdGeom
 
     from clothdojo.teleop.isaac_fabric import _find_render_body_paths
+
+    requested_names = tuple(view.name for view in cameras)
+    embedded = {
+        prim.GetName(): str(prim.GetPath())
+        for prim in stage.Traverse()
+        if prim.IsA(UsdGeom.Camera) and prim.GetName() in requested_names
+    }
+    if embedded:
+        if set(embedded) != set(requested_names):
+            raise RuntimeError("robot USD contains only part of the requested camera set")
+        return tuple(embedded[name] for name in requested_names)
 
     body_paths = _find_render_body_paths(stage, body_labels)
     label_to_path = {
@@ -595,7 +646,7 @@ def _author_cameras(stage, body_labels) -> tuple[str, ...]:
         for index, path in body_paths.items()
     }
     paths = []
-    for view in DATASET_CAMERAS:
+    for view in cameras:
         parent = "/World/Cameras"
         if view.parent_body is not None:
             candidates = [

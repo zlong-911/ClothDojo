@@ -7,8 +7,7 @@ import math
 import numpy as np
 import warp as wp
 
-from clothdojo.rendering import CAMERA_MATRICES as _CAMERA_MATRICES
-from clothdojo.rendering import CAMERA_NAMES, DATASET_CAMERA_NAMES, DATASET_CAMERAS
+from clothdojo.rendering import CAMERA_NAMES, DATASET_CAMERA_NAMES
 
 
 @wp.kernel
@@ -16,12 +15,13 @@ def _accumulate_vertex_normals(
     points: wp.array(dtype=wp.vec3f),
     indices: wp.array(dtype=int),
     normals: wp.array(dtype=wp.vec3f),
+    winding_sign: float,
 ):
     triangle = wp.tid()
     i0 = indices[triangle * 3]
     i1 = indices[triangle * 3 + 1]
     i2 = indices[triangle * 3 + 2]
-    face_normal = wp.cross(points[i1] - points[i0], points[i2] - points[i0])
+    face_normal = winding_sign * wp.cross(points[i1] - points[i0], points[i2] - points[i0])
     wp.atomic_add(normals, i0, face_normal)
     wp.atomic_add(normals, i1, face_normal)
     wp.atomic_add(normals, i2, face_normal)
@@ -85,13 +85,14 @@ def _write_mesh_shape_bounds(
 @wp.kernel
 def _update_wrist_cameras(
     body_q: wp.array(dtype=wp.transformf),
+    camera_indices: wp.array(dtype=int),
     body_indices: wp.array(dtype=int),
     local_transforms: wp.array(dtype=wp.transformf),
     bodies_per_world: int,
     transforms: wp.array2d(dtype=wp.transformf),
 ):
     wrist, world = wp.tid()
-    transforms[wrist + 1, world] = wp.transform_multiply(
+    transforms[camera_indices[wrist], world] = wp.transform_multiply(
         body_q[world * bodies_per_world + body_indices[wrist]],
         local_transforms[wrist],
     )
@@ -116,6 +117,7 @@ class ShirtFlattenCameraObservation:
         if width < 1 or height < 1 or width * 3 != height * 4:
             raise ValueError("shirt-flattening cameras require a positive 4:3 resolution")
         self.model = scene.model
+        self.robot_profile = scene.robot_profile
         self.width = int(width)
         self.height = int(height)
         self.camera_names = tuple(camera_names)
@@ -135,12 +137,16 @@ class ShirtFlattenCameraObservation:
         self._sensor.utils.create_default_light(enable_shadows=True)
         self._smooth_cloth = _SmoothClothVisual(self._sensor, scene)
 
-        all_fovs = tuple(
+        cameras_by_name = {camera.name: camera for camera in self.robot_profile.cameras}
+        if set(self.camera_names) - cameras_by_name.keys():
+            raise ValueError(
+                f"robot {self.robot_profile.robot_id} does not define all cameras"
+            )
+        cameras = tuple(cameras_by_name[name] for name in self.camera_names)
+        fovs = tuple(
             _vertical_fov(camera.focal_length, camera.horizontal_aperture)
-            for camera in DATASET_CAMERAS
+            for camera in cameras
         )
-        camera_indices = tuple(DATASET_CAMERA_NAMES.index(name) for name in self.camera_names)
-        fovs = tuple(all_fovs[index] for index in camera_indices)
         self._rays = self._sensor.utils.compute_camera_rays_pinhole(
             self.width,
             self.height,
@@ -149,56 +155,75 @@ class ShirtFlattenCameraObservation:
         world_offsets = np.asarray(scene.world_offsets, dtype=np.float32)
         if world_offsets.shape != (self.world_count, 3):
             raise RuntimeError("camera world offsets do not match the Newton world count")
-        local = tuple(_matrix_to_transform(matrix) for matrix in _CAMERA_MATRICES)
-        high_transforms = tuple(
-            _matrix_to_transform(_translated_matrix(_CAMERA_MATRICES[0], offset))
-            for offset in world_offsets
+        local = tuple(
+            _matrix_to_transform(camera.parent_from_camera) for camera in cameras
         )
         if self.camera_names in (CAMERA_NAMES, DATASET_CAMERA_NAMES):
+            wrist_camera_indices = tuple(
+                index for index, camera in enumerate(cameras) if camera.parent_body
+            )
             camera_transforms = [
-                high_transforms,
-                [local[1]] * self.world_count,
-                [local[2]] * self.world_count,
-            ]
-            if self.camera_names == DATASET_CAMERA_NAMES:
-                camera_transforms.append(
-                    tuple(
+                (
+                    [local[index]] * self.world_count
+                    if camera.parent_body
+                    else tuple(
                         _matrix_to_transform(
-                            _translated_matrix(_CAMERA_MATRICES[3], offset)
+                            _translated_matrix(camera.parent_from_camera, offset)
                         )
                         for offset in world_offsets
                     )
                 )
+                for index, camera in enumerate(cameras)
+            ]
             self._transforms = wp.array(
                 camera_transforms,
                 dtype=wp.transformf,
                 device=self.model.device,
             )
             self._wrist_local = wp.array(
-                local[1:3], dtype=wp.transformf, device=self.model.device
+                [local[index] for index in wrist_camera_indices],
+                dtype=wp.transformf,
+                device=self.model.device,
+            )
+            self._wrist_camera_indices = wp.array(
+                wrist_camera_indices, dtype=int, device=self.model.device
             )
             if int(self.model.body_count) % self.world_count:
                 raise RuntimeError("render body count is not homogeneous across worlds")
             self._bodies_per_world = int(self.model.body_count) // self.world_count
             self._wrist_bodies = wp.array(
                 [
-                    _body_index(self.model, "left", "camera", self._bodies_per_world),
-                    _body_index(self.model, "right", "camera", self._bodies_per_world),
+                    _body_index(
+                        self.model, cameras[index].parent_body, self._bodies_per_world
+                    )
+                    for index in wrist_camera_indices
                 ],
                 dtype=int,
                 device=self.model.device,
             )
         else:
+            high_transforms = tuple(
+                _matrix_to_transform(
+                    _translated_matrix(cameras[0].parent_from_camera, offset)
+                )
+                for offset in world_offsets
+            )
             self._transforms = wp.array(
                 [high_transforms], dtype=wp.transformf, device=self.model.device
             )
             self._wrist_local = None
+            self._wrist_camera_indices = None
             self._wrist_bodies = None
             self._bodies_per_world = 0
         self._color = self._sensor.utils.create_color_image_output(
             self.width, self.height, len(self.camera_names)
         )
         self._rgba = self._sensor.utils.to_rgba_from_color(self._color)
+
+    def set_cloth_surface_winding_reversed(self, reversed_: bool) -> None:
+        """Select the logical front face for the next recorded state."""
+
+        self._smooth_cloth.set_surface_winding_reversed(reversed_)
 
     def __call__(self, runtime) -> dict[str, np.ndarray]:
         if runtime.scene.model is not self.model:
@@ -210,6 +235,7 @@ class ShirtFlattenCameraObservation:
                 dim=(2, self.world_count),
                 inputs=[
                     runtime.state_0.body_q,
+                    self._wrist_camera_indices,
                     self._wrist_bodies,
                     self._wrist_local,
                     self._bodies_per_world,
@@ -289,6 +315,7 @@ class _SmoothClothVisual:
             dtype=wp.vec3f,
             device=scene.model.device,
         )
+        self._winding_sign = 1.0
         self._particle_ranges = []
         if scene.model.bvh_shape_bounds is None:
             raise RuntimeError("Newton render model has no shape BVH bounds")
@@ -336,6 +363,11 @@ class _SmoothClothVisual:
                 (int(particle_indices[0]), int(particle_indices[-1]) + 1)
             )
 
+    def set_surface_winding_reversed(self, reversed_: bool) -> None:
+        if not isinstance(reversed_, bool):
+            raise TypeError("surface winding flag must be bool")
+        self._winding_sign = -1.0 if reversed_ else 1.0
+
     def sync(self, runtime) -> None:
         particle_q = runtime.state_0.particle_q
         if self._particle_normals.shape[0] != particle_q.shape[0]:
@@ -346,7 +378,12 @@ class _SmoothClothVisual:
         wp.launch(
             _accumulate_vertex_normals,
             dim=self._all_source_indices.shape[0] // 3,
-            inputs=[particle_q, self._all_source_indices, self._particle_normals],
+            inputs=[
+                particle_q,
+                self._all_source_indices,
+                self._particle_normals,
+                self._winding_sign,
+            ],
             device=self._model.device,
         )
         wp.launch(
@@ -436,12 +473,25 @@ def _translated_matrix(matrix, offset):
     return values
 
 
-def _body_index(model, side: str, link: str, bodies_per_world: int) -> int:
+def _body_index(model, semantic_name: str | None, bodies_per_world: int) -> int:
+    if semantic_name is None:
+        raise ValueError("wrist camera must define a parent body")
     matches = [
         index
         for index, label in enumerate(model.body_label[:bodies_per_world])
-        if f"/{side}/" in str(label) and str(label).endswith(f"/{link}")
+        if _matches_semantic_body(str(label), semantic_name)
     ]
     if len(matches) != 1:
-        raise ValueError(f"expected one render body named {side}/{link}, found {len(matches)}")
+        raise ValueError(
+            f"expected one render body named {semantic_name}, found {len(matches)}"
+        )
     return matches[0]
+
+
+def _matches_semantic_body(label: str, semantic_name: str) -> bool:
+    label_parts = label.strip("/").split("/")
+    semantic_parts = semantic_name.strip("/").split("/")
+    if not label_parts or not semantic_parts or label_parts[-1] != semantic_parts[-1]:
+        return False
+    positions = iter(label_parts[:-1])
+    return all(part in positions for part in semantic_parts[:-1])

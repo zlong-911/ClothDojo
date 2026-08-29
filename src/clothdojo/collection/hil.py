@@ -191,7 +191,7 @@ class HILCatalog:
             reader = TrajectoryReader(trajectory)
             current_runtime = {
                 "task_name": reader.manifest.scene.task_name,
-                "robot_name": reader.manifest.scene.robot_name,
+                "robot_id": reader.manifest.scene.robot_id,
                 "control_fps": reader.manifest.control_fps,
                 "sim_substeps": reader.manifest.sim_substeps,
                 "asset_fingerprints": reader.manifest.scene.asset_fingerprints,

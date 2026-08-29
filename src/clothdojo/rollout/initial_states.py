@@ -647,7 +647,7 @@ def generate_initial_states(
     from clothdojo.assets import GarmentLibrary
     from clothdojo.sim.grasp import StaticParticlePatch
     from clothdojo.sim.runtime import ShirtFlattenRuntime
-    from clothdojo.sim.scene import ShirtFlattenSpec, build_shirt_flatten
+    from clothdojo.sim.scene import ShirtFlattenSpec, build_scene
 
     if min(state_count, candidate_batch, max_candidates) < 1:
         raise ValueError("state_count, candidate_batch and max_candidates must be positive")
@@ -661,7 +661,7 @@ def generate_initial_states(
     assets = Path(assets_root).expanduser().resolve()
     garment = GarmentLibrary(assets).converted(garment_id)
     spec = ShirtFlattenSpec(garment_id=garment_id, world_count=candidate_batch)
-    scene = build_shirt_flatten(assets, spec=spec, device=device)
+    scene = build_scene(assets, spec=spec, device=device)
     runtime = ShirtFlattenRuntime(scene)
     ranges = runtime.grasp.particle_ranges()
     particle_counts = {end - start for start, end in ranges}

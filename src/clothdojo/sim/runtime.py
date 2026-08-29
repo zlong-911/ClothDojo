@@ -17,23 +17,35 @@ def _write_arm_targets(
     action: wp.array2d(dtype=float),
     lower: wp.array3d(dtype=float),
     upper: wp.array3d(dtype=float),
+    joints_per_articulation: int,
     target: wp.array3d(dtype=float),
 ):
     world, joint = wp.tid()
-    target[world, 0, joint] = wp.clamp(
-        action[world, joint], lower[world, 0, joint], upper[world, 0, joint]
+    articulation = joint // joints_per_articulation
+    articulation_joint = joint % joints_per_articulation
+    target[world, articulation, articulation_joint] = wp.clamp(
+        action[world, joint],
+        lower[world, articulation, articulation_joint],
+        upper[world, articulation, articulation_joint],
     )
 
 
 @wp.kernel
 def _write_gripper_targets(
     openness: wp.array2d(dtype=float),
+    closed_positions: wp.array(dtype=float),
     open_positions: wp.array(dtype=float),
+    joints_per_articulation: int,
     target: wp.array3d(dtype=float),
 ):
     world, joint = wp.tid()
     side = joint // 2
-    target[world, 0, joint] = wp.clamp(openness[world, side], 0.0, 1.0) * open_positions[joint]
+    articulation = joint // joints_per_articulation
+    articulation_joint = joint % joints_per_articulation
+    amount = wp.clamp(openness[world, side], 0.0, 1.0)
+    target[world, articulation, articulation_joint] = closed_positions[joint] + amount * (
+        open_positions[joint] - closed_positions[joint]
+    )
 
 
 @wp.func
@@ -102,14 +114,10 @@ def _prune_static_soft_contact_pairs(model, collision_pipeline) -> None:
     )
     expected_capacity = len(pairs) + full_surface_count
     if collision_pipeline.soft_contact_max != expected_capacity:
-        raise RuntimeError(
-            "static soft-contact pruning requires Newton 1.5's default capacity"
-        )
+        raise RuntimeError("static soft-contact pruning requires Newton 1.5's default capacity")
     host_pairs = np.asarray(pairs.numpy(), dtype=np.int32)
     shape_flags = np.asarray(model.shape_flags.numpy())
-    keep = (
-        shape_flags[host_pairs[:, 1]] & int(newton.ShapeFlags.COLLIDE_PARTICLES)
-    ) != 0
+    keep = (shape_flags[host_pairs[:, 1]] & int(newton.ShapeFlags.COLLIDE_PARTICLES)) != 0
     if bool(keep.all()):
         return
     filtered = np.ascontiguousarray(host_pairs[keep])
@@ -125,11 +133,19 @@ def _prune_static_soft_contact_pairs(model, collision_pipeline) -> None:
 class ShirtFlattenRuntime:
     """Own state, controls, contacts and the one intentional two-solver step."""
 
-    def __init__(self, scene: ShirtFlattenScene, *, use_cuda_graph: bool = True):
+    def __init__(
+        self,
+        scene: ShirtFlattenScene,
+        *,
+        use_cuda_graph: bool = True,
+        rigid_deterministic: bool = False,
+    ):
         import newton
 
         if not isinstance(use_cuda_graph, bool):
             raise TypeError("use_cuda_graph must be a bool")
+        if not isinstance(rigid_deterministic, bool):
+            raise TypeError("rigid_deterministic must be a bool")
         self.scene = scene
         self.model = scene.model
         self.spec = scene.spec
@@ -174,9 +190,14 @@ class ShirtFlattenRuntime:
             # remains enabled because cold trajectory restore also updates the
             # robot coordinates owned by Newton state.
             disable_sensors=True,
-            # Style3D is not bitwise repeatable, so do not impose a stronger
-            # mode on the rigid solver or its unused MuJoCo Warp sensor module.
-            deterministic=wp.DeterministicMode.NOT_GUARANTEED,
+            # Full cloth stepping does not promise bitwise repeatability. The
+            # rigid-only retarget path opts into MuJoCo-Warp's deterministic
+            # kernels so repeated action replays have a meaningful hard gate.
+            deterministic=(
+                wp.DeterministicMode.RUN_TO_RUN
+                if rigid_deterministic
+                else wp.DeterministicMode.NOT_GUARANTEED
+            ),
         )
         if (
             self.rigid.mjw_model is not None
@@ -216,20 +237,28 @@ class ShirtFlattenRuntime:
         self._arm_lower = scene.arms.get_attribute("joint_limit_lower", self.model)
         self._arm_upper = scene.arms.get_attribute("joint_limit_upper", self.model)
         self._arm_targets = wp.empty_like(self._arm_lower)
-        self._gripper_targets = wp.empty(
-            (self.model.world_count, 1, 4),
+        self._arm_action_count = len(scene.robot_profile.arm_coord_indices)
+        if int(np.prod(self._arm_targets.shape[1:])) != self._arm_action_count:
+            raise RuntimeError("bimanual arm view differs from its robot profile")
+        self._arm_joints_per_articulation = int(self._arm_targets.shape[2])
+        self._gripper_targets = wp.empty_like(scene.grippers.get_attribute("joint_q", self.state_0))
+        if int(np.prod(self._gripper_targets.shape[1:])) != 4:
+            raise RuntimeError("bimanual gripper view must contain four coordinates")
+        self._gripper_joints_per_articulation = int(self._gripper_targets.shape[2])
+        self._gripper_closed_positions = wp.array(
+            scene.robot_profile.gripper_closed_positions * 2,
             dtype=wp.float32,
             device=self.model.device,
         )
         self._gripper_open_positions = wp.array(
-            (0.04, -0.04, 0.04, -0.04),
+            scene.robot_profile.gripper_open_positions * 2,
             dtype=wp.float32,
             device=self.model.device,
         )
         self.grasp = ParticleGrasp(scene)
         self.reset()
         self._graph_arm_target = wp.empty(
-            (self.model.world_count, 12),
+            (self.model.world_count, self._arm_action_count),
             dtype=wp.float32,
             device=self.model.device,
         )
@@ -250,14 +279,20 @@ class ShirtFlattenRuntime:
         return self._step_graph is not None
 
     def apply_action(self, arm_target, gripper_open) -> None:
-        """Apply batched device actions shaped ``(worlds, 12)`` and ``(worlds, 2)``."""
+        """Apply one profile-sized arm action and two gripper commands per world."""
 
-        self._validate_action("arm_target", arm_target, (self.model.world_count, 12))
+        arm_shape = (self.model.world_count, self._arm_action_count)
+        self._validate_action("arm_target", arm_target, arm_shape)
         self._validate_action("gripper_open", gripper_open, (self.model.world_count, 2))
         wp.launch(
             _write_arm_targets,
-            dim=(self.model.world_count, 12),
-            inputs=[arm_target, self._arm_lower, self._arm_upper],
+            dim=arm_shape,
+            inputs=[
+                arm_target,
+                self._arm_lower,
+                self._arm_upper,
+                self._arm_joints_per_articulation,
+            ],
             outputs=[self._arm_targets],
             device=self.model.device,
         )
@@ -265,14 +300,141 @@ class ShirtFlattenRuntime:
         wp.launch(
             _write_gripper_targets,
             dim=(self.model.world_count, 4),
-            inputs=[gripper_open, self._gripper_open_positions],
+            inputs=[
+                gripper_open,
+                self._gripper_closed_positions,
+                self._gripper_open_positions,
+                self._gripper_joints_per_articulation,
+            ],
             outputs=[self._gripper_targets],
             device=self.model.device,
         )
         self.scene.grippers.set_attribute("joint_target_q", self.control, self._gripper_targets)
 
+    def step_rigid(self, arm_target, gripper_open) -> None:
+        """Advance only target-robot rigid dynamics for one control interval."""
+
+        self._validate_action(
+            "arm_target", arm_target, (self.model.world_count, self._arm_action_count)
+        )
+        self._validate_action("gripper_open", gripper_open, (self.model.world_count, 2))
+        self.apply_action(arm_target, gripper_open)
+        sub_dt = self.control_dt / float(self.spec.sim_substeps)
+        for _ in range(self.spec.sim_substeps):
+            self._step_rigid(sub_dt)
+            self.state_0, self.state_1 = self.state_1, self.state_0
+
+    def restore_rigid_state(self, joint_q: np.ndarray, joint_qd: np.ndarray) -> None:
+        """Cold-restore one rigid boundary for disposable action shooting."""
+
+        if self.model.world_count != 1:
+            raise ValueError("rigid trajectory restore requires one world")
+        self.restore_rigid_state_batch(
+            np.asarray(joint_q, dtype=np.float32)[None],
+            np.asarray(joint_qd, dtype=np.float32)[None],
+        )
+
+    def restore_rigid_state_batch(self, joint_q: np.ndarray, joint_qd: np.ndarray) -> None:
+        """Cold-restore one rigid boundary per world for batched shooting."""
+
+        import newton
+
+        world_count = int(self.model.world_count)
+        coord_count = int(self.model.joint_coord_count) // world_count
+        dof_count = int(self.model.joint_dof_count) // world_count
+        arrays = {
+            "joint_q": np.asarray(joint_q, dtype=np.float32),
+            "joint_qd": np.asarray(joint_qd, dtype=np.float32),
+        }
+        expected = {
+            "joint_q": (world_count, coord_count),
+            "joint_qd": (world_count, dof_count),
+        }
+        for name, value in arrays.items():
+            if value.shape != expected[name] or not np.isfinite(value).all():
+                raise ValueError(
+                    f"{name} must be finite with shape {expected[name]}, got {value.shape}"
+                )
+        for state in (self.state_0, self.state_1):
+            state.joint_q.assign(arrays["joint_q"].reshape(-1))
+            state.joint_qd.assign(arrays["joint_qd"].reshape(-1))
+            state.clear_forces()
+            newton.eval_fk(self.model, state.joint_q, state.joint_qd, state)
+        # Episode trajectories do not store MuJoCo warm-start buffers. Every
+        # shooting branch therefore starts from the same canonical cold state.
+        self.rigid.reset(self.state_0, flags=0)
+
+    def rigid_state(self) -> dict[str, np.ndarray]:
+        """Copy the current one-world articulated state in canonical layout."""
+
+        if self.model.world_count != 1:
+            raise ValueError("canonical rigid state capture requires one world")
+        return {name: value[0] for name, value in self.rigid_state_batch().items()}
+
+    def rigid_state_batch(self) -> dict[str, np.ndarray]:
+        """Copy articulated state grouped by physics world."""
+
+        world_count = int(self.model.world_count)
+        counts = {
+            "joint_q": int(self.model.joint_coord_count) // world_count,
+            "joint_qd": int(self.model.joint_dof_count) // world_count,
+            "body_q": int(self.model.body_count) // world_count,
+            "body_qd": int(self.model.body_count) // world_count,
+        }
+        result = {}
+        for name, count in counts.items():
+            value = np.asarray(getattr(self.state_0, name).numpy(), dtype=np.float32)
+            result[name] = value.reshape((world_count, count, *value.shape[1:])).copy()
+        return result
+
+    def inverse_dynamics(self, desired_joint_acceleration: np.ndarray) -> np.ndarray:
+        """Return actuator effort for a desired generalized acceleration.
+
+        Newton 1.5 does not expose inverse dynamics on ``SolverMuJoCo``. This
+        version-pinned adapter uses the same MuJoCo Warp model and coordinate
+        conversion as forward stepping. It supports unactuated mimic joints:
+        their accelerations participate in inverse dynamics, while only
+        actuator-backed coordinates receive an output effort.
+        """
+
+        solver = self.rigid
+        if solver.use_mujoco_cpu or solver.mjw_model is None or solver.mjw_data is None:
+            raise RuntimeError("inverse dynamics requires the MuJoCo Warp solver")
+        mapping = np.asarray(solver.mjc_actuator_to_newton_idx.numpy(), dtype=np.int64)
+        if np.any(mapping < 0):
+            raise RuntimeError("inverse dynamics requires position-controlled actuators")
+        mj_model = solver.mj_model
+        actuator_joint = np.asarray(mj_model.actuator_trnid[:, 0], dtype=np.int64)
+        actuator_dof = np.asarray(mj_model.jnt_dofadr[actuator_joint], dtype=np.int64)
+        dof_map = np.asarray(solver.mjc_dof_to_newton_dof.numpy(), dtype=np.int64)
+        world_count = int(solver.mjw_data.nworld)
+        dofs_per_world = int(self.model.joint_dof_count) // world_count
+        local_dof_map = dof_map % dofs_per_world
+        if np.any(dof_map < 0) or not np.array_equal(
+            mapping % dofs_per_world, local_dof_map[0, actuator_dof]
+        ):
+            raise RuntimeError("Newton and MuJoCo scalar joint layouts differ")
+
+        desired = np.asarray(desired_joint_acceleration, dtype=np.float32)
+        expected = (world_count, dofs_per_world)
+        if desired.shape != expected or not np.isfinite(desired).all():
+            raise ValueError(f"desired_joint_acceleration must be finite with shape {expected}")
+        solver._update_mjc_data(solver.mjw_data, self.model, self.state_0)
+        solver.mjw_data.qacc.assign(np.take_along_axis(desired, local_dof_map, axis=1))
+        solver.mjw_model.opt.timestep.fill_(self.control_dt / float(self.spec.sim_substeps))
+        import mujoco_warp
+
+        mujoco_warp.inverse(solver.mjw_model, solver.mjw_data)
+        mj_effort = np.asarray(solver.mjw_data.qfrc_inverse.numpy(), dtype=np.float64)
+        mj_effort += np.asarray(solver.mjw_data.qfrc_constraint.numpy(), dtype=np.float64)
+        effort = np.zeros_like(desired, dtype=np.float64)
+        effort[:, mapping % dofs_per_world] = mj_effort[:, actuator_dof]
+        return effort
+
     def step(self, arm_target, gripper_open) -> None:
-        self._validate_action("arm_target", arm_target, (self.model.world_count, 12))
+        self._validate_action(
+            "arm_target", arm_target, (self.model.world_count, self._arm_action_count)
+        )
         self._validate_action("gripper_open", gripper_open, (self.model.world_count, 2))
         if self._step_graph is not None:
             wp.copy(self._graph_arm_target, arm_target)
@@ -281,10 +443,7 @@ class ShirtFlattenRuntime:
         else:
             self._step_eager(arm_target, gripper_open)
         self._control_steps_since_cloth_bvh_rebuild += 1
-        if (
-            self._control_steps_since_cloth_bvh_rebuild
-            >= _CLOTH_BVH_REBUILD_CONTROL_STEPS
-        ):
+        if self._control_steps_since_cloth_bvh_rebuild >= _CLOTH_BVH_REBUILD_CONTROL_STEPS:
             # Newton 1.5's Style3D collision owns one global BVH for every
             # world. Rebuilding every frame is cheap for B1 but dominates B8;
             # two control steps bounds refit aging while retaining batched

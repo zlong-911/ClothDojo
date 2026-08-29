@@ -20,6 +20,41 @@ def test_export_plan_help_describes_its_lightweight_boundary(capsys) -> None:
     )
 
 
+def test_retarget_cli_forwards_the_compact_public_options(monkeypatch, capsys) -> None:
+    call = {}
+    monkeypatch.setattr(
+        "clothdojo.data.retarget.retarget",
+        lambda *args, **kwargs: call.update(args=args, kwargs=kwargs) or {"ok": True},
+    )
+
+    cli.main(
+        [
+            "data",
+            "retarget",
+            "--source",
+            "source",
+            "--output",
+            "output",
+            "--target-robot",
+            "aloha2",
+            "--assets",
+            "robot-assets",
+            "--device",
+            "cpu",
+        ]
+    )
+
+    assert call == {
+        "args": ("source", "output"),
+        "kwargs": {
+            "assets": "robot-assets",
+            "device": "cpu",
+            "target_robot": "aloha2",
+        },
+    }
+    assert json.loads(capsys.readouterr().out) == {"ok": True}
+
+
 def test_environment_check_prints_report(monkeypatch, capsys) -> None:
     monkeypatch.setattr(
         "clothdojo.diagnostics.inspect_environment",

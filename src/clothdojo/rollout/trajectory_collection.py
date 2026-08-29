@@ -354,7 +354,7 @@ def _run_asset(
     from clothdojo.rollout.newton import NewtonTrajectoryEpisode
     from clothdojo.rollout.render import ShirtFlattenCameraObservation
     from clothdojo.sim.runtime import ShirtFlattenRuntime
-    from clothdojo.sim.scene import ShirtFlattenSpec, build_shirt_flatten
+    from clothdojo.sim.scene import ShirtFlattenSpec, build_scene
 
     pool = InitialStatePool.load(job.pool)
     scenario = replace(load_rollout_scenario(spec.scenario_path), garment_id=job.asset_id)
@@ -369,7 +369,7 @@ def _run_asset(
     if policy.identity != spec.policy_identity:
         raise ValueError("trajectory worker policy identity differs from the collection plan")
     world_count = min(spec.batch_size, job.state_count)
-    scene = build_shirt_flatten(
+    scene = build_scene(
         assets,
         spec=ShirtFlattenSpec(garment_id=job.asset_id, world_count=world_count),
         device=device,

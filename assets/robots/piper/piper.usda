@@ -1,0 +1,621 @@
+#usda 1.0
+(
+    defaultPrim = "piper_dual"
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    subLayers = [
+        @./payloads/collisions.usdc@,
+        @./piper_dual_m.usda@,
+        @./payloads/installation_materials.usda@,
+        @./payloads/installation.usdc@
+    ]
+    upAxis = "Z"
+)
+
+over "piper_dual"
+{
+    custom float clothdojo:contactMargin = 0.0004
+    custom rel clothdojo:physicsMaterial = </piper_dual/Materials/RobotPhysics>
+    float3[] extentsHint = [(-0.07236801, -0.38289264, 0.8), (0.45379937, 0.38277414, 1.6602)]
+    delete rel isaac:physics:robotJoints = [
+        </piper_dual/Physics/left/clamp_mount>,
+        </piper_dual/Physics/right/clamp_mount>,
+    ]
+    delete rel isaac:physics:robotLinks = [
+        </piper_dual/Geometry/world_base/left/clamp>,
+        </piper_dual/Geometry/world_base/right/clamp>,
+    ]
+
+    over "Materials"
+    {
+        def Material "C2254Structure" (
+            prepend references = @./payloads/materials.usda@</Materials/tn__Material004_qGMWqm9Vhb4>
+        )
+        {
+        }
+
+        def Material "C2254Camera"
+        {
+            color3f inputs:diffuseColor = (0.08, 0.09, 0.1)
+            float inputs:metallic = 0
+            float inputs:opacity = 1
+            float inputs:roughness = 0.32
+            token outputs:surface.connect = </piper_dual/Materials/C2254Camera/PreviewSurface.outputs:surface>
+
+            def Shader "PreviewSurface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </piper_dual/Materials/C2254Camera.inputs:diffuseColor>
+                float inputs:metallic.connect = </piper_dual/Materials/C2254Camera.inputs:metallic>
+                float inputs:opacity.connect = </piper_dual/Materials/C2254Camera.inputs:opacity>
+                float inputs:roughness.connect = </piper_dual/Materials/C2254Camera.inputs:roughness>
+                token outputs:surface
+            }
+        }
+
+        def Material "C2254CameraHousing" (
+            prepend references = @./payloads/materials.usda@</Materials/tn__Material__1_023_kMUhnnCnqn5>
+        )
+        {
+        }
+
+        def Material "RobotPhysics" (
+            prepend apiSchemas = ["NewtonMaterialAPI"]
+        )
+        {
+            float newton:contactDamping = 200
+            float newton:contactFrictionGain = 0
+            float newton:contactStiffness = 10000
+            float physics:dynamicFriction = 0.6
+            float physics:restitution = 0
+            float physics:staticFriction = 0.6
+        }
+    }
+
+    over "Geometry" (
+        prepend apiSchemas = ["MaterialBindingAPI"]
+    )
+    {
+        rel material:binding:physics = </piper_dual/Materials/RobotPhysics>
+
+        over "world_base"
+        {
+            custom float mjc:gravcomp = 1
+
+            over "installation"
+            {
+                over "table_mount" (
+                    prepend apiSchemas = ["MaterialBindingAPI"]
+                )
+                {
+                    rel material:binding = </piper_dual/Materials/C2254Structure>
+                }
+
+                over "camera_column_base" (
+                    prepend apiSchemas = ["MaterialBindingAPI"]
+                )
+                {
+                    rel material:binding = </piper_dual/Materials/C2254Structure>
+                }
+
+                over "camera_column" (
+                    prepend apiSchemas = ["MaterialBindingAPI"]
+                )
+                {
+                    rel material:binding = </piper_dual/Materials/C2254Structure>
+                }
+
+                over "camera_bracket" (
+                    prepend apiSchemas = ["MaterialBindingAPI"]
+                )
+                {
+                    rel material:binding = </piper_dual/Materials/C2254Structure>
+                    double3 xformOp:translate:calibration = (0, 0, 0.10021245)
+                    uniform token[] xformOpOrder = ["xformOp:translate:calibration"]
+                }
+
+                over "center_camera" (
+                    prepend apiSchemas = ["MaterialBindingAPI"]
+                )
+                {
+                    rel material:binding = </piper_dual/Materials/C2254Camera>
+                    float xformOp:rotateY:calibration = 4.353216
+                    double3 xformOp:translate:calibration = (0, 0, 0.10021245)
+                    double3 xformOp:translate:calibrationPivot = (0.25107175, 0.0010712966, 1.3039478)
+                    uniform token[] xformOpOrder = ["xformOp:translate:calibration", "xformOp:translate:calibrationPivot", "xformOp:rotateY:calibration", "!invert!xformOp:translate:calibrationPivot"]
+                }
+
+                def Xform "center_camera_optical_frame"
+                {
+                    matrix4d xformOp:transform = ( (0, -1, 0, 0), (0.8660254037844386, 0, 0.5, 0), (-0.5, 0, 0.8660254037844386, 0), (0.253845, 0.001071, 1.308, 1) )
+                    uniform token[] xformOpOrder = ["xformOp:transform"]
+                }
+            }
+
+            def Scope "cameras"
+            {
+                def Camera "cam_high"
+                {
+                    float2 clippingRange = (0.01, 100)
+                    float focalLength = 10
+                    float horizontalAperture = 14.266
+                    float verticalAperture = 10.6995
+                    matrix4d xformOp:transform = ( (0, -1, 0, 0), (0.8660254037844386, 0, 0.5, 0), (-0.5, 0, 0.8660254037844386, 0), (0.253845, 0.001071, 1.308, 1) )
+                    uniform token[] xformOpOrder = ["xformOp:transform"]
+                }
+
+                def Camera "cam_low"
+                {
+                    float2 clippingRange = (0.01, 100)
+                    float focalLength = 10
+                    float horizontalAperture = 14.266
+                    float verticalAperture = 10.6995
+                    matrix4d xformOp:transform = ( (0, 1, 0, 0), (-0.374606593415912, 0, 0.9271838545667874, 0), (0.9271838545667874, 0, 0.374606593415912, 0), (1.25, 0, 1.35, 1) )
+                    uniform token[] xformOpOrder = ["xformOp:transform"]
+                }
+            }
+
+            over "left"
+            {
+                over "base_link"
+                {
+                    custom float mjc:gravcomp = 1
+
+                    over "link1"
+                    {
+                        custom float mjc:gravcomp = 1
+
+                        over "link2"
+                        {
+                            custom float mjc:gravcomp = 1
+
+                            over "link3"
+                            {
+                                custom float mjc:gravcomp = 1
+
+                                over "link4"
+                                {
+                                    custom float mjc:gravcomp = 1
+
+                                    over "link5"
+                                    {
+                                        custom float mjc:gravcomp = 1
+
+                                        over "link6"
+                                        {
+                                            custom float mjc:gravcomp = 1
+
+                                            def Xform "attach"
+                                            {
+                                                custom string clothdojo:parentBody = "left/link6"
+                                                custom token clothdojo:role = "end_effector_attach"
+                                                double3 xformOp:translate = (0, 0, 0.13503)
+                                                uniform token[] xformOpOrder = ["xformOp:translate"]
+                                            }
+
+                                            over "camera"
+                                            {
+                                                custom float mjc:gravcomp = 1
+
+                                                def Camera "cam_left_wrist"
+                                                {
+                                                    custom string clothdojo:parentBody = "left/camera"
+                                                    float2 clippingRange = (0.01, 100)
+                                                    float focalLength = 13
+                                                    float horizontalAperture = 15.71625
+                                                    float verticalAperture = 11.7871875
+                                                    matrix4d xformOp:transform = ( (0, 1, 0, 0), (1, 0, 0, 0), (0, 0, -1, 0), (0, 0, 0.0109, 1) )
+                                                    uniform token[] xformOpOrder = ["xformOp:transform"]
+                                                }
+                                            }
+
+                                            over "link7"
+                                            {
+                                                custom float mjc:gravcomp = 1
+                                            }
+
+                                            over "link8"
+                                            {
+                                                custom float mjc:gravcomp = 1
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                over "clamp" (
+                    active = false
+                )
+                {
+                }
+            }
+
+            over "right"
+            {
+                over "base_link"
+                {
+                    custom float mjc:gravcomp = 1
+
+                    over "link1"
+                    {
+                        custom float mjc:gravcomp = 1
+
+                        over "link2"
+                        {
+                            custom float mjc:gravcomp = 1
+
+                            over "link3"
+                            {
+                                custom float mjc:gravcomp = 1
+
+                                over "link4"
+                                {
+                                    custom float mjc:gravcomp = 1
+
+                                    over "link5"
+                                    {
+                                        custom float mjc:gravcomp = 1
+
+                                        over "link6"
+                                        {
+                                            custom float mjc:gravcomp = 1
+
+                                            def Xform "attach"
+                                            {
+                                                custom string clothdojo:parentBody = "right/link6"
+                                                custom token clothdojo:role = "end_effector_attach"
+                                                double3 xformOp:translate = (0, 0, 0.13503)
+                                                uniform token[] xformOpOrder = ["xformOp:translate"]
+                                            }
+
+                                            over "camera"
+                                            {
+                                                custom float mjc:gravcomp = 1
+
+                                                def Camera "cam_right_wrist"
+                                                {
+                                                    custom string clothdojo:parentBody = "right/camera"
+                                                    float2 clippingRange = (0.01, 100)
+                                                    float focalLength = 13
+                                                    float horizontalAperture = 15.71625
+                                                    float verticalAperture = 11.7871875
+                                                    matrix4d xformOp:transform = ( (0, 1, 0, 0), (1, 0, 0, 0), (0, 0, -1, 0), (0, 0, 0.0109, 1) )
+                                                    uniform token[] xformOpOrder = ["xformOp:transform"]
+                                                }
+                                            }
+
+                                            over "link7"
+                                            {
+                                                custom float mjc:gravcomp = 1
+                                            }
+
+                                            over "link8"
+                                            {
+                                                custom float mjc:gravcomp = 1
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                over "clamp" (
+                    active = false
+                )
+                {
+                }
+            }
+        }
+    }
+
+    over "Physics"
+    {
+        over "left"
+        {
+            over "clamp_mount" (
+                active = false
+            )
+            {
+            }
+
+            over "joint1"
+            {
+                float drive:angular:physics:damping = 0.09740036783557114
+                float drive:angular:physics:maxForce = 32
+                float drive:angular:physics:stiffness = 0.5411131546420619
+                float drive:angular:physics:targetPosition = 0
+                custom bool mjc:actuatorgravcomp = true
+                custom float newton:armature = 0.1
+                float physics:lowerLimit = -90
+                float physics:upperLimit = 90
+            }
+
+            over "joint2"
+            {
+                float drive:angular:physics:damping = 0.14354024100714363
+                float drive:angular:physics:maxForce = 32
+                float drive:angular:physics:stiffness = 0.7974461712239651
+                float drive:angular:physics:targetPosition = 0
+                custom bool mjc:actuatorgravcomp = true
+                custom float newton:armature = 0.1
+            }
+
+            over "joint3"
+            {
+                float drive:angular:physics:damping = 0.09067212356913301
+                float drive:angular:physics:maxForce = 18
+                float drive:angular:physics:stiffness = 0.5037334380520994
+                float drive:angular:physics:targetPosition = 0
+                custom bool mjc:actuatorgravcomp = true
+                custom float newton:armature = 0.1
+            }
+
+            over "joint4"
+            {
+                float drive:angular:physics:damping = 0.056043918544939515
+                float drive:angular:physics:maxForce = 5
+                float drive:angular:physics:stiffness = 0.3113545212510245
+                float drive:angular:physics:targetPosition = 0
+                custom bool mjc:actuatorgravcomp = true
+                custom float newton:armature = 0.1
+            }
+
+            over "joint5"
+            {
+                float drive:angular:physics:damping = 0.05881166167275212
+                float drive:angular:physics:maxForce = 5
+                float drive:angular:physics:stiffness = 0.3267308719610945
+                float drive:angular:physics:targetPosition = 0
+                custom bool mjc:actuatorgravcomp = true
+                custom float newton:armature = 0.1
+            }
+
+            over "joint6"
+            {
+                float drive:angular:physics:damping = 0.05598510094914731
+                float drive:angular:physics:maxForce = 2
+                float drive:angular:physics:stiffness = 0.31102814468090145
+                float drive:angular:physics:targetPosition = 0
+                custom bool mjc:actuatorgravcomp = true
+                custom float newton:armature = 0.1
+            }
+
+            over "joint7" (
+                prepend apiSchemas = ["PhysicsJointStateAPI:linear"]
+            )
+            {
+                float drive:linear:physics:damping = 80
+                float drive:linear:physics:maxForce = 30
+                float drive:linear:physics:stiffness = 2500
+                float drive:linear:physics:targetPosition = 0.04
+                custom float newton:armature = 0.3
+                float physics:lowerLimit = 0
+                float physics:upperLimit = 0.04
+                float state:linear:physics:position = 0.04
+            }
+
+            over "joint8" (
+                prepend apiSchemas = ["NewtonMimicAPI", "PhysicsJointStateAPI:linear"]
+            )
+            {
+                float drive:linear:physics:damping = 80
+                float drive:linear:physics:maxForce = 30
+                float drive:linear:physics:stiffness = 0
+                float drive:linear:physics:targetPosition = -0.04
+                custom float newton:armature = 0.3
+                custom double newton:mimicCoef0 = 0
+                custom double newton:mimicCoef1 = -1
+                custom rel newton:mimicJoint = </piper_dual/Physics/left/joint7>
+                float physics:lowerLimit = -0.04
+                float physics:upperLimit = 0
+                float state:linear:physics:position = -0.04
+            }
+        }
+
+        over "right"
+        {
+            over "clamp_mount" (
+                active = false
+            )
+            {
+            }
+
+            over "joint1"
+            {
+                float drive:angular:physics:damping = 0.09740036783557114
+                float drive:angular:physics:maxForce = 32
+                float drive:angular:physics:stiffness = 0.5411131546420619
+                float drive:angular:physics:targetPosition = 0
+                custom bool mjc:actuatorgravcomp = true
+                custom float newton:armature = 0.1
+                float physics:lowerLimit = -90
+                float physics:upperLimit = 90
+            }
+
+            over "joint2"
+            {
+                float drive:angular:physics:damping = 0.14354024100714363
+                float drive:angular:physics:maxForce = 32
+                float drive:angular:physics:stiffness = 0.7974461712239651
+                float drive:angular:physics:targetPosition = 0
+                custom bool mjc:actuatorgravcomp = true
+                custom float newton:armature = 0.1
+            }
+
+            over "joint3"
+            {
+                float drive:angular:physics:damping = 0.09067212356913301
+                float drive:angular:physics:maxForce = 18
+                float drive:angular:physics:stiffness = 0.5037334380520994
+                float drive:angular:physics:targetPosition = 0
+                custom bool mjc:actuatorgravcomp = true
+                custom float newton:armature = 0.1
+            }
+
+            over "joint4"
+            {
+                float drive:angular:physics:damping = 0.056043918544939515
+                float drive:angular:physics:maxForce = 5
+                float drive:angular:physics:stiffness = 0.3113545212510245
+                float drive:angular:physics:targetPosition = 0
+                custom bool mjc:actuatorgravcomp = true
+                custom float newton:armature = 0.1
+            }
+
+            over "joint5"
+            {
+                float drive:angular:physics:damping = 0.05881166167275212
+                float drive:angular:physics:maxForce = 5
+                float drive:angular:physics:stiffness = 0.3267308719610945
+                float drive:angular:physics:targetPosition = 0
+                custom bool mjc:actuatorgravcomp = true
+                custom float newton:armature = 0.1
+            }
+
+            over "joint6"
+            {
+                float drive:angular:physics:damping = 0.05598510094914731
+                float drive:angular:physics:maxForce = 2
+                float drive:angular:physics:stiffness = 0.31102814468090145
+                float drive:angular:physics:targetPosition = 0
+                custom bool mjc:actuatorgravcomp = true
+                custom float newton:armature = 0.1
+            }
+
+            over "joint7" (
+                prepend apiSchemas = ["PhysicsJointStateAPI:linear"]
+            )
+            {
+                float drive:linear:physics:damping = 80
+                float drive:linear:physics:maxForce = 30
+                float drive:linear:physics:stiffness = 2500
+                float drive:linear:physics:targetPosition = 0.04
+                custom float newton:armature = 0.3
+                float physics:lowerLimit = 0
+                float physics:upperLimit = 0.04
+                float state:linear:physics:position = 0.04
+            }
+
+            over "joint8" (
+                prepend apiSchemas = ["NewtonMimicAPI", "PhysicsJointStateAPI:linear"]
+            )
+            {
+                float drive:linear:physics:damping = 80
+                float drive:linear:physics:maxForce = 30
+                float drive:linear:physics:stiffness = 0
+                float drive:linear:physics:targetPosition = -0.04
+                custom float newton:armature = 0.3
+                custom double newton:mimicCoef0 = 0
+                custom double newton:mimicCoef1 = -1
+                custom rel newton:mimicJoint = </piper_dual/Physics/right/joint7>
+                float physics:lowerLimit = -0.04
+                float physics:upperLimit = 0
+                float state:linear:physics:position = -0.04
+            }
+        }
+    }
+
+    over "joints"
+    {
+        over "left_joint1" (
+            active = true
+        )
+        {
+        }
+
+        over "left_joint2" (
+            active = true
+        )
+        {
+        }
+
+        over "left_joint3" (
+            active = true
+        )
+        {
+        }
+
+        over "left_joint4" (
+            active = true
+        )
+        {
+        }
+
+        over "left_joint5" (
+            active = true
+        )
+        {
+        }
+
+        over "left_joint6" (
+            active = true
+        )
+        {
+        }
+
+        over "left_joint7" (
+            active = true
+        )
+        {
+        }
+
+        over "left_joint8" (
+            active = true
+        )
+        {
+        }
+
+        over "right_joint1" (
+            active = true
+        )
+        {
+        }
+
+        over "right_joint2" (
+            active = true
+        )
+        {
+        }
+
+        over "right_joint3" (
+            active = true
+        )
+        {
+        }
+
+        over "right_joint4" (
+            active = true
+        )
+        {
+        }
+
+        over "right_joint5" (
+            active = true
+        )
+        {
+        }
+
+        over "right_joint6" (
+            active = true
+        )
+        {
+        }
+
+        over "right_joint7" (
+            active = true
+        )
+        {
+        }
+
+        over "right_joint8" (
+            active = true
+        )
+        {
+        }
+    }
+}

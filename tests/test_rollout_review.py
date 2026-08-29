@@ -73,6 +73,7 @@ def test_review_incrementally_renders_id_addressed_trajectory_videos(
             self.manifest = SimpleNamespace(
                 control_fps=50.0,
                 action_count=value["action_count"],
+                scene=SimpleNamespace(robot_id="piper"),
             )
 
         @staticmethod
@@ -99,7 +100,7 @@ def test_review_incrementally_renders_id_addressed_trajectory_videos(
 
     add_trajectory("teleop_a")
     monkeypatch.setattr("clothdojo.trajectory.TrajectoryReader", Reader)
-    monkeypatch.setattr("clothdojo.sim.scene.build_shirt_flatten", lambda *_a, **_kw: object())
+    monkeypatch.setattr("clothdojo.sim.scene.build_scene", lambda *_a, **_kw: object())
     monkeypatch.setattr("clothdojo.rollout.render.ShirtFlattenCameraObservation", Camera)
     monkeypatch.setattr("clothdojo.data.rollout._TrajectoryRenderState", lambda _scene: object())
     monkeypatch.setattr("clothdojo.data.rollout._restore_render_state", lambda *_a: None)

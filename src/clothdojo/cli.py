@@ -214,6 +214,20 @@ def main(argv: Sequence[str] | None = None) -> None:
         result = prepare_isaac_assets(args.output, include_room=args.include_room)
         print(json.dumps(result, indent=2, sort_keys=True))
         return
+    if args.command == "data" and args.data_command == "retarget":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.data.retarget import retarget
+
+        result = retarget(
+            args.source,
+            args.output,
+            target_robot=args.target_robot,
+            assets=args.assets,
+            device=args.device,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return
     if args.command == "data" and args.data_command == "export-lerobot":
         if passthrough:
             parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
@@ -235,7 +249,11 @@ def main(argv: Sequence[str] | None = None) -> None:
                 raise RuntimeError(
                     f"cannot read source manifest: {source_manifest}: {exc}"
                 ) from exc
-        if source_schema in {"clothdojo_rollout", "clothdojo_evaluation_condition"}:
+        if source_schema in {
+            "clothdojo_rollout",
+            "clothdojo_evaluation_condition",
+            "clothdojo_retarget_collection",
+        }:
             if args.plan_only:
                 if args.isaac_seed is not None:
                     from clothdojo.data.isaac_render import (
@@ -843,6 +861,28 @@ def _parser() -> argparse.ArgumentParser:
         "--include-room",
         action="store_true",
         help="also download the optional room assets",
+    )
+    retarget = data_commands.add_parser(
+        "retarget",
+        help="retarget Piper trajectories to another robot",
+    )
+    retarget.add_argument("--source", required=True, help="trajectory or collection root")
+    retarget.add_argument("--output", required=True, help="new retarget artifact root")
+    retarget.add_argument(
+        "--target-robot",
+        required=True,
+        choices=("aloha2", "x5", "panda", "ur5e_2f85"),
+        help="fixed target robot profile",
+    )
+    retarget.add_argument(
+        "--assets",
+        default="assets",
+        help="project asset directory",
+    )
+    retarget.add_argument(
+        "--device",
+        default="cuda:0",
+        help="Newton IK and rigid-dynamics device",
     )
     review = data_commands.add_parser(
         "render-review",

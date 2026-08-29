@@ -70,9 +70,39 @@ class TrajectorySample:
 @dataclass(slots=True)
 class SceneMetadata:
     task_name: str = "minimal_box"
-    robot_name: str = "none"
+    robot_id: str = "none"
     asset_fingerprints: dict[str, str] = field(default_factory=dict)
     config_fingerprints: dict[str, str] = field(default_factory=dict)
+
+    @classmethod
+    def from_json_dict(cls, data: dict[str, Any]) -> SceneMetadata:
+        """Read current metadata and the former task-coupled environment IDs."""
+
+        values = dict(data)
+        robot_id = str(values.pop("robot_id", ""))
+        robot_name = str(values.pop("robot_name", ""))
+        task_name = str(values.pop("task_name", ""))
+        environment_id = str(values.pop("environment_id", ""))
+        values.pop("environment_fingerprint", None)
+        legacy_scenes = {
+            "piper_shirt_flatten_v1": ("piper", "shirt_flatten"),
+            "aloha2_shirt_flatten_v1": ("aloha2", "shirt_flatten"),
+            "x5_shirt_flatten_v1": ("x5", "shirt_flatten"),
+            "panda_shirt_flatten_v1": ("panda", "shirt_flatten"),
+            "ur5e_2f85_shirt_flatten_v1": ("ur5e_2f85", "shirt_flatten"),
+        }
+        if environment_id and environment_id not in legacy_scenes:
+            raise ValueError(f"unknown legacy trajectory environment: {environment_id!r}")
+        legacy_robot, legacy_task = legacy_scenes.get(environment_id, ("", ""))
+        candidates = {value for value in (robot_id, robot_name, legacy_robot) if value}
+        if len(candidates) > 1:
+            raise ValueError("trajectory scene contains conflicting robot identities")
+        task_candidates = {value for value in (task_name, legacy_task) if value}
+        if len(task_candidates) > 1:
+            raise ValueError("trajectory scene contains conflicting task identities")
+        values["robot_id"] = next(iter(candidates), "none")
+        values["task_name"] = next(iter(task_candidates), "minimal_box")
+        return cls(**values)
 
 
 @dataclass(slots=True)
@@ -120,6 +150,6 @@ class TrajectoryManifest:
                 key: [int(value) for value in shape]
                 for key, shape in data.get("action_shapes", {}).items()
             },
-            scene=SceneMetadata(**data.get("scene", {})),
+            scene=SceneMetadata.from_json_dict(data.get("scene", {})),
             metadata=dict(data.get("metadata", {})),
         )

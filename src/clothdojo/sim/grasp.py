@@ -21,6 +21,8 @@ _CAPTURE_RADIUS = 0.01
 # seconds and derive the fixed substep count when the scene is built.
 _RELEASE_COLLISION_OFF_TIME_S = 5.0 / 30.0
 _GRIPPER_COLLISION_LINKS = ("link6", "link7", "link8")
+ATTACH_OPENNESS_THRESHOLD = 0.1
+RELEASE_OPENNESS_THRESHOLD = 0.7
 
 
 @wp.func
@@ -529,6 +531,10 @@ class GraspRegionProbe:
         self._readback_valid = False
 
 
+def _attach_local_offsets(scene: ShirtFlattenScene) -> tuple[tuple[float, float, float], ...]:
+    return tuple(frame.position for frame in scene.robot_profile.attach_frames)
+
+
 class ParticleGrasp:
     """Capture and softly pin one connected garment patch per gripper."""
 
@@ -549,7 +555,7 @@ class ParticleGrasp:
         self._frontier = wp.full(shape3, -1, dtype=wp.int32, device=self.device)
         self._next_frontier = wp.full(shape3, -1, dtype=wp.int32, device=self.device)
         self._local_offsets = wp.array(
-            ((0.0, 0.0, 0.13503), (0.0, 0.0, 0.13503)),
+            _attach_local_offsets(scene),
             dtype=wp.vec3,
             device=self.device,
         )
@@ -633,8 +639,8 @@ class ParticleGrasp:
                 self.model.shape_flags,
                 self._collision_shapes,
                 self._collision_shape_count,
-                0.1,
-                0.7,
+                ATTACH_OPENNESS_THRESHOLD,
+                RELEASE_OPENNESS_THRESHOLD,
                 self._release_collision_off_substeps,
                 self._particle_collision_bit,
                 0.01**2,

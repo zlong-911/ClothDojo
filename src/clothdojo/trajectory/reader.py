@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Iterable, Iterator
 from pathlib import Path
@@ -23,6 +24,10 @@ from clothdojo.trajectory.schema import (
 
 _STATE_KEYS = ("sample_index", *STATE_ARRAY_DTYPES)
 _ACTION_KEYS = ("sample_index", *ACTION_ARRAY_DTYPES)
+_DERIVED_BASE_FIELDS = ("particle_q", "particle_qd")
+_DERIVED_OVERRIDE_FIELDS = tuple(
+    field for field in STATE_ARRAY_DTYPES if field not in _DERIVED_BASE_FIELDS
+)
 _DTYPES = {
     "sample_index": SAMPLE_INDEX_DTYPE,
     **STATE_ARRAY_DTYPES,
@@ -40,6 +45,14 @@ class TrajectoryReader:
         self._validate_manifest(require_complete=require_complete)
         self._state_arrays: dict[str, np.ndarray] | None = None
         self._action_arrays: dict[str, np.ndarray] | None = None
+        self._base_reader: TrajectoryReader | None = None
+        self._base_sample_indices: np.ndarray | None = None
+        storage = self.manifest.metadata.get("storage")
+        if isinstance(storage, dict) and storage.get("kind") in {
+            "derived_overlay",
+            "derived_overlay_v1",
+        }:
+            self._base_reader = self._open_base_reader(storage)
 
     def iter_states(self) -> Iterator[TrajectoryState]:
         arrays = self._states()
@@ -93,6 +106,8 @@ class TrajectoryReader:
             field not in STATE_ARRAY_DTYPES for field in selected
         ):
             raise ValueError("state array fields must be unique known state fields")
+        if self._base_reader is not None:
+            return self._overlay_state_arrays(selected)
         return self._load_arrays(
             self.trajectory_dir / "states.npz",
             _STATE_KEYS,
@@ -100,6 +115,11 @@ class TrajectoryReader:
             self.manifest.state_shapes,
             load_keys=("sample_index", *selected),
         )
+
+    def action_arrays(self) -> dict[str, np.ndarray]:
+        """Return all validated read-only action arrays for vectorized consumers."""
+
+        return dict(self._actions())
 
     def validate_training_data(
         self,
@@ -136,13 +156,108 @@ class TrajectoryReader:
 
     def _states(self) -> dict[str, np.ndarray]:
         if self._state_arrays is None:
-            self._state_arrays = self._load_arrays(
-                self.trajectory_dir / "states.npz",
-                _STATE_KEYS,
-                self.manifest.state_count,
-                self.manifest.state_shapes,
-            )
+            if self._base_reader is None:
+                self._state_arrays = self._load_arrays(
+                    self.trajectory_dir / "states.npz",
+                    _STATE_KEYS,
+                    self.manifest.state_count,
+                    self.manifest.state_shapes,
+                )
+            else:
+                fields = self._overlay_state_arrays(tuple(STATE_ARRAY_DTYPES))
+                sample_index = np.arange(
+                    self.manifest.state_count, dtype=SAMPLE_INDEX_DTYPE
+                )
+                sample_index.setflags(write=False)
+                self._state_arrays = {"sample_index": sample_index, **fields}
         return self._state_arrays
+
+    def _overlay_state_arrays(self, fields: tuple[str, ...]) -> dict[str, np.ndarray]:
+        if self._base_reader is None:
+            raise RuntimeError("derived trajectory base reader is missing")
+        base_fields = tuple(field for field in fields if field in _DERIVED_BASE_FIELDS)
+        override_fields = tuple(field for field in fields if field in _DERIVED_OVERRIDE_FIELDS)
+        result: dict[str, np.ndarray] = {}
+        if base_fields:
+            base_arrays = self._base_reader.state_arrays(base_fields)
+            if self._base_sample_indices is None:
+                result.update(base_arrays)
+            else:
+                for field, values in base_arrays.items():
+                    selected = values[self._base_sample_indices]
+                    selected.setflags(write=False)
+                    result[field] = selected
+        if override_fields:
+            overrides = self._load_arrays(
+                self.trajectory_dir / "states.npz",
+                ("sample_index", *_DERIVED_OVERRIDE_FIELDS),
+                self.manifest.state_count,
+                {
+                    field: self.manifest.state_shapes[field]
+                    for field in _DERIVED_OVERRIDE_FIELDS
+                },
+                load_keys=("sample_index", *override_fields),
+            )
+            overrides.pop("sample_index")
+            result.update(overrides)
+        return {field: result[field] for field in fields}
+
+    def _open_base_reader(self, storage: dict) -> TrajectoryReader:
+        value = storage.get("base_trajectory")
+        expected_hash = storage.get("base_manifest_sha256")
+        if not isinstance(value, str) or not value:
+            raise RuntimeError("derived trajectory base_trajectory is missing")
+        if not isinstance(expected_hash, str) or len(expected_hash) != 64:
+            raise RuntimeError("derived trajectory base manifest fingerprint is missing")
+        base_path = Path(value).expanduser()
+        if not base_path.is_absolute():
+            base_path = self.trajectory_dir / base_path
+        base_path = base_path.resolve()
+        if base_path == self.trajectory_dir.resolve():
+            raise RuntimeError("derived trajectory cannot reference itself")
+        manifest_path = base_path / "manifest.json"
+        try:
+            actual_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+        except OSError as exc:
+            raise RuntimeError(f"cannot read derived trajectory base: {base_path}") from exc
+        if actual_hash != expected_hash:
+            raise RuntimeError("derived trajectory base manifest fingerprint differs")
+        base = TrajectoryReader(base_path)
+        if base.manifest.control_fps != self.manifest.control_fps:
+            raise RuntimeError("derived trajectory base timeline differs")
+        index_file = storage.get("base_sample_indices")
+        if index_file is None:
+            if (
+                base.manifest.state_count != self.manifest.state_count
+                or base.manifest.action_count != self.manifest.action_count
+            ):
+                raise RuntimeError("derived trajectory base timeline differs")
+        else:
+            if not isinstance(index_file, str) or not index_file:
+                raise RuntimeError("derived trajectory base_sample_indices is invalid")
+            index_path = self.trajectory_dir / index_file
+            try:
+                indices = np.load(index_path, allow_pickle=False)
+            except OSError as exc:
+                raise RuntimeError("derived trajectory base sample map is missing") from exc
+            if indices.dtype != SAMPLE_INDEX_DTYPE or indices.shape != (
+                self.manifest.state_count,
+            ):
+                raise RuntimeError("derived trajectory base sample map shape or dtype differs")
+            if (
+                indices[0] != 0
+                or indices[-1] != base.manifest.state_count - 1
+                or np.any(np.diff(indices) < 0)
+                or np.any(indices < 0)
+                or np.any(indices >= base.manifest.state_count)
+            ):
+                raise RuntimeError("derived trajectory base sample map is invalid")
+            indices.setflags(write=False)
+            self._base_sample_indices = indices
+        for field in _DERIVED_BASE_FIELDS:
+            if base.manifest.state_shapes.get(field) != self.manifest.state_shapes.get(field):
+                raise RuntimeError(f"derived trajectory base {field} shape differs")
+        return base
 
     def _actions(self) -> dict[str, np.ndarray]:
         if self._action_arrays is None:

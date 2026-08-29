@@ -10,7 +10,12 @@ import numpy as np
 import pytest
 
 from clothdojo.sim.check import _gripper_openness
-from clothdojo.sim.runtime import ShirtFlattenRuntime, _prune_static_soft_contact_pairs
+from clothdojo.sim.runtime import (
+    ShirtFlattenRuntime,
+    _prune_static_soft_contact_pairs,
+    _write_arm_targets,
+    _write_gripper_targets,
+)
 from clothdojo.sim.scene import (
     ARM_JOINTS,
     GRIPPER_JOINTS,
@@ -19,41 +24,15 @@ from clothdojo.sim.scene import (
     _add_table,
     _body_indices,
     _centered_world_offsets,
-    _configure_robot,
     _joint_dofs,
     _joint_indices,
     _nocs_visual_mesh,
     _register_solver_attributes,
+    _select_piper_robot,
     _vertex_normals,
-    build_shirt_flatten,
+    build_scene,
     rest_vertices_to_nocs,
 )
-
-
-class _RobotBuilder:
-    def __init__(self) -> None:
-        labels = tuple(
-            f"/robot/{side}/joint{joint}" for side in ("left", "right") for joint in range(1, 9)
-        )
-        self.joint_label = list(labels)
-        self.joint_dof_dim = [(0, 1)] * len(labels)
-        self.joint_limit_lower = np.full(len(labels), -10.0)
-        self.joint_limit_upper = np.full(len(labels), 10.0)
-        self.joint_q = np.zeros(len(labels))
-        self.joint_target_q = np.zeros(len(labels))
-        self.joint_target_mode = np.zeros(len(labels), dtype=np.int32)
-        self.joint_target_ke = np.zeros(len(labels))
-        self.joint_target_kd = np.zeros(len(labels))
-        self.joint_effort_limit = np.zeros(len(labels))
-        self.joint_armature = np.zeros(len(labels))
-        self.custom_attributes = {
-            "mujoco:gravcomp": SimpleNamespace(values=None),
-            "mujoco:jnt_actgravcomp": SimpleNamespace(values=None),
-        }
-        self.mimics: list[dict[str, object]] = []
-
-    def add_constraint_mimic(self, **kwargs) -> None:
-        self.mimics.append(kwargs)
 
 
 def test_scene_sets_safe_openusd_concurrency_before_newton_import() -> None:
@@ -107,12 +86,75 @@ def test_sim_runtime_does_not_depend_on_trajectory_dataset() -> None:
 
 
 def test_sim_runtime_enables_cuda_graph_by_default() -> None:
-    assert ShirtFlattenRuntime.__init__.__kwdefaults__ == {"use_cuda_graph": True}
+    assert ShirtFlattenRuntime.__init__.__kwdefaults__ == {
+        "use_cuda_graph": True,
+        "rigid_deterministic": False,
+    }
 
     runtime = ShirtFlattenRuntime.__new__(ShirtFlattenRuntime)
     runtime.spec = SimpleNamespace(sim_substeps=3)
     with pytest.raises(RuntimeError, match="even sim_substeps"):
         runtime._capture_step_graph()
+
+
+def test_aloha_action_targets_follow_two_articulation_layout() -> None:
+    import warp as wp
+
+    arm = np.arange(12, dtype=np.float32).reshape(1, 12) / 10.0
+    arm_target = wp.zeros((1, 2, 6), dtype=wp.float32, device="cpu")
+    arm_limit = wp.array(np.full((1, 2, 6), 100.0, dtype=np.float32), device="cpu")
+    wp.launch(
+        _write_arm_targets,
+        dim=(1, 12),
+        inputs=[wp.array(arm, device="cpu"), -arm_limit, arm_limit, 6],
+        outputs=[arm_target],
+        device="cpu",
+    )
+    np.testing.assert_allclose(arm_target.numpy().reshape(1, 12), arm)
+
+    gripper_target = wp.zeros((1, 2, 2), dtype=wp.float32, device="cpu")
+    wp.launch(
+        _write_gripper_targets,
+        dim=(1, 4),
+        inputs=[
+            wp.array([[0.0, 1.0]], dtype=wp.float32, device="cpu"),
+            wp.array([0.0079] * 4, dtype=wp.float32, device="cpu"),
+            wp.array([0.037] * 4, dtype=wp.float32, device="cpu"),
+            2,
+        ],
+        outputs=[gripper_target],
+        device="cpu",
+    )
+    np.testing.assert_allclose(gripper_target.numpy(), [[[0.0079, 0.0079], [0.037, 0.037]]])
+
+
+def test_runtime_groups_rigid_state_by_physics_world() -> None:
+    import warp as wp
+
+    runtime = ShirtFlattenRuntime.__new__(ShirtFlattenRuntime)
+    runtime.model = SimpleNamespace(
+        world_count=2,
+        joint_coord_count=6,
+        joint_dof_count=6,
+        body_count=4,
+    )
+    runtime.state_0 = SimpleNamespace(
+        joint_q=wp.array(np.arange(6, dtype=np.float32), device="cpu"),
+        joint_qd=wp.array(np.arange(6, dtype=np.float32) + 10.0, device="cpu"),
+        body_q=wp.array(np.arange(28, dtype=np.float32).reshape(4, 7), device="cpu"),
+        body_qd=wp.array(np.arange(24, dtype=np.float32).reshape(4, 6), device="cpu"),
+    )
+
+    state = runtime.rigid_state_batch()
+
+    assert state["joint_q"].shape == (2, 3)
+    assert state["joint_qd"].shape == (2, 3)
+    assert state["body_q"].shape == (2, 2, 7)
+    assert state["body_qd"].shape == (2, 2, 6)
+    np.testing.assert_array_equal(state["joint_q"][1], (3.0, 4.0, 5.0))
+    np.testing.assert_array_equal(
+        state["body_q"][1], np.arange(14, 28, dtype=np.float32).reshape(2, 7)
+    )
 
 
 def test_runtime_step_graph_keeps_bvh_rebuild_outside_substeps() -> None:
@@ -121,13 +163,12 @@ def test_runtime_step_graph_keeps_bvh_rebuild_outside_substeps() -> None:
     runtime.state_0 = "current"
     runtime.state_1 = "next"
     runtime.model = SimpleNamespace(world_count=1)
+    runtime._arm_action_count = 12
     runtime.spec = SimpleNamespace(sim_substeps=2, control_fps=50)
     runtime.grasp = SimpleNamespace(
         update=lambda particle, rigid: events.append(("grasp", particle, rigid))
     )
-    runtime.cloth = SimpleNamespace(
-        rebuild_bvh=lambda state: events.append(("rebuild", state))
-    )
+    runtime.cloth = SimpleNamespace(rebuild_bvh=lambda state: events.append(("rebuild", state)))
     runtime.apply_action = lambda arm, gripper: events.append(("action", arm, gripper))
     runtime._step_rigid = lambda dt: events.append(("rigid", dt))
     runtime._step_cloth = lambda dt: events.append(("cloth", dt))
@@ -215,9 +256,7 @@ def test_cloth_collision_combines_current_particles_and_updated_rigid_state() ->
         events.append(("collide", state, state.particle_q, contacts))
 
     def cloth_step(state_in, state_out, control, contacts, dt):
-        events.append(
-            ("cloth", state_in, state_out, state_out.particle_q, control, contacts, dt)
-        )
+        events.append(("cloth", state_in, state_out, state_out.particle_q, control, contacts, dt))
 
     runtime.collision = SimpleNamespace(collide=collide)
     runtime.cloth = SimpleNamespace(step=cloth_step)
@@ -252,9 +291,7 @@ def test_runtime_prunes_shapes_with_static_particle_collision_flags() -> None:
     )
     empty = wp.array(np.empty((0, 2), dtype=np.int32), dtype=wp.vec2i, device="cpu")
     pipeline = SimpleNamespace(
-        soft_rigid_contact_pairs=wp.array(
-            [[0, 0], [0, 1]], dtype=wp.vec2i, device="cpu"
-        ),
+        soft_rigid_contact_pairs=wp.array([[0, 0], [0, 1]], dtype=wp.vec2i, device="cpu"),
         soft_edge_rigid_pairs=empty,
         soft_face_rigid_pairs=empty,
         soft_contact_max=2,
@@ -364,7 +401,6 @@ def test_piper_import_selects_only_expert_collision_envelope(load_visual_shapes:
         wp,
         builder,
         root / "piper.usda",
-        ShirtFlattenSpec(),
         load_visual_shapes=load_visual_shapes,
     )
 
@@ -393,6 +429,18 @@ def test_piper_import_selects_only_expert_collision_envelope(load_visual_shapes:
     assert all(not int(builder.shape_flags[index]) & shape_bit for index in original)
     assert sum(bool(int(flags) & shape_bit) for flags in builder.shape_flags) == 126
     assert sum(bool(int(flags) & particle_bit) for flags in builder.shape_flags) == 99
+    np.testing.assert_allclose(
+        np.asarray(builder.shape_material_mu)[migrated], 0.6, rtol=0.0, atol=1.0e-6
+    )
+    np.testing.assert_allclose(
+        np.asarray(builder.shape_material_ke)[migrated], 10000.0
+    )
+    np.testing.assert_allclose(
+        np.asarray(builder.shape_material_kd)[migrated], 200.0
+    )
+    np.testing.assert_allclose(
+        np.asarray(builder.shape_margin)[migrated], 0.0004, rtol=0.0, atol=1.0e-8
+    )
 
 
 def test_robot_cloth_ghost_mode_preserves_table_particle_collision() -> None:
@@ -407,7 +455,6 @@ def test_robot_cloth_ghost_mode_preserves_table_particle_collision() -> None:
         wp,
         builder,
         root / "piper.usda",
-        ShirtFlattenSpec(),
         load_visual_shapes=False,
         robot_cloth_collision=False,
     )
@@ -415,9 +462,7 @@ def test_robot_cloth_ghost_mode_preserves_table_particle_collision() -> None:
 
     labels = tuple(str(label) for label in builder.shape_label)
     robot_shapes = [
-        index
-        for index, label in enumerate(labels)
-        if "/ClothDojoLegacyCollision/" in label
+        index for index, label in enumerate(labels) if "/ClothDojoLegacyCollision/" in label
     ]
     table_shapes = [index for index, label in enumerate(labels) if label == "table"]
     shape_bit = int(newton.ShapeFlags.COLLIDE_SHAPES)
@@ -464,34 +509,59 @@ def test_end_effector_selection_preserves_left_right_order() -> None:
     assert _body_indices(builder, ("left/link6", "right/link6")) == [0, 1]
 
 
-def test_piper_control_matches_legacy_limits_and_gripper_mimics() -> None:
-    builder = _RobotBuilder()
-    newton = SimpleNamespace(JointTargetMode=SimpleNamespace(POSITION=1))
+def test_piper_usd_authors_control_and_gripper_physics() -> None:
+    import newton
+    import warp as wp
 
-    arm_joints, gripper_joints, arm_dofs = _configure_robot(
-        newton, builder, ShirtFlattenSpec(), body_count=21
+    root = Path(__file__).parents[1] / "assets" / "robots" / "piper"
+    builder = newton.ModelBuilder()
+    _register_solver_attributes(newton, builder)
+    _add_robot(
+        newton,
+        wp,
+        builder,
+        root / "piper.usda",
+        load_visual_shapes=False,
     )
+    arm_joints, gripper_joints, arm_dofs = _select_piper_robot(builder)
+    gripper_dofs = _joint_dofs(builder, gripper_joints)
 
     assert arm_joints == _joint_indices(builder, ARM_JOINTS)
     assert gripper_joints == _joint_indices(builder, GRIPPER_JOINTS)
-    np.testing.assert_allclose(builder.joint_limit_lower[arm_dofs][[0, 6]], -0.5 * np.pi)
-    np.testing.assert_allclose(builder.joint_limit_upper[arm_dofs][[0, 6]], 0.5 * np.pi)
-    assert builder.mimics == [
-        {
-            "joint0": gripper_joints[1],
-            "joint1": gripper_joints[0],
-            "coef0": 0.0,
-            "coef1": -1.0,
-            "label": "left_gripper_mimic",
-        },
-        {
-            "joint0": gripper_joints[3],
-            "joint1": gripper_joints[2],
-            "coef0": 0.0,
-            "coef1": -1.0,
-            "label": "right_gripper_mimic",
-        },
+    np.testing.assert_allclose(
+        np.asarray(builder.joint_limit_lower)[arm_dofs][[0, 6]], -0.5 * np.pi
+    )
+    np.testing.assert_allclose(
+        np.asarray(builder.joint_limit_upper)[arm_dofs][[0, 6]], 0.5 * np.pi
+    )
+    np.testing.assert_allclose(
+        np.asarray(builder.joint_q)[gripper_dofs], (0.04, -0.04, 0.04, -0.04)
+    )
+    np.testing.assert_allclose(
+        np.asarray(builder.joint_target_q)[gripper_dofs], (0.04, -0.04, 0.04, -0.04)
+    )
+    assert np.asarray(builder.joint_target_mode)[gripper_dofs].tolist() == [
+        int(newton.JointTargetMode.POSITION),
+        int(newton.JointTargetMode.VELOCITY),
+        int(newton.JointTargetMode.POSITION),
+        int(newton.JointTargetMode.VELOCITY),
     ]
+    np.testing.assert_allclose(
+        np.asarray(builder.joint_target_ke)[arm_dofs],
+        (31.0035, 45.6903, 28.8618, 17.8393, 18.7203, 17.8206) * 2,
+        rtol=1.0e-6,
+    )
+    np.testing.assert_allclose(
+        np.asarray(builder.joint_target_kd)[arm_dofs],
+        (5.58063, 8.22425, 5.19513, 3.21108, 3.36966, 3.20771) * 2,
+        rtol=1.0e-6,
+    )
+    assert builder.constraint_mimic_joint0 == [gripper_joints[1], gripper_joints[3]]
+    assert builder.constraint_mimic_joint1 == [gripper_joints[0], gripper_joints[2]]
+    assert builder.constraint_mimic_coef0 == [0.0, 0.0]
+    assert builder.constraint_mimic_coef1 == [-1.0, -1.0]
+    assert set(builder.custom_attributes["mujoco:gravcomp"].values) == set(range(21))
+    assert set(builder.custom_attributes["mujoco:jnt_actgravcomp"].values) == set(arm_dofs)
 
 
 def test_scene_requires_at_least_one_world() -> None:
@@ -507,7 +577,7 @@ def test_visual_scene_uses_one_noncolliding_model_for_every_world() -> None:
 
     import newton
 
-    scene = build_shirt_flatten(
+    scene = build_scene(
         root,
         spec=ShirtFlattenSpec(world_count=2),
         device="cpu",

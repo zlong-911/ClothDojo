@@ -125,7 +125,7 @@ def _continuation_sources_cached(
             or manifest.state_count != manifest.action_count + 1
         ):
             continue
-        if manifest.scene.task_name != source_scene or manifest.scene.robot_name != "piper":
+        if manifest.scene.task_name != source_scene or manifest.scene.robot_id != "piper":
             continue
         expected = _asset_fingerprints(assets_root, asset_id)
         recorded = manifest.scene.asset_fingerprints
@@ -140,7 +140,7 @@ def _continuation_sources_cached(
                 "asset_id": asset_id,
                 "source_profile_id": source_profile_id,
                 "runtime": {
-                    "robot_name": manifest.scene.robot_name,
+                    "robot_id": manifest.scene.robot_id,
                     "control_fps": manifest.control_fps,
                     "sim_substeps": manifest.sim_substeps,
                     "asset_fingerprints": expected,

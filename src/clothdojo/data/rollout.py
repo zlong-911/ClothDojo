@@ -17,10 +17,10 @@ from clothdojo.data.lerobot import (
     _validate_video,
 )
 from clothdojo.rendering import DATASET_CAMERA_NAMES
+from clothdojo.robots import RobotProfile, robot_profile
 
 CAMERA_NAMES = DATASET_CAMERA_NAMES
 ARM_JOINTS = tuple(f"{side}/joint{joint}" for side in ("left", "right") for joint in range(1, 7))
-_ARM_COORD_INDICES = (0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13)
 
 
 class _TrajectoryRenderState:
@@ -52,6 +52,8 @@ class RolloutLeRobotWriter:
         image_writer_threads: int = 6,
         _writer_factory: Callable[..., Any] | None = None,
         selection_plan: ExportPlan | None = None,
+        robot_type: str = "piper",
+        arm_joint_names: tuple[str, ...] = ARM_JOINTS,
     ) -> None:
         self.output = Path(output).expanduser().resolve()
         if self.output.exists():
@@ -71,6 +73,7 @@ class RolloutLeRobotWriter:
         self.image_height = int(image_height)
         self.image_width = int(image_width)
         self.repo_id = repo_id or f"local/{self.output.name}"
+        self.action_dim = len(arm_joint_names) + 2
         self.selection_plan = selection_plan
         self._injected = _writer_factory is not None
         if self._injected:
@@ -80,8 +83,12 @@ class RolloutLeRobotWriter:
             repo_id=self.repo_id,
             root=self.staging,
             fps=self.fps,
-            robot_type="piper",
-            features=_features(self.image_height, self.image_width),
+            robot_type=robot_type,
+            features=_features(
+                self.image_height,
+                self.image_width,
+                arm_joint_names=arm_joint_names,
+            ),
             image_writer_threads=image_writer_threads,
         )
         self.frames = 0
@@ -98,9 +105,10 @@ class RolloutLeRobotWriter:
             raise RuntimeError("cannot add a frame to a closed rollout dataset")
         state = np.asarray(observation["observation.state"], dtype=np.float32)
         action = np.asarray(action, dtype=np.float32)
-        if state.shape != (1, 14) or action.shape != (14,):
+        if state.shape != (1, self.action_dim) or action.shape != (self.action_dim,):
             raise ValueError(
-                f"rollout state/action must be (1, 14)/(14,), got {state.shape}/{action.shape}"
+                "rollout state/action must match the robot profile, got "
+                f"{state.shape}/{action.shape}"
             )
         frame: dict[str, Any] = {
             "observation.state": state[0].copy(),
@@ -190,11 +198,16 @@ def export_rollout_collection(
 ) -> dict[str, Any]:
     """Replay canonical rollout states and publish one multi-episode LeRobot dataset."""
 
-    def camera_factory(asset_id: str, _initial_state: Any):
+    def camera_factory(
+        asset_id: str,
+        _initial_state: Any,
+        profile: RobotProfile,
+    ):
         return _NewtonTrajectoryCamera(
             asset_id,
             assets_root=assets_root,
             device=device,
+            profile=profile,
         )
 
     return _export_canonical_collection(
@@ -278,8 +291,17 @@ def export_trajectory_dataset(
         "trajectories": trajectories,
     }
 
-    def camera_factory(asset_id: str, _initial_state: Any):
-        return _NewtonTrajectoryCamera(asset_id, assets_root=assets_root, device=device)
+    def camera_factory(
+        asset_id: str,
+        _initial_state: Any,
+        profile: RobotProfile,
+    ):
+        return _NewtonTrajectoryCamera(
+            asset_id,
+            assets_root=assets_root,
+            device=device,
+            profile=profile,
+        )
 
     _export_collection_manifest(
         root,
@@ -311,15 +333,17 @@ class _NewtonTrajectoryCamera:
         *,
         assets_root: str | Path,
         device: str,
+        profile: RobotProfile,
     ) -> None:
         from clothdojo.rollout.render import ShirtFlattenCameraObservation
-        from clothdojo.sim.scene import ShirtFlattenSpec, build_shirt_flatten
+        from clothdojo.sim.scene import ShirtFlattenSpec, build_scene
 
-        self._scene = build_shirt_flatten(
+        self._scene = build_scene(
             assets_root,
             spec=ShirtFlattenSpec(garment_id=asset_id, world_count=1),
             device=device,
             visuals=True,
+            robot_id=profile.robot_id,
         )
         self._runtime = _TrajectoryRenderState(self._scene)
         self._camera = ShirtFlattenCameraObservation(
@@ -340,7 +364,7 @@ def _export_canonical_collection(
     source: str | Path,
     output: str | Path,
     *,
-    camera_factory: Callable[[str, Any], Any],
+    camera_factory: Callable[[str, Any, RobotProfile], Any],
     rendering: dict[str, Any],
     repo_id: str | None,
     image_writer_threads: int,
@@ -376,7 +400,7 @@ def _export_collection_manifest(
     *,
     manifest: dict[str, Any],
     source_kind: str,
-    camera_factory: Callable[[str, Any], Any],
+    camera_factory: Callable[[str, Any, RobotProfile], Any],
     rendering: dict[str, Any],
     repo_id: str | None,
     image_writer_threads: int,
@@ -391,6 +415,7 @@ def _export_collection_manifest(
     scenario = manifest["scenario"]
     trajectories = manifest["trajectories"]
     first_reader = TrajectoryReader(root / trajectories[0]["path"])
+    collection_robot = _trajectory_robot(first_reader)
     export_fps = float(first_reader.manifest.control_fps) if fps is None else float(fps)
     sink = RolloutLeRobotWriter(
         output,
@@ -405,6 +430,8 @@ def _export_collection_manifest(
         repo_id=repo_id,
         image_writer_threads=image_writer_threads,
         selection_plan=selection_plan,
+        robot_type=collection_robot.robot_id,
+        arm_joint_names=collection_robot.arm_joint_names,
     )
     try:
         active_asset = None
@@ -413,6 +440,9 @@ def _export_collection_manifest(
             reader = TrajectoryReader(root / episode["path"])
             if float(reader.manifest.control_fps) != export_fps:
                 raise ValueError("trajectories use different control rates")
+            profile = _trajectory_robot(reader)
+            if profile.robot_id != collection_robot.robot_id:
+                raise ValueError("one export cannot mix robot profiles")
             action_start = int(episode.get("action_start", 0))
             action_end = int(
                 episode.get("action_end_exclusive", reader.manifest.action_count)
@@ -421,7 +451,11 @@ def _export_collection_manifest(
                 _close_camera(camera)
                 camera = None
                 active_asset = episode["asset_id"]
-                camera = camera_factory(active_asset, reader.state_at(action_start))
+                camera = camera_factory(
+                    active_asset,
+                    reader.state_at(action_start),
+                    profile,
+                )
             if hasattr(camera, "begin_episode"):
                 camera.begin_episode(
                     episode_index,
@@ -434,7 +468,7 @@ def _export_collection_manifest(
                 action_end_exclusive=action_end,
             ):
                 arm_q = np.asarray(sample.state.joint_q, dtype=np.float32)[
-                    np.asarray(_ARM_COORD_INDICES)
+                    np.asarray(profile.arm_coord_indices)
                 ][None, :]
                 observation = {
                     "observation.state": pack_policy_state(
@@ -444,7 +478,7 @@ def _export_collection_manifest(
                     **camera(sample.state),
                 }
                 policy_action = pack_policy_state(
-                    sample.action.joint_target.reshape(1, 12),
+                    sample.action.joint_target.reshape(1, -1),
                     sample.action.gripper_open_command.reshape(1, 2),
                 )[0]
                 sink.add_frame(observation, policy_action)
@@ -482,7 +516,15 @@ def _load_canonical_collection(root: Path) -> tuple[dict[str, Any], str]:
         if not isinstance(trajectories, list) or len(trajectories) != len(condition.cases):
             raise ValueError("evaluation condition trajectory index is incomplete")
         return condition.meta, "evaluation_condition"
+    if schema == "clothdojo_retarget_collection":
+        from clothdojo.data.retarget import load_retarget_collection
+
+        return load_retarget_collection(root), "retarget_collection"
     raise ValueError(f"unsupported canonical trajectory collection schema: {schema!r}")
+
+
+def _trajectory_robot(reader) -> RobotProfile:
+    return robot_profile(reader.manifest.scene.robot_id)
 
 
 def _trajectory_export_context(
@@ -523,26 +565,34 @@ def _task_prompt(task_name: str) -> str:
 
 
 def _restore_render_state(runtime, state) -> None:
+    import newton
+
     if int(runtime.scene.model.world_count) != 1:
         raise ValueError("single-state replay requires one Newton world")
-    robot = runtime.scene.robot
     world_offsets = np.asarray(runtime.scene.world_offsets, dtype=np.float32)
     if world_offsets.shape != (1, 3):
-        raise RuntimeError("render world offsets do not match the Newton world count")
+        raise RuntimeError("render world offset does not match one Newton world")
     for name in ("joint_q", "joint_qd", "body_q", "body_qd"):
-        target = robot.get_attribute(name, runtime.state_0)
-        values = np.asarray(getattr(state, name), dtype=np.float32)[None, None]
+        target = getattr(runtime.state_0, name)
+        values = np.asarray(getattr(state, name), dtype=np.float32)
         if name == "body_q":
             values = values.copy()
-            values[0, 0, :, :3] += world_offsets[0]
+            values[:, :3] += world_offsets[0]
         _assign_render_array(target, values, name=name)
-        robot.set_attribute(name, runtime.state_0, target)
-    particle_q = (
-        np.asarray(state.particle_q, dtype=np.float32) + world_offsets[0]
-    )
+    particle_q = np.asarray(state.particle_q, dtype=np.float32) + world_offsets[0]
     particle_qd = np.asarray(state.particle_qd, dtype=np.float32)
     _assign_render_array(runtime.state_0.particle_q, particle_q, name="particle_q")
     _assign_render_array(runtime.state_0.particle_qd, particle_qd, name="particle_qd")
+    # Match the legacy EpisodeV1 exporter: recorded generalized coordinates
+    # own articulated rendering, while body_q remains authoritative for every
+    # non-articulated body.  Persisted body arrays predate a guaranteed
+    # importer-stable articulation layout.
+    newton.eval_fk(
+        runtime.scene.model,
+        runtime.state_0.joint_q,
+        runtime.state_0.joint_qd,
+        runtime.state_0,
+    )
 
 
 def _assign_render_array(target, values: np.ndarray, *, name: str) -> None:
@@ -561,29 +611,41 @@ def _assign_render_array(target, values: np.ndarray, *, name: str) -> None:
     target.assign(np.ascontiguousarray(values))
 
 
-def _features(height: int, width: int) -> dict[str, dict[str, Any]]:
+def _features(
+    height: int,
+    width: int,
+    *,
+    arm_joint_names: tuple[str, ...] = ARM_JOINTS,
+) -> dict[str, dict[str, Any]]:
+    if not arm_joint_names or len(arm_joint_names) % 2:
+        raise ValueError("LeRobot features require equal non-empty left/right arms")
+    side = len(arm_joint_names) // 2
     state_names = (
-        *ARM_JOINTS[:6],
+        *arm_joint_names[:side],
         "left_gripper_open_state",
-        *ARM_JOINTS[6:],
+        *arm_joint_names[side:],
         "right_gripper_open_state",
     )
     action_names = tuple(
         name if name.endswith("_cmd") else f"{name}_target"
         for name in (
-            *ARM_JOINTS[:6],
+            *arm_joint_names[:side],
             "left_gripper_open_cmd",
-            *ARM_JOINTS[6:],
+            *arm_joint_names[side:],
             "right_gripper_open_cmd",
         )
     )
     features = {
         "observation.state": {
             "dtype": "float32",
-            "shape": (14,),
+            "shape": (len(arm_joint_names) + 2,),
             "names": state_names,
         },
-        "action": {"dtype": "float32", "shape": (14,), "names": action_names},
+        "action": {
+            "dtype": "float32",
+            "shape": (len(arm_joint_names) + 2,),
+            "names": action_names,
+        },
     }
     features.update(
         {
