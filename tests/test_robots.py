@@ -154,7 +154,7 @@ def test_task_profiles_are_independent_of_robot_profiles() -> None:
         build_scene("assets", robot_id=PIPER, task_name=SHIRT_FOLD)
 
 
-def test_x5_profile_reuses_the_old_validated_dual_installation() -> None:
+def test_x5_profile_uses_the_kai0_integrated_base_with_the_old_x5_model() -> None:
     profile = robot_profile(X5)
 
     assert profile.asset == "robots/x5/x5.usda"
@@ -162,7 +162,7 @@ def test_x5_profile_reuses_the_old_validated_dual_installation() -> None:
     assert len(profile.home_joint_q) == 16
     np.testing.assert_allclose(
         tuple(frame.position for frame in profile.root_body_frames),
-        ((0.25, 0.3, 0.8), (0.25, -0.3, 0.8)),
+        ((0.25, 0.28625912, 0.81), (0.25, -0.28625912, 0.81)),
     )
     assert profile.attach_frames[0].position == (0.152602, 0.0, -0.00014)
     assert profile.gripper_open_positions == (0.044, 0.044)
