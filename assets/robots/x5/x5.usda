@@ -2,8 +2,8 @@
 (
     defaultPrim = "Robot"
     customLayerData = {
-        string installation = "OpenDriveLab/kai0 complete base-integrated CAD and camera-bottom bracket, with the old ClothDojo X5 robot and RoboDojo camera mast"
-        string wristCameraVisual = "RoboDojo camera.glb converted to QEM-reduced visual-only meshes; camera links and semantic frames are unchanged"
+        string installation = "OpenDriveLab/kai0 integrated mount assembly with two complete RoboDojo ARX X5 references"
+        string robot = "RoboDojo Assets/Robots/x5/ARX.usd, including its camera_base and full-resolution camera geometry"
     }
     kilogramsPerUnit = 1
     metersPerUnit = 1

@@ -157,7 +157,7 @@ def test_task_profiles_are_independent_of_robot_profiles() -> None:
         build_scene("assets", robot_id=PIPER, task_name=SHIRT_FOLD)
 
 
-def test_x5_profile_uses_the_kai0_integrated_base_with_the_old_x5_model() -> None:
+def test_x5_profile_uses_the_kai0_integrated_base_with_robodojo_x5() -> None:
     profile = robot_profile(X5)
 
     assert profile.asset == "robots/x5/x5.usda"
@@ -172,20 +172,41 @@ def test_x5_profile_uses_the_kai0_integrated_base_with_the_old_x5_model() -> Non
     assert profile.body_parents.count(-1) == 2
 
 
-def test_x5_wrist_camera_housings_are_detailed_visual_only_meshes() -> None:
+def test_x5_references_complete_robodojo_arms_and_full_wrist_cameras() -> None:
     stage = Usd.Stage.Open(
         str(Path(__file__).parents[1] / "assets/robots/x5/x5.usda")
     )
 
-    for body_index in (8, 19):
+    assert not stage.GetPrimAtPath("/Robot/Installation/CameraStand")
+    for side in ("left", "right"):
+        arm = stage.GetPrimAtPath(f"/Robot/Arms/{side}")
+        assert arm
+        assert stage.GetPrimAtPath(f"/Robot/Arms/{side}/camera_base")
         prim = stage.GetPrimAtPath(
-            f"/Robot/Bodies/body_{body_index:03d}/Geometry/shape_000"
+            f"/Robot/Arms/{side}/camera/visuals/camera/World/mesh"
         )
         mesh = UsdGeom.Mesh(prim)
         assert prim.GetAttribute("clothdojo:shapeFlags").Get() == 1
-        assert not prim.HasAPI(UsdPhysics.CollisionAPI)
-        assert len(mesh.GetPointsAttr().Get()) > 10_000
-        assert len(mesh.GetFaceVertexCountsAttr().Get()) > 20_000
+        assert prim.GetAttribute("physics:collisionEnabled").Get() is False
+        assert len(mesh.GetPointsAttr().Get()) == 554_009
+        assert len(mesh.GetFaceVertexCountsAttr().Get()) == 231_186
+        mount_joint = UsdPhysics.FixedJoint(
+            stage.GetPrimAtPath(f"/Robot/Arms/{side}/joints/hand_to_camera_mount")
+        )
+        camera_joint = UsdPhysics.FixedJoint(
+            stage.GetPrimAtPath(f"/Robot/Arms/{side}/joints/camera_joint")
+        )
+        np.testing.assert_allclose(mount_joint.GetLocalPos0Attr().Get(), (0.057, 0.0, 0.0))
+        np.testing.assert_allclose(
+            camera_joint.GetLocalPos0Attr().Get(), (-0.0275, 0.0, 0.05)
+        )
+        root_joint = UsdPhysics.FixedJoint(
+            stage.GetPrimAtPath(f"/Robot/Arms/{side}/joints/root_joint")
+        )
+        assert root_joint
+        assert root_joint.GetBody1Rel().GetTargets() == [
+            root_joint.GetPath().GetParentPath().GetParentPath().AppendChild("base_link")
+        ]
 
 
 def test_ur5e_2f85_profile_keeps_closed_chain_coordinates_separate_from_dofs() -> None:

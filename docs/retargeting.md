@@ -191,23 +191,26 @@ scene、USD stage 和 renderer 中。
 ## 能力边界
 
 当前源机器人是 `piper`，目标机器人是 `aloha2`、`x5`、`panda` 或 `ur5e_2f85`。
-Newton 和 Isaac 路径都从目标
-MJCF 读取层级与 visual mesh，不维护第二套目标机器人 USD。Isaac 只做目标状态回放与
-高保真外观随机化，不会重新运行布料物理。
+Newton 仿真与 Isaac 渲染都读取同一套固定工作站 USD；retarget/逆动力学仍可使用固定
+MJCF 计算模型，但 MJCF 不再是第二套视觉真值。Isaac 只做目标状态回放与高保真外观
+随机化，不会重新运行布料物理。
 
 资产选择优先使用上游发布的完整双臂装配，而不是只看两个单臂型号。ALOHA 2 因此直接
 保留 Menagerie 的整套双臂与安装架。ARX 已销售名为 OpenPI 的双臂数据采集整机，公开配置
 包含双 6-DoF follower、leader arms、顶部和腕部相机；但截至当前固定版本，厂商公开仓库
 只有两台 X5 的 bimanual 控制入口和单臂 URDF，没有整机底座 mesh、统一 URDF/MJCF 或基座
 相对尺寸。当前 X5 profile 因而不能凭产品图片构造“官方套件”，仍将两台标准单臂
-安装在旧项目验证过的 `(0.25, ±0.30, 0.8) m`。一旦厂商发布 OpenPI 整机描述，应在 debug
+安装在 Kai0 CAD 测量位置 `(0.25, ±0.28625912, 0.81) m`。一旦厂商发布 OpenPI 整机描述，应在 debug
 阶段更新同名 profile，并在整套流程验证成熟后统一固定。
 
 X5 的完整双指和腕部相机几何来自固定 RoboDojo X5A；六轴真实位置限位来自固定
 `real-stanford/arx5-sdk`。RoboDojo URDF 的 `joint1..5` 使用 `[-10, 10] rad` 占位值，不能
-直接用于 IK。双臂间距、末端 attach frame、RoboDojo articulation drive 和夹爪范围从旧项目
-迁移，属于 ClothDojo robot profile 标定，不冒充 ARX 官方整机尺寸。MuJoCo 3.4 不读取源
-camera GLB，因此 MJCF 保留 camera body 和安装外参，支架转换为 STL，camera housing 使用
+直接用于 IK。工作站 USD 左右各引用一份 RoboDojo 官方 `ARX.usd`，不再从 MJCF 生成
+机械臂或将腕部 camera GLB 降面；`camera_base`、完整相机外壳及两个 fixed joint 均保留
+上游定义。双臂安装位、固定底座 joint、末端 attach frame、drive、夹爪 home 和数据集相机
+语义是 ClothDojo 的工作站覆盖层，不冒充 ARX 官方整机尺寸。MuJoCo 3.4 不能读取源 camera
+GLB，因此 `x5.xml` 只用于 retarget/动力学，不能作为 Isaac 工作站的视觉真值。
+
 Panda 保留 Menagerie 的官方几何、惯量、关节限位、equality constraint 和 tendon。
 标准资产描述单臂，因此双臂在 robot profile 中分别安装到 `(0.25, ±0.60, 0.8) m`；该安装
 位姿、语义 attach frame 与四路相机属于 ClothDojo，而不冒充 Franka 官方
