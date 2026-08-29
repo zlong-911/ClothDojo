@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
+from pxr import Usd, UsdGeom, UsdPhysics
 
 from clothdojo.robots import (
     ALOHA2,
@@ -167,6 +170,22 @@ def test_x5_profile_uses_the_kai0_integrated_base_with_the_old_x5_model() -> Non
     assert profile.attach_frames[0].position == (0.152602, 0.0, -0.00014)
     assert profile.gripper_open_positions == (0.044, 0.044)
     assert profile.body_parents.count(-1) == 2
+
+
+def test_x5_wrist_camera_housings_are_detailed_visual_only_meshes() -> None:
+    stage = Usd.Stage.Open(
+        str(Path(__file__).parents[1] / "assets/robots/x5/x5.usda")
+    )
+
+    for body_index in (8, 19):
+        prim = stage.GetPrimAtPath(
+            f"/Robot/Bodies/body_{body_index:03d}/Geometry/shape_000"
+        )
+        mesh = UsdGeom.Mesh(prim)
+        assert prim.GetAttribute("clothdojo:shapeFlags").Get() == 1
+        assert not prim.HasAPI(UsdPhysics.CollisionAPI)
+        assert len(mesh.GetPointsAttr().Get()) > 10_000
+        assert len(mesh.GetFaceVertexCountsAttr().Get()) > 20_000
 
 
 def test_ur5e_2f85_profile_keeps_closed_chain_coordinates_separate_from_dofs() -> None:
