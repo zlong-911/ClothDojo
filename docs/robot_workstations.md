@@ -45,6 +45,8 @@ local/world attach 和 USD 默认姿态与 Newton FK 的位置误差。
 不重新配色，不覆盖资产。桌面、桌腿与地面是只读审查背景；FR3 桌面孔板来自已认可的
 `tabletop_context_mm.stl`，随外部资产部署，不修改任务桌面碰撞体。
 ViewerGL 不等价于 Isaac RTX/MDL 的最终光照与材质效果。
+UR5e 腕部 D415 的源 STL 无 UV/贴图，仅有统一铝色；黑色前面板和镜头外观仍缺失。
+这是源外观资产的缺口，不是已恢复纹理或完成写实外观。
 
 ## 相机与运行边界
 

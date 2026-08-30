@@ -39,7 +39,10 @@ additional robot bodies, joints or control coordinates. The generated component
 preserves 1,034 adapter visual triangles with the DAE's white/green material
 split, all 186 collision triangles, and all **425,160 D415 visual triangles**.
 The camera material comes from upstream `aluminum`; no lens colors/textures
-are invented. The hidden D415 collision box uses the dimensions and offset
+are invented. This STL has no UV map or image texture, and its single material
+does not reproduce the real camera's black front panel and lens appearance.
+Physical geometry is installed, but full visual appearance is not complete.
+The hidden D415 collision box uses the dimensions and offset
 already defined by its official Xacro. It is not the visible camera model.
 
 The camera chain is: flange -> adapter -> D415 bottom screw
@@ -66,8 +69,8 @@ PickNik's adapter Xacro contains no inertial block. RealSense lists mass
 reliable and should not be used for modeling. We therefore do not merge that
 tensor or guess bracket density. Accessory shapes have zero authored mass and
 density, and all 42 existing body mass/COM/inertia values remain unchanged.
-This is a complete visual/kinematic camera installation, not a fully calibrated
-end-effector payload model or real-hardware mechanical certification.
+This is a geometric/kinematic camera installation, not complete appearance,
+a fully calibrated end-effector payload model or real-hardware mechanical certification.
 
 ## Offline rebuild
 

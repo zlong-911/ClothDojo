@@ -33,6 +33,8 @@ body、joint、geom、tendon 与 actuator 定义均来自上述两个标准模�
 两侧末端现采用 PickNik 公布的贴合法兰安装方式：7 mm 相机转接件、保留的
 Robotiq coupling、官方 RealSense D415 高模。不是自制外观块；adapter 的
 DAE 材质分区、D415 的全部 425,160 个三角形和来源碰撞模型均保留。
+D415 的源 STL 只有统一铝色，没有 UV/贴图或黑色面板、镜头分区材质；装配已接入，
+但真实相机外观尚未补齐，不能靠改渲染器恢复源文件不存在的细节。
 内部组件为 `components/wrist_camera.usdc`，唯一工作站入口仍是
 `ur5e_2f85.usda`。详见 [完整来源、装配链及边界](provenance/wrist_camera/README.md)。
 
