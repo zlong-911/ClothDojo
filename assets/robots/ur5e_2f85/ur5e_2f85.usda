@@ -1,12 +1,16 @@
 #usda 1.0
 (
-    defaultPrim = "Robot"
     customLayerData = {
+        string dynamicsUnits = "Newton USD revolute coefficients use degrees; source payload is legacy SI. 1e6 rad/s is an effectively unlimited fallback, not a hardware rating. Robotiq spring values come from fixed Menagerie 2f85.xml."
         string installation = "Dual UR5e plus Robotiq 2F-85 workstation at x=0.25, y=+-0.55, with the complete legacy RoboDojo D455 stand on the X5 column axis"
+        string wristCameraSource = "provenance/wrist_camera/README.md"
     }
+    defaultPrim = "Robot"
     kilogramsPerUnit = 1
     metersPerUnit = 1
-    subLayers = [@./payloads/workstation.usdc@]
+    subLayers = [
+        @./payloads/workstation.usdc@
+    ]
     upAxis = "Z"
 )
 
@@ -21,225 +25,464 @@ over "Robot"
         over "joint_001"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 43.63323129985824
-            float newton:limitDamping = 1.74532925199433
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 1.7453293
+            float newton:limitStiffness = 43.633232
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_002"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 43.63323129985824
-            float newton:limitDamping = 1.74532925199433
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 1.7453293
+            float newton:limitStiffness = 43.633232
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_003"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 43.63323129985824
-            float newton:limitDamping = 1.74532925199433
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 1.7453293
+            float newton:limitStiffness = 43.633232
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_004"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 43.63323129985824
-            float newton:limitDamping = 1.74532925199433
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 1.7453293
+            float newton:limitStiffness = 43.633232
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_005"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 43.63323129985824
-            float newton:limitDamping = 1.74532925199433
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 1.7453293
+            float newton:limitStiffness = 43.633232
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_006"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 43.63323129985824
-            float newton:limitDamping = 1.74532925199433
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 1.7453293
+            float newton:limitStiffness = 43.633232
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_009"
         {
-            float newton:damping = 0.001745329278001762
-            float newton:limitStiffness = 698.1317007977318
-            float newton:limitDamping = 6.981317007977318
-            float newton:velocityLimit = 57295779.51308233
+            float newton:damping = 0.0017453292
+            float newton:limitDamping = 6.981317
+            float newton:limitStiffness = 698.1317
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_010"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 698.1317007977318
-            float newton:limitDamping = 6.981317007977318
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 6.981317
+            float newton:limitStiffness = 698.1317
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_011"
         {
-            float newton:damping = 2.181661516228976e-05
-            float newton:limitStiffness = 43.63323129985824
-            float newton:limitDamping = 1.74532925199433
-            float newton:velocityLimit = 57295779.51308233
-            custom float mjc:stiffness = 0.05
             custom float mjc:springref = 2.62
+            custom float mjc:stiffness = 0.05
+            float newton:damping = 0.000021816615
+            float newton:limitDamping = 1.7453293
+            float newton:limitStiffness = 43.633232
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_012"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 698.1317007977318
-            float newton:limitDamping = 6.981317007977318
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 6.981317
+            float newton:limitStiffness = 698.1317
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_015"
         {
-            float newton:damping = 0.001745329278001762
-            float newton:limitStiffness = 698.1317007977318
-            float newton:limitDamping = 6.981317007977318
-            float newton:velocityLimit = 57295779.51308233
+            float newton:damping = 0.0017453292
+            float newton:limitDamping = 6.981317
+            float newton:limitStiffness = 698.1317
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_016"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 698.1317007977318
-            float newton:limitDamping = 6.981317007977318
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 6.981317
+            float newton:limitStiffness = 698.1317
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_017"
         {
-            float newton:damping = 2.181661516228976e-05
-            float newton:limitStiffness = 43.63323129985824
-            float newton:limitDamping = 1.74532925199433
-            float newton:velocityLimit = 57295779.51308233
-            custom float mjc:stiffness = 0.05
             custom float mjc:springref = 2.62
+            custom float mjc:stiffness = 0.05
+            float newton:damping = 0.000021816615
+            float newton:limitDamping = 1.7453293
+            float newton:limitStiffness = 43.633232
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_018"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 698.1317007977318
-            float newton:limitDamping = 6.981317007977318
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 6.981317
+            float newton:limitStiffness = 698.1317
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_024"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 43.63323129985824
-            float newton:limitDamping = 1.74532925199433
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 1.7453293
+            float newton:limitStiffness = 43.633232
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_025"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 43.63323129985824
-            float newton:limitDamping = 1.74532925199433
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 1.7453293
+            float newton:limitStiffness = 43.633232
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_026"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 43.63323129985824
-            float newton:limitDamping = 1.74532925199433
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 1.7453293
+            float newton:limitStiffness = 43.633232
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_027"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 43.63323129985824
-            float newton:limitDamping = 1.74532925199433
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 1.7453293
+            float newton:limitStiffness = 43.633232
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_028"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 43.63323129985824
-            float newton:limitDamping = 1.74532925199433
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 1.7453293
+            float newton:limitStiffness = 43.633232
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_029"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 43.63323129985824
-            float newton:limitDamping = 1.74532925199433
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 1.7453293
+            float newton:limitStiffness = 43.633232
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_032"
         {
-            float newton:damping = 0.001745329278001762
-            float newton:limitStiffness = 698.1317007977318
-            float newton:limitDamping = 6.981317007977318
-            float newton:velocityLimit = 57295779.51308233
+            float newton:damping = 0.0017453292
+            float newton:limitDamping = 6.981317
+            float newton:limitStiffness = 698.1317
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_033"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 698.1317007977318
-            float newton:limitDamping = 6.981317007977318
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 6.981317
+            float newton:limitStiffness = 698.1317
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_034"
         {
-            float newton:damping = 2.181661516228976e-05
-            float newton:limitStiffness = 43.63323129985824
-            float newton:limitDamping = 1.74532925199433
-            float newton:velocityLimit = 57295779.51308233
-            custom float mjc:stiffness = 0.05
             custom float mjc:springref = 2.62
+            custom float mjc:stiffness = 0.05
+            float newton:damping = 0.000021816615
+            float newton:limitDamping = 1.7453293
+            float newton:limitStiffness = 43.633232
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_035"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 698.1317007977318
-            float newton:limitDamping = 6.981317007977318
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 6.981317
+            float newton:limitStiffness = 698.1317
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_038"
         {
-            float newton:damping = 0.001745329278001762
-            float newton:limitStiffness = 698.1317007977318
-            float newton:limitDamping = 6.981317007977318
-            float newton:velocityLimit = 57295779.51308233
+            float newton:damping = 0.0017453292
+            float newton:limitDamping = 6.981317
+            float newton:limitStiffness = 698.1317
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_039"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 698.1317007977318
-            float newton:limitDamping = 6.981317007977318
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 6.981317
+            float newton:limitStiffness = 698.1317
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_040"
         {
-            float newton:damping = 2.181661516228976e-05
-            float newton:limitStiffness = 43.63323129985824
-            float newton:limitDamping = 1.74532925199433
-            float newton:velocityLimit = 57295779.51308233
-            custom float mjc:stiffness = 0.05
             custom float mjc:springref = 2.62
+            custom float mjc:stiffness = 0.05
+            float newton:damping = 0.000021816615
+            float newton:limitDamping = 1.7453293
+            float newton:limitStiffness = 43.633232
+            float newton:velocityLimit = 57295780
         }
+
         over "joint_041"
         {
             float newton:damping = 0
-            float newton:limitStiffness = 698.1317007977318
-            float newton:limitDamping = 6.981317007977318
-            float newton:velocityLimit = 57295779.51308233
+            float newton:limitDamping = 6.981317
+            float newton:limitStiffness = 698.1317
+            float newton:velocityLimit = 57295780
+        }
+
+        over "joint_007"
+        {
+            point3f physics:localPos0 = (0, 0.11399999, 0)
+        }
+
+        over "joint_030"
+        {
+            point3f physics:localPos0 = (0, 0.11399999, 0)
         }
     }
+
     over "Bodies"
     {
-        # Source 2f85.xml omits explicit inertia only for this mounting body.
-        # Preserve MuJoCo 3.11 geometry/density inference, not a measured rating.
         over "body_007"
         {
-            float physics:mass = 0.1500028551637798
-            point3f physics:centerOfMass = (-0.0003605835958214157, 8.536274800937428e-05, -5.919914145050651e-05)
-            float3 physics:diagonalInertia = (0.0001023454890179491, 5.35996872189825e-05, 5.217176310506675e-05)
-            quatf physics:principalAxes = (-0.0005222230216346269, 0.7060997694368749, 0.0005237112247473696, 0.7081119746275054)
+            point3f physics:centerOfMass = (-0.0003605836, 0.00008536275, -0.00005919914)
+            float3 physics:diagonalInertia = (0.00010234549, 0.000053599688, 0.000052171763)
+            float physics:mass = 0.15000285
+            quatf physics:principalAxes = (-0.000522223, 0.70609975, 0.0005237112, 0.708112)
+            matrix4d xformOp:transform = ( (0.0005461288555892452, 1.0000005810464287, -0.00016470763184628368, 0), (1.0000005496474031, -0.000547666507046074, -0.0002997877596087051, 0), (-0.0002998777929335006, -0.0001645436541011236, -1.0000014297907143, 0), (0.7001040449562036, 0.40006200077575194, 1.0468008172305874, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
         }
+
         over "body_028"
         {
-            float physics:mass = 0.1500028551637798
-            point3f physics:centerOfMass = (-0.0003605835958214157, 8.536274800937428e-05, -5.919914145050651e-05)
-            float3 physics:diagonalInertia = (0.0001023454890179491, 5.35996872189825e-05, 5.217176310506675e-05)
-            quatf physics:principalAxes = (-0.0005222230216346269, 0.7060997694368749, 0.0005237112247473696, 0.7081119746275054)
+            point3f physics:centerOfMass = (-0.0003605836, 0.00008536275, -0.00005919914)
+            float3 physics:diagonalInertia = (0.00010234549, 0.000053599688, 0.000052171763)
+            float physics:mass = 0.15000285
+            quatf physics:principalAxes = (-0.000522223, 0.70609975, 0.0005237112, 0.708112)
+            matrix4d xformOp:transform = ( (-0.000033186182010425114, 1.000001151191837, -0.000031101951165624087, 0), (1.0000011400622402, 0.00003087706443061222, -0.00015240358969492718, 0), (-0.0001524025933719031, -0.00003110683287843585, -1.0000022922801008, 0), (0.7000496449798538, -0.39998869699410905, 1.0468002188313033, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_008"
+        {
+            matrix4d xformOp:transform = ( (-1.000001444062527, 0.0005468974914618499, 0.0002997877889365933, 0), (0.0005468481313203441, 0.9999998369143748, -0.00016470765727188193, 0), (-0.00029987781817634226, -0.00016454368698093445, -1.0000015800465594, 0), (0.7001029124679529, 0.4000613749269818, 1.0430007827075771, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+
+            over "cam_left_wrist"
+            {
+                custom string clothdojo:cameraSource = "PickNik UR5e D415 nominal optical chain; source horizontal FOV 1.047rad at 640x480"
+                float focalLength = 13
+                float horizontalAperture = 15.007683
+                float verticalAperture = 11.255762
+                matrix4d xformOp:transform = ( (6.408524713800395e-7, 1.0000006401062342, 2.481752355044438e-9, 0), (0.9945209003180546, -6.661226203312677e-8, 0.10452901684287587, 0), (0.10452838021319003, 6.395566206918143e-7, -0.9945208337044878, 0), (0.07843692526777239, -0.03500017574182021, 0.0005021652935523618, 1) )
+                uniform token[] xformOpOrder = ["xformOp:transform"]
+            }
+        }
+
+        over "body_009"
+        {
+            matrix4d xformOp:transform = ( (-1.000001920899884, 0.0005468975647106092, 0.000299885700907933, 0), (0.0005468481884561768, 0.9999998369143748, -0.00016470770365968612, 0), (-0.00029997573014768197, -0.00016454367984293505, -1.0000020568839165, 0), (0.700103150886532, 0.43065339925330626, 0.9880916726383023, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_010"
+        {
+            matrix4d xformOp:transform = ( (-1.000002397737298, 0.0005468976249966796, 0.0002998261319821409, 0), (0.0005468482585546984, 0.9999998369143748, -0.00016470770698651452, 0), (-0.0002999161612218899, -0.00016454371576591145, -1.0000025337213305, 0), (0.7001216283264123, 0.4621541857961987, 0.9921865117343717, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_011"
+        {
+            matrix4d xformOp:transform = ( (-1.000001920899884, 0.0005468975647106092, 0.000299885700907933, 0), (0.0005468481884561768, 0.9999998369143748, -0.00016470770365968612, 0), (-0.00029997573014768197, -0.00016454367984293505, -1.0000020568839165, 0), (0.7000918260040246, 0.413251286769328, 0.9820985448154264, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_012"
+        {
+            matrix4d xformOp:transform = ( (-1.000002397737298, 0.0005468976249966796, 0.0002998261319821409, 0), (0.0005468482585546984, 0.9999998369143748, -0.00016470770698651452, 0), (-0.0002999161612218899, -0.00016454371576591145, -1.0000025337213305, 0), (0.7001106610717737, 0.46824530365508543, 0.9445894610675626, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_013"
+        {
+            matrix4d xformOp:transform = ( (-1.000002397737298, 0.0005468976249966796, 0.0002998261319821409, 0), (0.0005468482585546984, 0.9999998369143748, -0.00016470770698651452, 0), (-0.0002999161612218899, -0.00016454371576591145, -1.0000025337213305, 0), (0.7000962963523828, 0.44934300186675535, 0.9310725581439786, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_014"
+        {
+            matrix4d xformOp:transform = ( (-1.000002397737298, 0.0005468976249966796, 0.0002998261319821409, 0), (0.0005468482585546984, 0.9999998369143748, -0.00016470770698651452, 0), (-0.0002999161612218899, -0.00016454371576591145, -1.0000025337213305, 0), (0.7000962963523828, 0.44934300186675535, 0.9310725581439786, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_015"
+        {
+            matrix4d xformOp:transform = ( (0.9999998054859969, -0.0005468975647106092, -0.000299885700907933, 0), (-0.0005468481884561768, -1.0000019523282617, 0.00016470770365968612, 0), (-0.00029997573014768197, -0.00016454367984293505, -1.0000020568839165, 0), (0.7000696530761682, 0.36945114138167845, 0.9881017458232694, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_016"
+        {
+            matrix4d xformOp:transform = ( (0.9999998055038724, -0.0005468976249966796, -0.0002998261319821409, 0), (-0.0005468482585546984, -1.0000024291478002, 0.00016470770698651452, 0), (-0.0002999161612218899, -0.00016454371576591145, -1.0000025337213305, 0), (0.7000536790313684, 0.3379517257456158, 0.9922069561275296, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_017"
+        {
+            matrix4d xformOp:transform = ( (0.9999998054859969, -0.0005468975647106092, -0.000299885700907933, 0), (-0.0005468481884561768, -1.0000019523282617, 0.00016470770365968612, 0), (-0.00029997573014768197, -0.00016454367984293505, -1.0000020568839165, 0), (0.7000773420753442, 0.38685128691237913, 0.982102895954495, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_018"
+        {
+            matrix4d xformOp:transform = ( (0.9999998055038724, -0.0005468976249966796, -0.0002998261319821409, 0), (-0.0005468482585546984, -1.0000024291478002, 0.00016470770698651452, 0), (-0.0002999161612218899, -0.00016454371576591145, -1.0000025337213305, 0), (0.7000359168472253, 0.3318450808767651, 0.9446119916232877, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_019"
+        {
+            matrix4d xformOp:transform = ( (0.9999998055038724, -0.0005468976249966796, -0.0002998261319821409, 0), (-0.0005468482585546984, -1.0000024291478002, 0.00016470770698651452, 0), (-0.0002999161612218899, -0.00016454371576591145, -1.0000025337213305, 0), (0.7000422945442163, 0.3507428229097699, 0.9310888302120023, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_020"
+        {
+            matrix4d xformOp:transform = ( (0.9999998055038724, -0.0005468976249966796, -0.0002998261319821409, 0), (-0.0005468482585546984, -1.0000024291478002, 0.00016470770698651452, 0), (-0.0002999161612218899, -0.00016454371576591145, -1.0000025337213305, 0), (0.7000422945442163, 0.3507428229097699, 0.9310888302120023, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_006"
+        {
+            def Xform "WristCameraAssembly" (
+                references = @./components/wrist_camera.usdc@
+            )
+            {
+                matrix4d xformOp:transform = ( (1, 0, -0, 0), (-0, 2.220446049250313e-16, -1, 0), (0, 1, 2.220446049250313e-16, 0), (0, 0.1, 0, 1) )
+                uniform token[] xformOpOrder = ["xformOp:transform"]
+            }
+        }
+
+        over "body_029"
+        {
+            matrix4d xformOp:transform = ( (-1.0000028615077134, -0.000032064951624949445, 0.00015240363081774977, 0), (-0.00003206969202600989, 0.999999999002103, -0.00003110195550156368, 0), (-0.00015240263338440118, -0.000031106842654856845, -1.0000028615381282, 0), (0.700049048933406, -0.3999888162033986, 1.043000184308293, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+
+            over "cam_right_wrist"
+            {
+                custom string clothdojo:cameraSource = "PickNik UR5e D415 nominal optical chain; source horizontal FOV 1.047rad at 640x480"
+                float focalLength = 13
+                float horizontalAperture = 15.007683
+                float verticalAperture = 11.255762
+                matrix4d xformOp:transform = ( (9.003299184933015e-7, 1.0000009302059745, 3.915302517030938e-8, 0), (0.9945199599680125, -7.169975617441117e-8, 0.10452920856366757, 0), (0.10452828343828484, 9.67080005998184e-7, -0.9945198629050528, 0), (0.07843683329907487, -0.035000246876047, 0.0005021044600340002, 1) )
+                uniform token[] xformOpOrder = ["xformOp:transform"]
+            }
+        }
+
+        over "body_030"
+        {
+            matrix4d xformOp:transform = ( (-1.0000033383452411, -0.0000320649589912273, 0.0001524097025875073, 0), (-0.000032069699581135556, 0.9999999990021028, -0.00003110196275013771, 0), (-0.0001524087051539289, -0.00003110685009810783, -1.000003338375656, 0), (0.7000396910041763, -0.36938946050576676, 0.9880950081455733, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_031"
+        {
+            matrix4d xformOp:transform = ( (-1.000003815182826, -0.00003206496737863558, 0.00015235011605458116, 0), (-0.00003206970611513253, 0.9999999990021026, -0.00003110197105145405, 0), (-0.00015234911862077293, -0.00003110685648861824, -1.0000038152132409, 0), (0.7000392737716629, -0.3378891209977101, 0.9921941387760664, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_032"
+        {
+            matrix4d xformOp:transform = ( (-1.0000033383452411, -0.0000320649589912273, 0.0001524097025875073, 0), (-0.000032069699581135556, 0.9999999990021028, -0.00003110196275013771, 0), (-0.0001524087051539289, -0.00003110685009810783, -1.000003338375656, 0), (0.7000392737716629, -0.3867907385247182, 0.9820996153461958, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_033"
+        {
+            matrix4d xformOp:transform = ( (-1.000003815182826, -0.00003206496737863558, 0.00015235011605458116, 0), (-0.00003206970611513253, 0.9999999990021026, -0.00003110197105145405, 0), (-0.00015234911862077293, -0.00003110685648861824, -1.0000038152132409, 0), (0.7000319424003555, -0.33179180425576676, 0.9445979225742842, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_034"
+        {
+            matrix4d xformOp:transform = ( (-1.000003815182826, -0.00003206496737863558, 0.00015235011605458116, 0), (-0.00003206970611513253, 0.9999999990021026, -0.00003110197105145405, 0), (-0.00015234911862077293, -0.00003110685648861824, -1.0000038152132409, 0), (0.7000304522842361, -0.3506922881024312, 0.9310785758602644, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_035"
+        {
+            matrix4d xformOp:transform = ( (-1.000003815182826, -0.00003206496737863558, 0.00015235011605458116, 0), (-0.00003206970611513253, 0.9999999990021026, -0.00003110197105145405, 0), (-0.00015234911862077293, -0.00003110685648861824, -1.0000038152132409, 0), (0.7000304522842361, -0.3506922881024312, 0.9310785758602644, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_036"
+        {
+            matrix4d xformOp:transform = ( (0.9999999878715807, 0.0000320649589912273, -0.0001524097025875073, 0), (0.000032069699581135556, -1.0000033494757634, 0.00003110196275013771, 0), (-0.0001524087051539289, -0.00003110685009810783, -1.000003338375656, 0), (0.7000415983528091, -0.43059174817971696, 0.9880970347034956, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_037"
+        {
+            matrix4d xformOp:transform = ( (0.9999999878806631, 0.00003206496737863558, -0.00015235011605458116, 0), (0.00003206970611513253, -1.0000038263042654, 0.00003110197105145405, 0), (-0.00015234911862077293, -0.00003110685648861824, -1.0000038152132409, 0), (0.700043207678218, -0.46209173005990495, 0.9921980726826216, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_038"
+        {
+            matrix4d xformOp:transform = ( (0.9999999878715807, 0.0000320649589912273, -0.0001524097025875073, 0), (0.000032069699581135556, -1.0000033494757634, 0.00003110196275013771, 0), (-0.0001524087051539289, -0.00003110685009810783, -1.000003338375656, 0), (0.7000402274459793, -0.4131908575909566, 0.9821003902065779, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_039"
+        {
+            matrix4d xformOp:transform = ( (0.9999999878806631, 0.00003206496737863558, -0.00015235011605458116, 0), (0.00003206970611513253, -1.0000038263042654, 0.00003110197105145405, 0), (-0.00015234911862077293, -0.00003110685648861824, -1.0000038152132409, 0), (0.7000362339347793, -0.46819208663873185, 0.9446020948994185, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_040"
+        {
+            matrix4d xformOp:transform = ( (0.9999999878806631, 0.00003206496737863558, -0.00015235011605458116, 0), (0.00003206970611513253, -1.0000038263042654, 0.00003110197105145405, 0), (-0.00015234911862077293, -0.00003110685648861824, -1.0000038152132409, 0), (0.7000335517257644, -0.4492925862687062, 0.931081615697148, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_041"
+        {
+            matrix4d xformOp:transform = ( (0.9999999878806631, 0.00003206496737863558, -0.00015235011605458116, 0), (0.00003206970611513253, -1.0000038263042654, 0.00003110197105145405, 0), (-0.00015234911862077293, -0.00003110685648861824, -1.0000038152132409, 0), (0.7000335517257644, -0.4492925862687062, 0.931081615697148, 1) )
+            uniform token[] xformOpOrder = ["xformOp:transform"]
+        }
+
+        over "body_027"
+        {
+            def Xform "WristCameraAssembly" (
+                references = @./components/wrist_camera.usdc@
+            )
+            {
+                matrix4d xformOp:transform = ( (1, 0, -0, 0), (-0, 2.220446049250313e-16, -1, 0), (0, 1, 2.220446049250313e-16, 0), (0, 0.1, 0, 1) )
+                uniform token[] xformOpOrder = ["xformOp:transform"]
+            }
         }
     }
 }

@@ -5,9 +5,10 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import asdict, dataclass
+from functools import cache
 from pathlib import Path
 
-from clothdojo.rendering import DATASET_CAMERA_NAMES, CameraSpec
+from clothdojo.rendering import CAMERA_NAMES, DATASET_CAMERA_NAMES, CameraSpec
 
 if "pxr.Work" not in sys.modules:
     os.environ.setdefault("PXR_WORK_THREAD_LIMIT", "1")
@@ -16,6 +17,7 @@ PIPER = "piper"
 ALOHA2 = "aloha2"
 X5 = "x5"
 PANDA = "panda"
+FR3_DUO = "fr3_duo"
 UR5E_2F85 = "ur5e_2f85"
 
 
@@ -45,8 +47,8 @@ class RobotProfile:
     gripper_dof_indices: tuple[int, ...]
     joint_dof_count: int
     home_joint_q: tuple[float, ...]
-    gripper_closed_positions: tuple[float, float]
-    gripper_open_positions: tuple[float, float]
+    gripper_closed_positions: tuple[float, ...]
+    gripper_open_positions: tuple[float, ...]
     attach_frames: tuple[AttachFrame, AttachFrame]
     cameras: tuple[CameraSpec, ...]
     body_names: tuple[str, ...]
@@ -60,18 +62,26 @@ class RobotProfile:
             or len(self.arm_joint_names) % 2
         ):
             raise ValueError("robot workstation must define equal non-empty left/right arms")
-        if len(self.gripper_coord_indices) != 4:
-            raise ValueError("robot workstation must define four gripper coordinates")
+        if not self.gripper_coord_indices or len(self.gripper_coord_indices) % 2:
+            raise ValueError(
+                "robot workstation must define equal non-empty left/right grippers"
+            )
         if len(self.arm_dof_indices) != len(self.arm_coord_indices):
             raise ValueError("arm coordinate and velocity layouts must have equal size")
         if len(self.gripper_dof_indices) != len(self.gripper_coord_indices):
             raise ValueError("gripper coordinate and velocity layouts must have equal size")
+        if len(self.gripper_closed_positions) != self.gripper_coords_per_side:
+            raise ValueError("closed gripper positions do not match one articulation")
+        if len(self.gripper_open_positions) != self.gripper_coords_per_side:
+            raise ValueError("open gripper positions do not match one articulation")
         if self.joint_dof_count <= max(*self.arm_dof_indices, *self.gripper_dof_indices):
             raise ValueError("robot workstation velocity layout does not cover its DOFs")
         if len(self.home_joint_q) <= max(*self.arm_coord_indices, *self.gripper_coord_indices):
             raise ValueError("robot workstation home pose does not cover its coordinates")
-        if tuple(camera.name for camera in self.cameras) != DATASET_CAMERA_NAMES:
-            raise ValueError("robot workstation must define the four dataset cameras in order")
+        if tuple(camera.name for camera in self.cameras) not in (
+            CAMERA_NAMES, DATASET_CAMERA_NAMES,
+        ):
+            raise ValueError("robot workstation must define native policy/dataset cameras in order")
         if len(self.body_names) != len(self.body_parents) or not self.body_names:
             raise ValueError("robot workstation body topology is incomplete")
         if any(parent >= index for index, parent in enumerate(self.body_parents)):
@@ -82,6 +92,10 @@ class RobotProfile:
     @property
     def arm_dofs_per_side(self) -> int:
         return len(self.arm_coord_indices) // 2
+
+    @property
+    def gripper_coords_per_side(self) -> int:
+        return len(self.gripper_coord_indices) // 2
 
     def to_json_dict(self) -> dict:
         return asdict(self)
@@ -102,11 +116,11 @@ def _matrix_tuple(matrix) -> tuple[tuple[float, ...], ...]:
     )
 
 
-def _load_workstation(robot_id: str, asset: str) -> RobotProfile:
+def _load_workstation(robot_id: str, asset: str, assets_root: Path) -> RobotProfile:
     import newton_usd_schemas  # noqa: F401
     from pxr import Usd, UsdGeom
 
-    path = Path(__file__).resolve().parents[2] / "assets" / asset
+    path = assets_root / asset
     stage = Usd.Stage.Open(str(path))
     if stage is None or not stage.GetDefaultPrim():
         raise RuntimeError(f"could not open robot workstation USD: {path}")
@@ -122,7 +136,9 @@ def _load_workstation(robot_id: str, asset: str) -> RobotProfile:
     cameras = {}
     attach_frames = {}
     for prim in stage.Traverse():
-        if prim.IsA(UsdGeom.Camera) and prim.GetName() in DATASET_CAMERA_NAMES:
+        role = prim.GetAttribute("clothdojo:cameraName")
+        camera_name = str(role.Get()) if role and role.HasAuthoredValue() else prim.GetName()
+        if prim.IsA(UsdGeom.Camera) and camera_name in DATASET_CAMERA_NAMES:
             camera = UsdGeom.Camera(prim)
             horizontal_aperture = round(
                 float(camera.GetHorizontalApertureAttr().Get()), 6
@@ -130,20 +146,19 @@ def _load_workstation(robot_id: str, asset: str) -> RobotProfile:
             vertical_aperture = round(
                 float(camera.GetVerticalApertureAttr().Get()), 6
             )
-            if abs(vertical_aperture / horizontal_aperture - 0.75) > 1.0e-6:
-                raise RuntimeError(
-                    f"robot camera {prim.GetPath()} must use a 640:480 aperture ratio"
-                )
             parent_attr = prim.GetAttribute("clothdojo:parentBody")
             parent_body = str(parent_attr.Get()) if parent_attr and parent_attr.Get() else None
-            cameras[prim.GetName()] = CameraSpec(
-                name=prim.GetName(),
+            if camera_name in cameras:
+                raise RuntimeError(f"duplicate robot camera role {camera_name}: {path}")
+            cameras[camera_name] = CameraSpec(
+                name=camera_name,
                 parent_body=parent_body,
                 parent_from_camera=_matrix_tuple(
                     UsdGeom.Xformable(prim).GetLocalTransformation()
                 ),
                 focal_length=round(float(camera.GetFocalLengthAttr().Get()), 6),
                 horizontal_aperture=horizontal_aperture,
+                vertical_aperture=vertical_aperture,
             )
         role = prim.GetAttribute("clothdojo:role")
         if not role or role.Get() != "end_effector_attach":
@@ -163,8 +178,8 @@ def _load_workstation(robot_id: str, asset: str) -> RobotProfile:
                 float(rotation.GetReal()),
             ),
         )
-    if set(cameras) != set(DATASET_CAMERA_NAMES):
-        raise RuntimeError(f"robot workstation does not define all dataset cameras: {path}")
+    if set(cameras) not in (set(CAMERA_NAMES), set(DATASET_CAMERA_NAMES)):
+        raise RuntimeError(f"robot workstation does not define its native cameras: {path}")
     attach_order = tuple(
         name for name in _required(root, "clothdojo:bodyNames") if name in attach_frames
     )
@@ -207,7 +222,7 @@ def _load_workstation(robot_id: str, asset: str) -> RobotProfile:
             float(value) for value in _required(root, "clothdojo:gripperOpenPositions")
         ),
         attach_frames=tuple(attach_frames[name] for name in attach_order),
-        cameras=tuple(cameras[name] for name in DATASET_CAMERA_NAMES),
+        cameras=tuple(cameras[name] for name in DATASET_CAMERA_NAMES if name in cameras),
         body_names=body_names,
         body_parents=body_parents,
         root_body_frames=root_frames,
@@ -218,23 +233,30 @@ _ASSETS = {
     PIPER: "robots/piper/piper.usda",
     ALOHA2: "robots/aloha2/aloha2.usda",
     X5: "robots/x5/x5.usda",
-    PANDA: "robots/panda/panda.usda",
+    FR3_DUO: "robots/fr3_duo/fr3_duo.usda",
     UR5E_2F85: "robots/ur5e_2f85/ur5e_2f85.usda",
-}
-_PROFILES = {
-    robot_id: _load_workstation(robot_id, asset)
-    for robot_id, asset in _ASSETS.items()
 }
 
 
 def robot_ids() -> tuple[str, ...]:
-    return tuple(_PROFILES)
+    return tuple(_ASSETS)
 
 
-def robot_profile(robot_id: str) -> RobotProfile:
+@cache
+def _profile_at(robot_id: str, assets_root: Path) -> RobotProfile:
     try:
-        return _PROFILES[robot_id]
+        asset = _ASSETS[robot_id]
     except KeyError as exc:
         raise ValueError(
-            f"unknown robot {robot_id!r}; expected one of {', '.join(robot_ids())}"
+            f"unknown or retired robot {robot_id!r}; expected one of {', '.join(robot_ids())}"
         ) from exc
+    return _load_workstation(robot_id, asset, assets_root)
+
+
+def robot_profile(robot_id: str, *, assets_root: str | Path | None = None) -> RobotProfile:
+    """Read a deployed fixed workstation on demand, so deployment needs no USDs."""
+    root = (
+        Path(assets_root) if assets_root is not None
+        else Path(__file__).resolve().parents[2] / "assets"
+    )
+    return _profile_at(robot_id, root.expanduser().resolve())

@@ -36,12 +36,13 @@ def _write_gripper_targets(
     closed_positions: wp.array(dtype=float),
     open_positions: wp.array(dtype=float),
     joints_per_articulation: int,
+    joints_per_side: int,
     target: wp.array3d(dtype=float),
 ):
     world, joint = wp.tid()
-    side = joint // 2
     articulation = joint // joints_per_articulation
     articulation_joint = joint % joints_per_articulation
+    side = joint // joints_per_side
     amount = wp.clamp(openness[world, side], 0.0, 1.0)
     target[world, articulation, articulation_joint] = closed_positions[joint] + amount * (
         open_positions[joint] - closed_positions[joint]
@@ -242,8 +243,9 @@ class ShirtFlattenRuntime:
             raise RuntimeError("bimanual arm view differs from its robot profile")
         self._arm_joints_per_articulation = int(self._arm_targets.shape[2])
         self._gripper_targets = wp.empty_like(scene.grippers.get_attribute("joint_q", self.state_0))
-        if int(np.prod(self._gripper_targets.shape[1:])) != 4:
-            raise RuntimeError("bimanual gripper view must contain four coordinates")
+        self._gripper_action_count = len(scene.robot_profile.gripper_coord_indices)
+        if int(np.prod(self._gripper_targets.shape[1:])) != self._gripper_action_count:
+            raise RuntimeError("bimanual gripper view differs from its robot profile")
         self._gripper_joints_per_articulation = int(self._gripper_targets.shape[2])
         self._gripper_closed_positions = wp.array(
             scene.robot_profile.gripper_closed_positions * 2,
@@ -299,12 +301,13 @@ class ShirtFlattenRuntime:
         self.scene.arms.set_attribute("joint_target_q", self.control, self._arm_targets)
         wp.launch(
             _write_gripper_targets,
-            dim=(self.model.world_count, 4),
+            dim=(self.model.world_count, self._gripper_action_count),
             inputs=[
                 gripper_open,
                 self._gripper_closed_positions,
                 self._gripper_open_positions,
                 self._gripper_joints_per_articulation,
+                self.scene.robot_profile.gripper_coords_per_side,
             ],
             outputs=[self._gripper_targets],
             device=self.model.device,

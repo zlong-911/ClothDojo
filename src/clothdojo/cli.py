@@ -494,6 +494,39 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
         print(json.dumps(report, indent=2, sort_keys=True))
         return
+    if args.command == "assets":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.assets.workstations import (
+            inspect_workstation_assets,
+            prepare_workstation_assets,
+        )
+
+        if args.assets_command == "prepare-workstations":
+            report = prepare_workstation_assets(args.source, args.output)
+        elif args.assets_command == "check-workstations":
+            report = inspect_workstation_assets(args.assets)
+        else:
+            parser.error("an assets command is required")
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return
+    if args.command == "sim" and args.sim_command == "render-workstations":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.robots import robot_ids
+        from clothdojo.sim.workstation_review import render_workstation_review
+
+        selected = robot_ids() if args.robot == "all" else (args.robot,)
+        reports = [
+            render_workstation_review(
+                robot, assets_root=args.assets, output_dir=args.output,
+                device=args.device, egl_device=args.egl_device,
+                views=tuple(args.views),
+            )
+            for robot in selected
+        ]
+        print(json.dumps(reports, indent=2, sort_keys=True))
+        return
     if args.command == "sim" and args.sim_command == "check":
         from clothdojo.sim.check import run_shirt_flatten_check
 
@@ -537,6 +570,31 @@ def _parser() -> argparse.ArgumentParser:
     simulation_check.add_argument("--assets", default="assets")
     simulation_check.add_argument("--device", default="cuda:0")
     simulation_check.add_argument("--worlds", type=int, default=1)
+
+    from clothdojo.robots import robot_ids
+
+    render_workstations = simulation_commands.add_parser(
+        "render-workstations", help="render fixed USD home and attach frames with Newton"
+    )
+    render_workstations.add_argument("--robot", choices=("all", *robot_ids()), default="all")
+    render_workstations.add_argument("--assets", default="assets")
+    render_workstations.add_argument("--output", default="outputs/workstation_review")
+    render_workstations.add_argument("--device", default="cpu")
+    render_workstations.add_argument("--egl-device", type=int, default=0)
+    render_workstations.add_argument(
+        "--views", nargs="+",
+        choices=("overall", "left", "right", "left_wrist", "right_wrist"),
+        default=("overall", "left", "right"),
+        help="overall, attach close-ups, or wrist-camera installation close-ups",
+    )
+
+    assets = commands.add_parser("assets", help="deploy fixed workstation asset snapshots")
+    asset_commands = assets.add_subparsers(dest="assets_command")
+    prepare_workstations = asset_commands.add_parser("prepare-workstations")
+    prepare_workstations.add_argument("--source", required=True)
+    prepare_workstations.add_argument("--output", default="assets")
+    check_workstations = asset_commands.add_parser("check-workstations")
+    check_workstations.add_argument("--assets", default="assets")
 
     rollout = commands.add_parser("rollout", help="generate initial states and policy trajectories")
     rollout_commands = rollout.add_subparsers(dest="rollout_command")
@@ -871,7 +929,12 @@ def _parser() -> argparse.ArgumentParser:
     retarget.add_argument(
         "--target-robot",
         required=True,
-        choices=("aloha2", "x5", "panda", "ur5e_2f85"),
+        choices=(
+            "aloha2",
+            "x5",
+            "fr3_duo",
+            "ur5e_2f85",
+        ),
         help="fixed target robot profile",
     )
     retarget.add_argument(

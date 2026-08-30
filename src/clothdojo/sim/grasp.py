@@ -1,4 +1,4 @@
-"""A fixed-allocation connected cloth patch grasp for the Piper grippers."""
+"""A fixed-allocation connected cloth patch grasp for workstation grippers."""
 
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ _CAPTURE_RADIUS = 0.01
 # evaluates release every physics substep, so express the same grace period in
 # seconds and derive the fixed substep count when the scene is built.
 _RELEASE_COLLISION_OFF_TIME_S = 5.0 / 30.0
-_GRIPPER_COLLISION_LINKS = ("link6", "link7", "link8")
 ATTACH_OPENNESS_THRESHOLD = 0.1
 RELEASE_OPENNESS_THRESHOLD = 0.7
 
@@ -139,8 +138,10 @@ def _detect_region_particles(
 @wp.kernel
 def _update_grasp(
     gripper_q: wp.array3d(dtype=float),
-    gripper_lower: wp.array3d(dtype=float),
-    gripper_upper: wp.array3d(dtype=float),
+    gripper_closed: wp.array(dtype=float),
+    gripper_opened: wp.array(dtype=float),
+    joints_per_articulation: int,
+    joints_per_side: int,
     ee_body: wp.array2d(dtype=int),
     body_q: wp.array(dtype=wp.transform),
     particle_q: wp.array(dtype=wp.vec3),
@@ -171,14 +172,19 @@ def _update_grasp(
     joint_margin: float,
 ):
     world, side = wp.tid()
-    joint = side * 2
-    lower = gripper_lower[world, 0, joint]
-    upper = gripper_upper[world, 0, joint]
-    span = upper - lower
-    soft_lower = lower + joint_margin * span
-    soft_upper = upper - joint_margin * span
+    joint = side * joints_per_side
+    articulation = joint // joints_per_articulation
+    articulation_joint = joint % joints_per_articulation
+    closed = gripper_closed[joint]
+    opened = gripper_opened[joint]
+    # A signed span also handles grippers that open toward smaller angles.
+    # The soft endpoint margin retains the original Piper threshold behavior.
+    span = opened - closed
+    soft_closed = closed + joint_margin * span
+    soft_opened = opened - joint_margin * span
     openness = wp.clamp(
-        (gripper_q[world, 0, joint] - soft_lower) / (soft_upper - soft_lower),
+        (gripper_q[world, articulation, articulation_joint] - soft_closed)
+        / (soft_opened - soft_closed),
         0.0,
         1.0,
     )
@@ -559,8 +565,20 @@ class ParticleGrasp:
             dtype=wp.vec3,
             device=self.device,
         )
-        self._gripper_lower = scene.grippers.get_attribute("joint_limit_lower", self.model)
-        self._gripper_upper = scene.grippers.get_attribute("joint_limit_upper", self.model)
+        profile = scene.robot_profile
+        view_shape = scene.grippers.get_attribute("joint_limit_lower", self.model).shape
+        self._gripper_joints_per_articulation = int(view_shape[2])
+        self._gripper_joints_per_side = profile.gripper_coords_per_side
+        if int(np.prod(view_shape[1:])) != 2 * self._gripper_joints_per_side:
+            raise ValueError("grasp gripper view differs from its robot profile")
+        closed = np.asarray(profile.gripper_closed_positions * 2, dtype=np.float32)
+        opened = np.asarray(profile.gripper_open_positions * 2, dtype=np.float32)
+        if not np.isfinite(closed).all() or not np.isfinite(opened).all() or np.any(
+            np.abs(opened - closed) <= 1e-8
+        ):
+            raise ValueError("grasp gripper open/closed range is invalid")
+        self._gripper_closed = wp.array(closed, dtype=wp.float32, device=self.device)
+        self._gripper_opened = wp.array(opened, dtype=wp.float32, device=self.device)
         bodies_per_world = int(self.model.body_count) // self.world_count
         self._ee_body = wp.array(
             [
@@ -618,8 +636,10 @@ class ParticleGrasp:
             dim=(self.world_count, 2),
             inputs=[
                 self.scene.grippers.get_attribute("joint_q", rigid_state),
-                self._gripper_lower,
-                self._gripper_upper,
+                self._gripper_closed,
+                self._gripper_opened,
+                self._gripper_joints_per_articulation,
+                self._gripper_joints_per_side,
                 self._ee_body,
                 rigid_state.body_q,
                 particle_state.particle_q,
@@ -810,7 +830,7 @@ class ParticleGrasp:
         )
 
     def _gripper_collision_shapes(self) -> tuple[np.ndarray, np.ndarray, int]:
-        """Resolve each world's cloth-colliding wrist and finger shapes."""
+        """Resolve cloth-colliding descendants of each arm's last-joint body."""
 
         import newton
 
@@ -819,22 +839,47 @@ class ParticleGrasp:
         shape_body = np.asarray(self.model.shape_body.numpy(), dtype=np.int32)
         shape_world = np.asarray(self.model.shape_world.numpy(), dtype=np.int32)
         shape_flags = np.asarray(self.model.shape_flags.numpy(), dtype=np.int32)
-        body_labels = tuple(str(label) for label in self.model.body_label)
+        joint_world = np.asarray(self.model.joint_world.numpy(), dtype=np.int32)
+        joint_child = np.asarray(self.model.joint_child.numpy(), dtype=np.int32)
+        joint_q_start = np.asarray(self.model.joint_q_start.numpy(), dtype=np.int32)
+        profile = self.scene.robot_profile
+        bodies_per_world = len(profile.body_names)
+        if int(self.model.body_count) != self.world_count * bodies_per_world:
+            raise ValueError("grasp body layout differs from its robot profile")
+        wrist_coords = (
+            profile.arm_coord_indices[profile.arm_dofs_per_side - 1],
+            profile.arm_coord_indices[-1],
+        )
         selected: list[list[np.ndarray]] = []
         for world in range(self.world_count):
             world_sides = []
-            for side in ("left", "right"):
+            for wrist_coord in wrist_coords:
+                # Source joint labels differ across USD exporters. The same
+                # scalar coordinate contract already used for control is exact.
+                coordinate = world * len(profile.home_joint_q) + wrist_coord
+                matches = np.flatnonzero(
+                    (joint_world == world)
+                    & (joint_q_start[:-1] == coordinate)
+                    & (np.diff(joint_q_start) == 1)
+                )
+                if len(matches) != 1:
+                    raise ValueError(
+                        f"grasp requires one scalar wrist joint at coordinate {coordinate} "
+                        f"in world {world}, "
+                        f"got {len(matches)}"
+                    )
+                wrist_body = int(joint_child[matches[0]])
+                local_wrist = wrist_body - world * bodies_per_world
+                if not 0 <= local_wrist < bodies_per_world or int(body_world[wrist_body]) != world:
+                    raise ValueError("grasp wrist joint child does not belong to its world")
+                descendants = {local_wrist}
+                # Profile parents precede children, so a single pass includes
+                # fingers and camera mounts without relying on their names.
+                for body, parent in enumerate(profile.body_parents):
+                    if parent in descendants:
+                        descendants.add(body)
                 bodies = np.asarray(
-                    [
-                        body
-                        for body, label in enumerate(body_labels)
-                        if int(body_world[body]) == world
-                        and f"/{side}/" in label
-                        and any(
-                            label.endswith(f"/{link}")
-                            for link in _GRIPPER_COLLISION_LINKS
-                        )
-                    ],
+                    [world * bodies_per_world + body for body in sorted(descendants)],
                     dtype=np.int32,
                 )
                 shapes = np.flatnonzero(

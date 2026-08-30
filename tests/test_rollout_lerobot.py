@@ -15,7 +15,7 @@ from clothdojo.data.rollout import (
 )
 from clothdojo.robots import (
     ALOHA2,
-    PANDA,
+    FR3_DUO,
     robot_profile,
 )
 
@@ -103,11 +103,11 @@ def test_rollout_features_match_expert_policy_order() -> None:
     assert aloha_features["observation.state"]["names"][0] == "left/waist"
     assert aloha_features["action"]["names"][7] == "right/waist_target"
 
-    panda = robot_profile(PANDA)
-    panda_features = _features(480, 640, arm_joint_names=panda.arm_joint_names)
-    assert panda_features["observation.state"]["shape"] == (16,)
-    assert panda_features["observation.state"]["names"][7] == "left_gripper_open_state"
-    assert panda_features["action"]["names"][8] == "right/joint1_target"
+    fr3 = robot_profile(FR3_DUO)
+    fr3_features = _features(480, 640, arm_joint_names=fr3.arm_joint_names)
+    assert fr3_features["observation.state"]["shape"] == (16,)
+    assert fr3_features["observation.state"]["names"][7] == "left_gripper_open_state"
+    assert fr3_features["action"]["names"][8] == "right/fr3v2_joint1_target"
 
 
 def test_rollout_writer_can_publish_multiple_episodes(tmp_path) -> None:

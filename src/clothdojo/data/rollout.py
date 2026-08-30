@@ -416,6 +416,12 @@ def _export_collection_manifest(
     trajectories = manifest["trajectories"]
     first_reader = TrajectoryReader(root / trajectories[0]["path"])
     collection_robot = _trajectory_robot(first_reader)
+    missing_cameras = set(CAMERA_NAMES) - {camera.name for camera in collection_robot.cameras}
+    if missing_cameras:
+        raise ValueError(
+            f"robot {collection_robot.robot_id} cannot export the four-camera dataset: "
+            f"missing {', '.join(sorted(missing_cameras))}; native cameras are not duplicated"
+        )
     export_fps = float(first_reader.manifest.control_fps) if fps is None else float(fps)
     sink = RolloutLeRobotWriter(
         output,

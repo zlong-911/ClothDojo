@@ -1,4 +1,4 @@
-"""Dynamics-consistent counterfactual replay from Piper to ALOHA."""
+"""Dynamics-consistent counterfactual replay from Piper to fixed workstations."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from clothdojo.data.retarget_dynamics import (
 )
 from clothdojo.robots import (
     ALOHA2,
-    PANDA,
+    FR3_DUO,
     PIPER,
     UR5E_2F85,
     X5,
@@ -35,8 +35,6 @@ ALOHA_SOURCE_REVISION = "da76818e269b82289eba39808e2fb91d679d6994"
 ALOHA_MJCF_SHA256 = "8f8fe3a476ebbd9c7aa1b6940dda8f01da9b8b5adde2d52a614862c9069c2e7b"
 ALOHA_FRAME_MJCF_SHA256 = "6dc4abb19b1275c1ea413aab7991af99645170e96323cc75da663fe5d20b2445"
 ALOHA_LICENSE_SHA256 = "21868447315ac2b10e592d08958c1035b19a32cf39e9165b23033f68390098cb"
-PANDA_MJCF_SHA256 = "96ad67da03710f17f798c9478fd9e9efdf24a3bf8359f05e456dd9fb158ea273"
-PANDA_LICENSE_SHA256 = "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
 UR5E_2F85_MJCF_SHA256 = "d0399d65466c742fc5a6241a48feb12e034b47c77803c12b0021d560e02870bb"
 UR5E_LICENSE_SHA256 = "5ec71ccf66c8d03261448f2441a586765b97f2248c860a1ae19689fb1c45cee6"
 ROBOTIQ_2F85_LICENSE_SHA256 = "3d5edd18d1e22a17666e9bb84270171ed5ac90b192d24e0177fd171708ea2316"
@@ -79,12 +77,6 @@ _TARGET_ASSET_PINS = {
         (("LICENSE", ALOHA_LICENSE_SHA256),),
         ALOHA_FRAME_MJCF_SHA256,
     ),
-    PANDA: _AssetPins(
-        "google-deepmind/mujoco_menagerie",
-        ALOHA_SOURCE_REVISION,
-        PANDA_MJCF_SHA256,
-        (("LICENSE", PANDA_LICENSE_SHA256),),
-    ),
     UR5E_2F85: _AssetPins(
         "google-deepmind/mujoco_menagerie",
         ALOHA_SOURCE_REVISION,
@@ -106,7 +98,6 @@ _TARGET_ASSET_PINS = {
 }
 _TARGET_SOURCE_ASSETS = {
     ALOHA2: ("robots/aloha2/aloha.xml", "robots/aloha2/frame.xml"),
-    PANDA: ("robots/panda/panda.xml", None),
     UR5E_2F85: ("robots/ur5e_2f85/ur5e_2f85.xml", None),
     X5: ("robots/x5/x5.xml", None),
 }
@@ -164,6 +155,50 @@ class _Motion:
     approach_errors: np.ndarray
 
 
+def _validate_fr3_asset(assets_root: Path) -> dict:
+    """Read the accepted USD and its actual sources, without inventing an MJCF pin."""
+
+    from clothdojo.assets.workstations import _usd_dependencies
+
+    root = assets_root.resolve()
+    entry = root / "robots/fr3_duo/fr3_duo.usda"
+    payload = entry.parent / "payloads/workstation.usdc"
+    provenance = entry.parent / "provenance/dynamics.json"
+    files, _renderer_modules = _usd_dependencies(entry, root)
+    if payload not in files:
+        raise RuntimeError(f"FR3 workstation does not reference its accepted payload: {payload}")
+    # Use the same semantic reader as the runtime registry, including home,
+    # attach, gripper topology and cameras; do not maintain another definition.
+    robot_profile(FR3_DUO, assets_root=root)
+    with provenance.open(encoding="utf-8") as stream:
+        sources = json.load(stream)
+    if not isinstance(sources, dict):
+        raise ValueError(f"FR3 dynamics provenance must be an object: {provenance}")
+    for field in ("franka_revision", "robotiq_revision"):
+        if not isinstance(sources.get(field), str) or not sources[field].strip():
+            raise ValueError(f"FR3 dynamics provenance is missing {field}: {provenance}")
+    return {
+        "format": "usd",
+        "asset": entry.relative_to(root).as_posix(),
+        "payload": payload.relative_to(root).as_posix(),
+        "dynamics_provenance": provenance.relative_to(root).as_posix(),
+        "sources": {
+            "workstation": {
+                "source": "https://franka.de/3d-assets",
+                "asset": "FR3Duo_withVMkit.usd",
+            },
+            "arm_dynamics": {
+                "source": "frankarobotics/franka_description",
+                "revision": sources["franka_revision"],
+            },
+            "gripper_dynamics": {
+                "source": "PickNikRobotics/ros2_robotiq_gripper",
+                "revision": sources["robotiq_revision"],
+            },
+        },
+    }
+
+
 def retarget(
     source: str | Path,
     output: str | Path,
@@ -183,32 +218,39 @@ def retarget(
         raise FileExistsError(f"retarget output already exists: {output_root}")
     trajectories, is_collection = _source_trajectories(source_root)
     target_profile = robot_profile(target_robot)
-    try:
-        asset_pins = _TARGET_ASSET_PINS[target_profile.robot_id]
-    except KeyError as exc:
-        raise ValueError(f"retarget does not support {target_robot!r}") from exc
     assets_root = Path(assets).expanduser().resolve()
-    source_asset, source_installation = _TARGET_SOURCE_ASSETS[target_profile.robot_id]
-    mjcf = assets_root / source_asset
-    if not mjcf.is_file() or _sha256(mjcf) != asset_pins.mjcf_sha256:
-        raise FileNotFoundError(
-            f"pinned {target_profile.robot_id} asset is missing or modified: {mjcf}"
-        )
-    for license_name, expected_sha256 in asset_pins.licenses:
-        license_path = mjcf.parent / license_name
-        if not license_path.is_file() or _sha256(license_path) != expected_sha256:
+    target_asset_metadata = None
+    if target_profile.robot_id == FR3_DUO:
+        target_asset_metadata = _validate_fr3_asset(assets_root)
+    else:
+        try:
+            asset_pins = _TARGET_ASSET_PINS[target_profile.robot_id]
+        except KeyError as exc:
+            raise ValueError(f"retarget does not support {target_robot!r}") from exc
+        source_asset, source_installation = _TARGET_SOURCE_ASSETS[target_profile.robot_id]
+        mjcf = assets_root / source_asset
+        if not mjcf.is_file() or _sha256(mjcf) != asset_pins.mjcf_sha256:
             raise FileNotFoundError(
-                f"pinned {target_profile.robot_id} license is missing or modified: {license_path}"
+                f"pinned {target_profile.robot_id} asset is missing or modified: {mjcf}"
             )
-    installation = None
-    if asset_pins.installation_sha256 is not None:
-        if source_installation is None:
-            raise RuntimeError("target robot does not define its installation asset")
-        installation = assets_root / source_installation
-        if not installation.is_file() or _sha256(installation) != asset_pins.installation_sha256:
-            raise FileNotFoundError(
-                f"pinned installation asset is missing or modified: {installation}"
-            )
+        for license_name, expected_sha256 in asset_pins.licenses:
+            license_path = mjcf.parent / license_name
+            if not license_path.is_file() or _sha256(license_path) != expected_sha256:
+                raise FileNotFoundError(
+                    f"pinned {target_profile.robot_id} license is missing or modified: "
+                    f"{license_path}"
+                )
+        if asset_pins.installation_sha256 is not None:
+            if source_installation is None:
+                raise RuntimeError("target robot does not define its installation asset")
+            installation = assets_root / source_installation
+            if (
+                not installation.is_file()
+                or _sha256(installation) != asset_pins.installation_sha256
+            ):
+                raise FileNotFoundError(
+                    f"pinned installation asset is missing or modified: {installation}"
+                )
 
     staging = output_root.with_name(f".{output_root.name}.tmp-{uuid4().hex}")
     staging.mkdir(parents=True)
@@ -246,6 +288,7 @@ def retarget(
                     dynamics=dynamics,
                     position_tolerance_m=position_tolerance_m,
                     target_robot=target_robot,
+                    target_asset_metadata=target_asset_metadata,
                 )
             )
         if is_collection:
@@ -322,6 +365,7 @@ def _retarget_trajectory(
     dynamics: _Dynamics,
     position_tolerance_m: float,
     target_robot: str = ALOHA2,
+    target_asset_metadata: dict | None = None,
 ) -> dict:
     reader = TrajectoryReader(source)
     source_robot = reader.manifest.scene.robot_id
@@ -492,7 +536,7 @@ def _retarget_trajectory(
             "source_robot": source_robot,
             "target_robot": target_robot,
             "attach_alignment": "position_with_pregrasp_approach",
-            "target_asset": {
+            "target_asset": target_asset_metadata if target_asset_metadata is not None else {
                 "source": _TARGET_ASSET_PINS[target_robot].source,
                 "revision": _TARGET_ASSET_PINS[target_robot].revision,
                 "mjcf_sha256": _TARGET_ASSET_PINS[target_robot].mjcf_sha256,
@@ -531,7 +575,7 @@ def _retarget_trajectory(
         scene=type(reader.manifest.scene)(
             task_name=reader.manifest.scene.task_name,
             robot_id=target_profile.robot_id,
-            asset_fingerprints={
+            asset_fingerprints={} if target_robot == FR3_DUO else {
                 "robot_kinematics": _TARGET_ASSET_PINS[target_robot].mjcf_sha256,
                 **(
                     {
@@ -748,10 +792,10 @@ def _set_gripper_positions(
     open_positions: np.ndarray,
 ) -> None:
     openness = np.clip(open_state, 0.0, 1.0)
-    closed = np.asarray(closed_positions, dtype=np.float32).reshape(1, 1, 2)
-    opened = np.asarray(open_positions, dtype=np.float32).reshape(1, 1, 2)
+    closed = np.asarray(closed_positions, dtype=np.float32).reshape(1, 1, -1)
+    opened = np.asarray(open_positions, dtype=np.float32).reshape(1, 1, -1)
     positions = closed + openness[:, :, None] * (opened - closed)
-    joint_q[:, gripper_indices] = positions.reshape(len(joint_q), 4)
+    joint_q[:, gripper_indices] = positions.reshape(len(joint_q), len(gripper_indices))
 
 
 class _RobotKinematics:

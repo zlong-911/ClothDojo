@@ -139,8 +139,9 @@ class AlohaDynamicsRetargeter:
         self.dt = self.runtime.control_dt
         self.gripper = np.asarray(self.profile.gripper_coord_indices, dtype=np.int64)
         self.gripper_dof = profile_gripper_dof
-        self.gripper_leaders = self.gripper[[0, 2]]
-        self.gripper_dof_leaders = self.gripper_dof[[0, 2]]
+        gripper_stride = self.profile.gripper_coords_per_side
+        self.gripper_leaders = self.gripper[[0, gripper_stride]]
+        self.gripper_dof_leaders = self.gripper_dof[[0, gripper_stride]]
         self.attach_body_indices = tuple(
             self.profile.body_names.index(frame.parent_body) for frame in self.profile.attach_frames
         )

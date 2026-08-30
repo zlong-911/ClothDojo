@@ -122,6 +122,7 @@ def test_aloha_action_targets_follow_two_articulation_layout() -> None:
             wp.array([0.0079] * 4, dtype=wp.float32, device="cpu"),
             wp.array([0.037] * 4, dtype=wp.float32, device="cpu"),
             2,
+            2,
         ],
         outputs=[gripper_target],
         device="cpu",

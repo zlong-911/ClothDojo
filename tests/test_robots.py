@@ -8,10 +8,11 @@ from pxr import Usd, UsdGeom, UsdPhysics, UsdShade
 
 from clothdojo.robots import (
     ALOHA2,
-    PANDA,
+    FR3_DUO,
     PIPER,
     UR5E_2F85,
     X5,
+    robot_ids,
     robot_profile,
 )
 from clothdojo.tasks import SHIRT_FLATTEN, SHIRT_FOLD, task_profile
@@ -64,12 +65,15 @@ def test_piper_profile_reads_the_four_asset_authored_cameras() -> None:
 def test_every_robot_uses_the_same_asset_authored_workstation_contract() -> None:
     profiles = tuple(
         robot_profile(robot_id)
-        for robot_id in (PIPER, ALOHA2, X5, PANDA, UR5E_2F85)
+        for robot_id in (PIPER, ALOHA2, X5, FR3_DUO, UR5E_2F85)
     )
 
     assert all(profile.asset.endswith(".usda") for profile in profiles)
     assert all("newton_asset" not in profile.to_json_dict() for profile in profiles)
     assert all("installation_asset" not in profile.to_json_dict() for profile in profiles)
+    assert set(robot_ids()) == {PIPER, ALOHA2, X5, FR3_DUO, UR5E_2F85}
+    with pytest.raises(ValueError, match="retired"):
+        robot_profile("panda")
 
 
 def test_aloha_static_cameras_frame_both_robots_and_table_workspace() -> None:
@@ -133,39 +137,115 @@ def test_aloha_wrist_cameras_frame_open_fingers_at_a_readable_distance() -> None
         assert np.all((300.0 <= projected[:, 1]) & (projected[:, 1] <= 370.0))
 
 
-def test_panda_profile_uses_one_fixed_dual_arm_workstation() -> None:
-    profile = robot_profile(PANDA)
+def test_fr3_duo_profile_uses_one_shared_articulation_and_accepted_home() -> None:
+    profile = robot_profile(FR3_DUO)
 
-    assert profile.asset == "robots/panda/panda.usda"
+    assert profile.asset == "robots/fr3_duo/fr3_duo.usda"
     assert profile.arm_dofs_per_side == 7
     assert len(profile.arm_coord_indices) == 14
-    assert len(profile.home_joint_q) == 18
+    assert len(profile.home_joint_q) == profile.joint_dof_count == 26
+    assert profile.arm_coord_indices == tuple(range(7)) + tuple(range(13, 20))
+    assert profile.gripper_coord_indices == profile.gripper_dof_indices == (7, 20)
+    assert profile.gripper_coords_per_side == 1
+    assert profile.gripper_open_positions == (0.0,)
+    assert profile.gripper_closed_positions == pytest.approx((0.8000066006619417,))
+    assert profile.body_parents.count(-1) == 1
+    assert profile.body_names[0] == "fr3_duo_mount_mounting_point"
     np.testing.assert_allclose(
         tuple(frame.position for frame in profile.root_body_frames),
-        ((0.25, 0.55, 0.8), (0.25, -0.55, 0.8)),
+        ((0.13, 0.0, 0.95),), atol=2e-7,
     )
-    assert profile.body_parents.count(-1) == 2
+    np.testing.assert_allclose(
+        np.asarray(profile.home_joint_q)[list(profile.arm_coord_indices)],
+        (0.189741, -0.494105, -0.292850, -2.623325, 0.740971, 1.771250, 0.065042,
+         -0.020020, -0.474083, 0.139937, -2.615131, -0.792055, 1.719218, -0.018384086),
+        atol=2e-7, rtol=0,
+    )
+    assert tuple(frame.parent_body for frame in profile.attach_frames) == ("left/tcp", "right/tcp")
+    for frame in profile.attach_frames:
+        np.testing.assert_allclose(frame.position, (0.0, 0.0, 0.054319), atol=1e-9)
+        np.testing.assert_allclose(frame.rotation_xyzw, (0.0, 0.0, 0.0, 1.0), atol=1e-9)
 
 
-def test_aloha_usd_default_transforms_match_authored_home_fk() -> None:
+def test_fr3_duo_keeps_three_native_vmkit_cameras_without_an_extra_stand() -> None:
+    profile = robot_profile(FR3_DUO)
+    assert tuple(camera.name for camera in profile.cameras) == (
+        "cam_high", "cam_left_wrist", "cam_right_wrist",
+    )
+    assert tuple(camera.parent_body for camera in profile.cameras) == (
+        "zed_mini_left_camera_frame", "left/d405_color_frame", "right/d405_color_frame",
+    )
+    np.testing.assert_allclose(
+        [camera.focal_length for camera in profile.cameras], (2.4, 2.529072, 2.529072),
+        atol=1e-6,
+    )
+    np.testing.assert_allclose([camera.horizontal_aperture for camera in profile.cameras], 4.8)
+    np.testing.assert_allclose(
+        [camera.vertical_aperture for camera in profile.cameras], (2.7, 2.716981, 2.716981),
+        atol=1e-6,
+    )
+    stage = Usd.Stage.Open(str(Path(__file__).parents[1] / "assets" / profile.asset))
+    cameras = [prim for prim in stage.Traverse() if prim.IsA(UsdGeom.Camera)]
+    assert len(cameras) == 3
+    assert {prim.GetName() for prim in cameras} == {"head_cam", "left_wrist_cam", "right_wrist_cam"}
+    assert stage.GetPrimAtPath("/Robot/Installation/TableMount")
+    assert not stage.GetPrimAtPath("/Robot/Installation/CameraStand")
+    for prim in cameras:
+        name = prim.GetAttribute("clothdojo:cameraName").Get()
+        spec = next(camera for camera in profile.cameras if camera.name == name)
+        np.testing.assert_allclose(
+            spec.parent_from_camera, np.asarray(UsdGeom.Xformable(prim).GetLocalTransformation()).T,
+            atol=1e-7,
+        )
+
+
+def test_fr3_duo_attach_matches_ur5_robotiq_base_local_grasp_depth() -> None:
+    stage = Usd.Stage.Open(
+        str(Path(__file__).parents[1] / "assets" / robot_profile(FR3_DUO).asset)
+    )
+    cache = UsdGeom.XformCache()
+    bases = {
+        str(prim.GetAttribute("clothdojo:bodyLabel").Get()): prim
+        for prim in stage.Traverse()
+        if str(prim.GetAttribute("clothdojo:bodyLabel").Get()).endswith("/robotiq_85_base_link")
+    }
+    checked = set()
+    for prim in stage.Traverse():
+        if prim.GetAttribute("clothdojo:role").Get() != "end_effector_attach":
+            continue
+        side = str(prim.GetAttribute("clothdojo:parentBody").Get()).split("/")[0]
+        relative = cache.GetLocalToWorldTransform(prim) * cache.GetLocalToWorldTransform(
+            bases[f"{side}/robotiq_85_base_link"]
+        ).GetInverse()
+        np.testing.assert_allclose(relative.ExtractTranslation(), (0, 0, 0.157719), atol=5e-7)
+        np.testing.assert_allclose(np.asarray(relative)[:3, :3], np.eye(3), atol=1e-6)
+        checked.add(side)
+    assert checked == {"left", "right"}
+
+
+@pytest.mark.parametrize("robot_id", (ALOHA2, FR3_DUO))
+def test_workstation_usd_default_transforms_match_authored_home_fk(robot_id) -> None:
     import newton
     import warp as wp
     from pxr import Gf
 
     from clothdojo.sim.scene import _add_robot
 
-    profile = robot_profile(ALOHA2)
+    profile = robot_profile(robot_id)
     path = Path(__file__).parents[1] / "assets" / profile.asset
-    np.testing.assert_allclose(
-        np.asarray(profile.home_joint_q)[list(profile.arm_coord_indices)],
-        (0.0, -0.96, 1.16, 0.0, -0.3, 0.0) * 2,
-        rtol=0.0,
-        atol=1.0e-7,
-    )
+    if robot_id == ALOHA2:
+        np.testing.assert_allclose(
+            np.asarray(profile.home_joint_q)[list(profile.arm_coord_indices)],
+            (0.0, -0.96, 1.16, 0.0, -0.3, 0.0) * 2,
+            rtol=0.0,
+            atol=1.0e-7,
+        )
     with wp.ScopedDevice("cpu"):
         builder = newton.ModelBuilder()
         _add_robot(newton, wp, builder, path, profile, load_visual_shapes=False)
         model = builder.finalize(device="cpu")
+        if robot_id == FR3_DUO:
+            assert model.articulation_count == 1
         state = model.state()
         newton.eval_fk(model, model.joint_q, model.joint_qd, state)
         poses = dict(zip(profile.body_names, state.body_q.numpy(), strict=True))
@@ -191,22 +271,13 @@ def test_aloha_usd_default_transforms_match_authored_home_fk() -> None:
     assert checked == set(profile.body_names)
 
 
-def test_panda_and_ur5_usds_open_directly_in_their_legacy_home_poses() -> None:
-    panda = robot_profile(PANDA)
-    np.testing.assert_allclose(
-        np.asarray(panda.home_joint_q)[[6, 15]],
-        (-2.356097, -2.356097),
-        rtol=0.0,
-        atol=1.0e-7,
-    )
+def test_ur5_usd_opens_directly_in_its_legacy_home_pose() -> None:
     expected_positions = {
-        PANDA: {
-            "left/hand": (0.8044994, 0.5500001, 1.4245025),
-            "right/hand": (0.8044994, -0.5500000, 1.4245025),
-        },
         UR5E_2F85: {
-            "left/gripper_base": (0.7001050, 0.4000625, 1.0500008),
-            "right/gripper_base": (0.7000501, -0.3999886, 1.0500002),
+            # PickNik's flush camera adapter adds 7 mm along the tool axis;
+            # accepted arm joint home angles and the original coupling stay.
+            "left/gripper_base": (0.7001029, 0.4000614, 1.0430008),
+            "right/gripper_base": (0.7000490, -0.3999888, 1.0430002),
         },
     }
     for robot_id, positions in expected_positions.items():
@@ -234,12 +305,11 @@ def test_panda_and_ur5_usds_open_directly_in_their_legacy_home_poses() -> None:
             np.testing.assert_allclose(actual[name], expected, rtol=0.0, atol=2.0e-6)
 
 
-def test_panda_and_ur5_have_stable_bases_and_the_complete_legacy_camera_stand() -> None:
+def test_ur5_has_stable_bases_and_the_complete_legacy_camera_stand() -> None:
     project = Path(__file__).parents[1]
     camera_position = (0.3179578738615954, -0.0225080347427568, 1.34981)
 
     for robot_id, base_labels in (
-        (PANDA, ("left/link0", "right/link0")),
         (UR5E_2F85, ("left/base", "right/base")),
     ):
         profile = robot_profile(robot_id)

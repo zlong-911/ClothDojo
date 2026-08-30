@@ -6,7 +6,10 @@
 打开资产需要先部署完整 payload，不能只下载 Git 中的入口文件。
 
 本入口已经脱离 `outputs/`、旧项目绝对路径和官方源 USD 的运行时引用。
-它尚未加入 `RobotProfile` 注册表；本轮没有宣称完成 fold/flatten 的正式运行接入。
+它以 `fr3_duo` 加入 `RobotProfile`、Newton 控制与 retarget，替代已停用的 `panda`。
+保留官方头部和双腕三路相机、原始 aperture 及镜像夹爪 home；不额外制造 `cam_low`。
+现有四路 LeRobot 导出会在创建数据集前明确拒绝 FR3；不复制视角凑数。
+任务集成仍需要逐轨迹门禁，`shirt_fold` 场景尚未实现。
 旧 `outputs/fr3_duo_migration/` 是迁移过程与审计备份，不再是当前参数入口。
 
 ## 来源
@@ -22,6 +25,7 @@
 ## 复验
 
 ```bash
+.venv/bin/clothdojo sim render-workstations --robot fr3_duo --egl-device 1
 PXR_WORK_THREAD_LIMIT=1 CUDA_VISIBLE_DEVICES='' .venv/bin/pytest tests/test_robot_dynamics.py -q
 CUDA_VISIBLE_DEVICES='' .venv/bin/python scripts/robots/check_dynamics.py fr3_duo
 ```

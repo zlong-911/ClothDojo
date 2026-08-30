@@ -27,3 +27,23 @@ body、joint、geom、tendon 与 actuator 定义均来自上述两个标准模�
 网格和默认密度推导的质量 `0.150002855 kg`、COM 与完整惯量；不是厂家实测。
 来源及求解器限制见 `docs/robot_dynamics.md`，复现校对见
 `outputs/robot_dynamics_audit/others_audit.py`。
+
+## 固定腕部相机装配
+
+两侧末端现采用 PickNik 公布的贴合法兰安装方式：7 mm 相机转接件、保留的
+Robotiq coupling、官方 RealSense D415 高模。不是自制外观块；adapter 的
+DAE 材质分区、D415 的全部 425,160 个三角形和来源碰撞模型均保留。
+内部组件为 `components/wrist_camera.usdc`，唯一工作站入口仍是
+`ur5e_2f85.usda`。详见 [完整来源、装配链及边界](provenance/wrist_camera/README.md)。
+
+机械臂关节 home、底座、桌面安装和第三人称相机不变；相机板位于原 coupling
+之前，所以夹爪及 attach 随末端轴向外移 7 mm。两个原有 wrist Camera prim
+改用真实 D415 nominal optical chain，镜头比例来自 PickNik 的
+`horizontal_fov=1.047 rad`、640×480，不再是夹爪内部的虚拟观察点。
+
+新增外观/碰撞形状融合在既有 wrist body，不增加 body、joint 或控制坐标。
+**相机和支架的附加载荷尚未计入动力学**：PickNik 未给支架惯性，RealSense
+明确警告其示例 COM/tensor 不可靠。本次不猜质量或密度；原 42 个 body
+mass/COM/inertia 保持不变，因此不能称末端完整动力学校准已经完成。
+
+复验：`PXR_WORK_THREAD_LIMIT=1 CUDA_VISIBLE_DEVICES='' .venv/bin/pytest tests/test_ur5_wrist_camera.py tests/test_robot_dynamics.py -q`。

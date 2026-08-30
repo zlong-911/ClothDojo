@@ -3,8 +3,10 @@
 Retarget 的公开边界是固定 robot profile，而不是一组零散参数。当前入口把 Piper
 人工轨迹转换为 `aloha2` canonical trajectory collection；后续 Newton
 重渲染、LeRobot 导出和 Isaac RTX 随机化都从目标轨迹的 `robot_id` 读取同一套
-机械臂、关节投影、夹持语义和相机标定。当前正式目标为 ALOHA 2、ARX X5、Franka
-Panda 与 UR5e + Robotiq 2F-85。ALOHA、Panda 和 UR5e/2F-85 使用同一固定 MuJoCo
+机械臂、关节投影、夹持语义和相机标定。后续本体选型为 ALOHA 2、ARX X5、FR3 Duo
+与 UR5e + Robotiq 2F-85；FR3 Duo 已选定替代 Panda，Panda 不再用于新任务。
+FR3 Duo 已以 `fr3_duo` 接入固定工作站与 retarget；旧 Panda 不再注册或接受为新目标。
+ALOHA 和 UR5e/2F-85 使用同一固定 MuJoCo
 Menagerie commit；X5 使用固定 RoboDojo X5A 模型，并以固定 `arx5-sdk` 真机参数替换
 URDF 占位限位。
 
@@ -26,14 +28,11 @@ retarget 默认只对齐左右 attach 中心。每次 attach 前的夹爪闭合�
 该阶段完全由夹爪与 attach 事件推导，没有公开模式或固定秒数参数；最终释放后若不再抓取，
 也不会施加接近轴约束。
 
-Franka Panda 使用同一入口，只替换目标机器人：
-
-```bash
-.venv/bin/clothdojo data retarget \
-  --source data/collections/shirt_flatten \
-  --output data/retarget/shirt_flatten_panda \
-  --target-robot panda
-```
+FR3 Duo 使用 `--target-robot fr3_duo`，保留已确认的镜像夹爪 home 和官方三相机。
+双臂共用一棵 articulation，左右夹爪分别控制一个坐标，被动连杆由原约束驱动。
+来源记录固定 USD/payload 与惯性审计，不添加伪 MJCF 字段或新的资产 hash。
+当前四路 LeRobot 导出不接受缺少 `cam_low` 的 FR3；不复制相机凑数。
+控制布局已验证，但仍必须逐条通过 retarget 与接触门禁，不能据接入推断任务成功。
 
 UR5e + Robotiq 2F-85 同样只替换目标机器人：
 
@@ -190,7 +189,7 @@ scene、USD stage 和 renderer 中。
 
 ## 能力边界
 
-当前源机器人是 `piper`，目标机器人是 `aloha2`、`x5`、`panda` 或 `ur5e_2f85`。
+当前源机器人是 `piper`，目标机器人是 `aloha2`、`x5`、`fr3_duo` 或 `ur5e_2f85`。
 Newton 仿真与 Isaac 渲染都读取同一套固定工作站 USD；retarget/逆动力学仍可使用固定
 MJCF 计算模型，但 MJCF 不再是第二套视觉真值。Isaac 只做目标状态回放与高保真外观
 随机化，不会重新运行布料物理。
@@ -203,6 +202,11 @@ MJCF 计算模型，但 MJCF 不再是第二套视觉真值。Isaac 只做目标
 安装在 Kai0 CAD 测量位置 `(0.25, ±0.28625912, 0.81) m`。一旦厂商发布 OpenPI 整机描述，应在 debug
 阶段更新同名 profile，并在整套流程验证成熟后统一固定。
 
+第三人称相机复用旧项目 RoboDojo `camera_stand/00000` 的完整立柱、顶部转接件和 D455，
+删除其独立 90 × 300 mm 底板及 Kai0 原相机底部支架，将 66.1 mm 脚座按中央孔阵外侧四孔
+居中放置在 Kai0 一体化底板上。RoboDojo 54.1 mm 方形四孔与 Kai0 的六孔阵列并不机械
+兼容；该固定位置是服务仿真的装配推断，不表示真机无需转接板即可安装。
+
 X5 的完整双指和腕部相机几何来自固定 RoboDojo X5A；六轴真实位置限位来自固定
 `real-stanford/arx5-sdk`。RoboDojo URDF 的 `joint1..5` 使用 `[-10, 10] rad` 占位值，不能
 直接用于 IK。工作站 USD 左右各引用一份 RoboDojo 官方 `ARX.usd`，不再从 MJCF 生成
@@ -211,13 +215,10 @@ X5 的完整双指和腕部相机几何来自固定 RoboDojo X5A；六轴真实�
 语义是 ClothDojo 的工作站覆盖层，不冒充 ARX 官方整机尺寸。MuJoCo 3.4 不能读取源 camera
 GLB，因此 `x5.xml` 只用于 retarget/动力学，不能作为 Isaac 工作站的视觉真值。
 
-Panda 保留 Menagerie 的官方几何、惯量、关节限位、equality constraint 和 tendon。
-标准资产描述单臂，因此双臂在 robot profile 中分别安装到 `(0.25, ±0.60, 0.8) m`；该安装
-位姿、语义 attach frame 与四路相机属于 ClothDojo，而不冒充 Franka 官方
-工作站。Menagerie 使用 affine arm actuator 与 tendon gripper，Newton 1.5 不能直接把它们
-写入 `joint_target_q`；profile 因此保存由官方 actuator 方程严格展开得到的等价标量 position
-drive。上游 actuator metadata 在 Newton scene 中被替换，避免原 actuator 与等价 drive
-重复施力；Isaac 外观仍读取未修改的上游 MJCF。
+FR3 Duo 复用官方完整 VMkit 双臂几何、腕部/头部相机和已确认的桌面安装。
+主臂惯性来自固定 fr3v2 description，Robotiq 惯性来自逐顶点匹配的 PickNik 模型；
+安装、镜像 home、attach 和调试驱动属于项目覆盖，不冒充厂家装配或控制标定。
+固定工作站部署与渲染见 [robot_workstations.md](robot_workstations.md)。
 
 UR5e 与 Robotiq 2F-85 分别保留 Menagerie 的标准单臂和夹爪模型。项目固定的组合 MJCF
 只通过 MuJoCo `MjSpec.attach` 把 2F-85 挂到 UR5e 的官方 `attachment_site`，并把

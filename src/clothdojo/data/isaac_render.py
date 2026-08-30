@@ -626,9 +626,11 @@ def _author_cameras(stage, body_labels, cameras) -> tuple[str, ...]:
 
     requested_names = tuple(view.name for view in cameras)
     embedded = {
-        prim.GetName(): str(prim.GetPath())
+        str(prim.GetAttribute("clothdojo:cameraName").Get() or prim.GetName()): str(prim.GetPath())
         for prim in stage.Traverse()
-        if prim.IsA(UsdGeom.Camera) and prim.GetName() in requested_names
+        if prim.IsA(UsdGeom.Camera)
+        and str(prim.GetAttribute("clothdojo:cameraName").Get() or prim.GetName())
+        in requested_names
     }
     if embedded:
         if set(embedded) != set(requested_names):
@@ -663,7 +665,7 @@ def _author_cameras(stage, body_labels, cameras) -> tuple[str, ...]:
         UsdGeom.Xformable(camera).AddTransformOp().Set(transform)
         camera.CreateFocalLengthAttr(view.focal_length)
         camera.CreateHorizontalApertureAttr(view.horizontal_aperture)
-        camera.CreateVerticalApertureAttr(view.horizontal_aperture * 480.0 / 640.0)
+        camera.CreateVerticalApertureAttr(view.vertical_aperture)
         camera.CreateClippingRangeAttr(Gf.Vec2f(0.01, 100.0))
         paths.append(path)
     return tuple(paths)

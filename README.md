@@ -16,6 +16,10 @@ Newton、训练、评测和默认数据导出都使用 `requirements.txt`。可�
 
 ## 统一入口
 
+机器人固定工作站为 `piper`、`aloha2`、`x5`、`ur5e_2f85`、`fr3_duo`；Panda 已停用。
+安装、home、attach、物理与相机由各自同名 USD 持有，不从任务配置重新拼装。
+资产部署与整体/attach 渲染见 [工作站说明](docs/robot_workstations.md)。
+
 所有正式功能都从一个 `clothdojo` CLI 进入：
 
 ```bash

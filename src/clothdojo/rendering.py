@@ -21,6 +21,7 @@ class CameraSpec:
     parent_from_camera: tuple[tuple[float, float, float, float], ...]
     focal_length: float
     horizontal_aperture: float
+    vertical_aperture: float
 
 
 def policy_observation_settings() -> dict[str, object]:

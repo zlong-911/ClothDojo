@@ -14,9 +14,9 @@
 | `paper/` | 论文工程；中文初稿为 `paper/draft_zh.md`，LaTeX 入口为 `paper/main.tex` |
 | `configs/` | 运行与实验配置 |
 | `assets/` | 项目资产 |
-| `assets/robots/` | Piper、ALOHA2、X5、Panda、UR5e_2F85 的固定源资产、许可证与完整工作站 USD |
-| `assets/robots/<robot>/<robot>.usda` | 每种机器人唯一的双臂工作站入口；固定本体安装、物理、reset/attach、拓扑和四路相机 |
-| `assets/robots/fr3_duo/fr3_duo.usda` | 已接受 FR3 Duo 装配与动力学快照；尚未注册为任务运行 profile |
+| `assets/robots/` | Piper、ALOHA2、X5、UR5e_2F85、FR3 Duo 的固定源资产、许可证与完整工作站 USD；Panda 停用 |
+| `assets/robots/<robot>/<robot>.usda` | 每种机器人唯一的双臂工作站入口；固定安装、物理、home/attach、拓扑和原生相机 |
+| `assets/robots/fr3_duo/fr3_duo.usda` | 已接受 FR3 Duo 桌面装配、原生三相机和动力学快照，正式 profile 为 fr3_duo |
 | `scripts/robots/check_dynamics.py` | 只读机器人 USD 的空载/接触动态复验；结果写入 outputs |
 | `configs/rendering/materials.json` | 高质量视觉材质与 HDRI 的固定选择清单 |
 | `data/` | 正式数据与模型产物 |
@@ -31,8 +31,10 @@
 | `src/clothdojo/cli.py` | 用户命令入口 |
 | `src/clothdojo/diagnostics.py` | 环境诊断 |
 | `src/clothdojo/assets/` | 资产目录与元数据 |
+| `src/clothdojo/assets/workstations.py` | 固定工作站部署、USD/纹理引用闭包检查；由 assets prepare/check-workstations 调用 |
 | `src/clothdojo/assets/materials.py` | Poly Haven 固定清单、下载校验与物理纹理尺度 |
 | `src/clothdojo/sim/` | 仿真场景与运行时 |
+| `src/clothdojo/sim/workstation_review.py` | sim render-workstations 的统一 Newton 整体/home/attach 审查渲染 |
 | `src/clothdojo/rendering.py` | 渲染视角接口与策略观测尺寸 |
 | `src/clothdojo/robots.py` | 从五套工作站 USD 读取控制布局、安装根、attach、相机与回放拓扑 |
 | `src/clothdojo/tasks.py` | 与机器人独立的任务身份及场景可用性 |
@@ -75,6 +77,7 @@
 - [`benchmark.md`](benchmark.md)：严重褶皱服装展平 benchmark 的数据路径与实验规划。
 - [`retargeting.md`](retargeting.md)：机械臂 retarget 的使用入口、产物语义与验证边界。
 - [`robot_dynamics.md`](robot_dynamics.md)：机器人 USD 动力学来源、单位与运行时适用边界。
+- [`robot_workstations.md`](robot_workstations.md)：五套固定工作站、外部 payload 部署与统一渲染入口。
 - [`reference_index.md`](reference_index.md)：官方文档与源码入口。
 - [`compute_hosts.md`](compute_hosts.md)：远端计算节点。
 - [`experiments/rapid_iteration_evaluation.md`](experiments/rapid_iteration_evaluation.md)：

@@ -123,7 +123,7 @@ def _build_shirt_flatten(
 
     spec = spec or ShirtFlattenSpec()
     assets_root = Path(assets_root).expanduser().absolute()
-    profile = robot_profile(robot_id)
+    profile = robot_profile(robot_id, assets_root=assets_root)
     robot_path = assets_root / profile.asset
     if not robot_path.is_file():
         raise FileNotFoundError(f"missing {profile.robot_id} asset: {robot_path}")
@@ -381,15 +381,17 @@ def _add_robot(
         prim_path: stage.GetPrimAtPath(prim_path).GetAttribute("clothdojo:shapeFlags")
         for prim_path in path_shape_map
     }
-    if shape_flags and all(
-        attribute and attribute.HasAuthoredValue() for attribute in shape_flags.values()
-    ):
+    if shape_flags and embedded_shape_contract:
         particle_bit = int(newton.ShapeFlags.COLLIDE_PARTICLES)
         collision_shapes = []
         for prim_path, shape in path_shape_map.items():
             prim = stage.GetPrimAtPath(prim_path)
             shape = int(shape)
-            flags = int(shape_flags[prim_path].Get())
+            override = shape_flags[prim_path]
+            flags = (
+                int(override.Get()) if override and override.HasAuthoredValue()
+                else int(builder.shape_flags[shape])
+            )
             if not robot_cloth_collision:
                 flags &= ~particle_bit
             builder.shape_flags[shape] = flags
@@ -456,15 +458,22 @@ def _add_robot(
     if not collision_shapes or body_end == body_start:
         raise RuntimeError("robot USD did not provide rigid bodies and collision shapes")
 
-    per_side = profile.arm_dofs_per_side
+    shared_articulation = profile.body_parents.count(-1) == 1
+    per_view = len(profile.arm_coord_indices) if shared_articulation else profile.arm_dofs_per_side
     arm_coords = [q_start + value for value in profile.arm_coord_indices]
     arm_joints = _joint_indices_for_coordinates(
-        newton, builder, arm_coords[:per_side]
+        newton, builder, arm_coords[:per_view]
     )
     gripper_joints = _joint_indices_for_coordinates(
         newton,
         builder,
-        [q_start + value for value in profile.gripper_coord_indices[:2]],
+        [
+            q_start + value
+            for value in profile.gripper_coord_indices[
+                : (len(profile.gripper_coord_indices) if shared_articulation
+                   else profile.gripper_coords_per_side)
+            ]
+        ],
     )
     end_effectors = _body_indices(
         builder, tuple(frame.parent_body for frame in profile.attach_frames)

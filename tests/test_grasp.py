@@ -61,8 +61,8 @@ def test_grasp_matches_expert_four_seed_two_ring_patch_and_release() -> None:
         device=device,
     )
     gripper_q = wp.array([[[0.0044, -0.04, 0.04, -0.04]]], dtype=wp.float32, device=device)
-    lower = wp.array([[[0.0, -0.04, 0.0, -0.04]]], dtype=wp.float32, device=device)
-    upper = wp.array([[[0.04, 0.0, 0.04, 0.0]]], dtype=wp.float32, device=device)
+    closed = wp.array([0.0, 0.0, 0.0, 0.0], dtype=wp.float32, device=device)
+    open_positions = wp.array([0.04, -0.04, 0.04, -0.04], dtype=wp.float32, device=device)
     body_q = wp.array([wp.transform_identity()], dtype=wp.transform, device=device)
 
     def update() -> None:
@@ -71,8 +71,10 @@ def test_grasp_matches_expert_four_seed_two_ring_patch_and_release() -> None:
             dim=(1, 2),
             inputs=[
                 gripper_q,
-                lower,
-                upper,
+                closed,
+                open_positions,
+                4,
+                2,
                 wp.array([[0, 0]], dtype=wp.int32, device=device),
                 body_q,
                 particle_q,
@@ -168,7 +170,18 @@ def test_grasp_matches_expert_four_seed_two_ring_patch_and_release() -> None:
 def test_gripper_collision_shapes_are_isolated_by_world_side_and_link() -> None:
     grasp = ParticleGrasp.__new__(ParticleGrasp)
     grasp.world_count = 2
+    grasp.scene = SimpleNamespace(robot_profile=SimpleNamespace(
+        body_names=("left/link6", "left/link7", "right/link6", "left/link5"),
+        body_parents=(-1, 0, -1, -1),
+        home_joint_q=(0.0, 0.0),
+        arm_coord_indices=(0, 1),
+        arm_dofs_per_side=1,
+    ))
     grasp.model = SimpleNamespace(
+        body_count=8,
+        joint_q_start=wp.array([0, 1, 2, 3, 4], dtype=wp.int32, device="cpu"),
+        joint_world=wp.array([0, 0, 1, 1], dtype=wp.int32, device="cpu"),
+        joint_child=wp.array([0, 2, 4, 6], dtype=wp.int32, device="cpu"),
         body_label=[
             "/robot/left/link6",
             "/robot/left/link7",

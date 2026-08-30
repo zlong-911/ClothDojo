@@ -129,6 +129,14 @@ class ShirtFlattenCameraObservation:
             raise ValueError(
                 "camera_names must be policy cameras, dataset cameras or only cam_high"
             )
+        cameras_by_name = {camera.name: camera for camera in self.robot_profile.cameras}
+        missing = tuple(name for name in self.camera_names if name not in cameras_by_name)
+        if missing:
+            raise ValueError(
+                f"robot {self.robot_profile.robot_id} does not define cameras: "
+                f"{', '.join(missing)}"
+            )
+        cameras = tuple(cameras_by_name[name] for name in self.camera_names)
         self._sensor = SensorTiledCamera(model=self.model)
         self._sensor.default_render_config.enable_backface_culling = False
         self._sensor.default_render_config.enable_shadows = True
@@ -137,49 +145,37 @@ class ShirtFlattenCameraObservation:
         self._sensor.utils.create_default_light(enable_shadows=True)
         self._smooth_cloth = _SmoothClothVisual(self._sensor, scene)
 
-        cameras_by_name = {camera.name: camera for camera in self.robot_profile.cameras}
-        if set(self.camera_names) - cameras_by_name.keys():
-            raise ValueError(
-                f"robot {self.robot_profile.robot_id} does not define all cameras"
-            )
-        cameras = tuple(cameras_by_name[name] for name in self.camera_names)
-        fovs = tuple(
-            _vertical_fov(camera.focal_length, camera.horizontal_aperture)
-            for camera in cameras
-        )
-        self._rays = self._sensor.utils.compute_camera_rays_pinhole(
-            self.width,
-            self.height,
-            camera_fovs=fovs,
-        )
+        self._rays = _camera_rays(self._sensor.utils, cameras, self.width, self.height)
         world_offsets = np.asarray(scene.world_offsets, dtype=np.float32)
         if world_offsets.shape != (self.world_count, 3):
             raise RuntimeError("camera world offsets do not match the Newton world count")
         local = tuple(
             _matrix_to_transform(camera.parent_from_camera) for camera in cameras
         )
-        if self.camera_names in (CAMERA_NAMES, DATASET_CAMERA_NAMES):
-            wrist_camera_indices = tuple(
-                index for index, camera in enumerate(cameras) if camera.parent_body
-            )
-            camera_transforms = [
-                (
-                    [local[index]] * self.world_count
-                    if camera.parent_body
-                    else tuple(
-                        _matrix_to_transform(
-                            _translated_matrix(camera.parent_from_camera, offset)
-                        )
-                        for offset in world_offsets
+        # This includes FR3's body-mounted head camera, even for cam_high-only
+        # rendering; body_q already contains each world's translation.
+        wrist_camera_indices = tuple(
+            index for index, camera in enumerate(cameras) if camera.parent_body
+        )
+        camera_transforms = [
+            (
+                [local[index]] * self.world_count
+                if camera.parent_body
+                else tuple(
+                    _matrix_to_transform(
+                        _translated_matrix(camera.parent_from_camera, offset)
                     )
+                    for offset in world_offsets
                 )
-                for index, camera in enumerate(cameras)
-            ]
-            self._transforms = wp.array(
-                camera_transforms,
-                dtype=wp.transformf,
-                device=self.model.device,
             )
+            for index, camera in enumerate(cameras)
+        ]
+        self._transforms = wp.array(
+            camera_transforms,
+            dtype=wp.transformf,
+            device=self.model.device,
+        )
+        if wrist_camera_indices:
             self._wrist_local = wp.array(
                 [local[index] for index in wrist_camera_indices],
                 dtype=wp.transformf,
@@ -202,15 +198,6 @@ class ShirtFlattenCameraObservation:
                 device=self.model.device,
             )
         else:
-            high_transforms = tuple(
-                _matrix_to_transform(
-                    _translated_matrix(cameras[0].parent_from_camera, offset)
-                )
-                for offset in world_offsets
-            )
-            self._transforms = wp.array(
-                [high_transforms], dtype=wp.transformf, device=self.model.device
-            )
             self._wrist_local = None
             self._wrist_camera_indices = None
             self._wrist_bodies = None
@@ -232,7 +219,7 @@ class ShirtFlattenCameraObservation:
         if self._wrist_bodies is not None:
             wp.launch(
                 _update_wrist_cameras,
-                dim=(2, self.world_count),
+                dim=(len(self._wrist_bodies), self.world_count),
                 inputs=[
                     runtime.state_0.body_q,
                     self._wrist_camera_indices,
@@ -455,6 +442,38 @@ def _refit_deforming_mesh_bounds(
         dim=1,
         inputs=[bounds, shape_index, shape_bounds],
         device=device,
+    )
+
+
+def _camera_rays(utils, cameras, width: int, height: int):
+    if all(
+        math.isclose(
+            camera.vertical_aperture,
+            camera.horizontal_aperture * height / width,
+            rel_tol=1.0e-6,
+        )
+        for camera in cameras
+    ):
+        # Preserve the existing benchmark pixels for the legacy 4:3 assets.
+        # That path historically treats horizontal FOV as vertical FOV; it is
+        # NOT equivalent to the USD intrinsics. Correcting it needs a separate
+        # paired benchmark, not an incidental workstation migration change.
+        return utils.compute_camera_rays_pinhole(
+            width,
+            height,
+            camera_fovs=tuple(
+                _vertical_fov(camera.focal_length, camera.horizontal_aperture)
+                for camera in cameras
+            ),
+        )
+    # Native non-4:3 cameras (FR3 Duo) retain both authored axes rather than
+    # deriving an aperture from the fixed policy raster's aspect ratio.
+    return utils.compute_camera_rays_pinhole(
+        width,
+        height,
+        focal_length=tuple(camera.focal_length for camera in cameras),
+        horizontal_aperture=tuple(camera.horizontal_aperture for camera in cameras),
+        vertical_aperture=tuple(camera.vertical_aperture for camera in cameras),
     )
 
 

@@ -15,7 +15,6 @@ os.environ.setdefault("PXR_WORK_THREAD_LIMIT", "1")
 import newton
 import numpy as np
 import warp as wp
-from pxr import Usd
 
 ROOT = Path(__file__).resolve().parents[2]
 HERE = ROOT / "outputs/robot_dynamics_audit"
@@ -36,41 +35,13 @@ def run(args):
     wp.set_device(args.device)
     builder = newton.ModelBuilder(gravity=(0, 0, -9.81))
     _register_solver_attributes(newton, builder)
-    if args.robot == "fr3_duo":
-        source = ROOT / "assets/robots/fr3_duo/fr3_duo.usda"
-        result = builder.add_usd(
-            str(source),
-            floating=False,
-            load_visual_shapes=False,
-            skip_mesh_approximation=True,
-            schema_resolvers=[newton.usd.SchemaResolverNewton(), newton.usd.SchemaResolverPhysx()],
-        )
-        stage = Usd.Stage.Open(str(source))
-        for path, index in result["path_shape_map"].items():
-            flags = stage.GetPrimAtPath(path).GetAttribute("clothdojo:shapeFlags")
-            if flags and flags.HasAuthoredValue():
-                builder.shape_flags[index] = int(flags.Get())
-        arm_joints = [
-            i
-            for i, label in enumerate(builder.joint_label)
-            if "fr3v2_joint" in label and label[-1] in "1234567"
-        ]
-        gripper_joints = [
-            i for i, label in enumerate(builder.joint_label) if label.endswith("gripper_ctrl")
-        ]
-        arm_q = np.array([builder.joint_q_start[i] for i in arm_joints])
-        grip_q = np.array([builder.joint_q_start[i] for i in gripper_joints])
-        closed = np.array(
-            [builder.joint_limit_upper[builder.joint_qd_start[i]] for i in gripper_joints]
-        )
-    else:
-        profile = robot_profile(args.robot)
-        source = ROOT / "assets" / profile.asset
-        _add_robot(newton, wp, builder, source, profile, load_visual_shapes=False)
-        arm_q = np.array(profile.arm_coord_indices)
-        grip_q = np.array(profile.gripper_coord_indices)
-        closed = np.tile(profile.gripper_closed_positions, 2)
-        arm_joints = [builder.joint_q_start.index(int(q)) for q in arm_q]
+    profile = robot_profile(args.robot)
+    source = ROOT / "assets" / profile.asset
+    _add_robot(newton, wp, builder, source, profile, load_visual_shapes=False)
+    arm_q = np.array(profile.arm_coord_indices)
+    grip_q = np.array(profile.gripper_coord_indices)
+    closed = np.tile(profile.gripper_closed_positions, 2)
+    arm_joints = [builder.joint_q_start.index(int(q)) for q in arm_q]
     assert len(arm_q) >= 12 and len(grip_q) >= 2
     arm_dof = np.array([builder.joint_qd_start[i] for i in arm_joints])
     if args.contacts:

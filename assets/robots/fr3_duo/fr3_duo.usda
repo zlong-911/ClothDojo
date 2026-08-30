@@ -2,7 +2,7 @@
 (
     customLayerData = {
         string dynamicsSources = "provenance/dynamics.json"
-        string status = "Accepted workstation snapshot; robot profile integration pending"
+        string status = "Fixed workstation; native three-camera FR3 Duo robot profile"
     }
     defaultPrim = "Robot"
     kilogramsPerUnit = 1
@@ -15,12 +15,28 @@
 
 over "Robot"
 {
+    custom int[] clothdojo:armCoordIndices = [0, 1, 2, 3, 4, 5, 6, 13, 14, 15, 16, 17, 18, 19]
+    custom int[] clothdojo:armDofIndices = [0, 1, 2, 3, 4, 5, 6, 13, 14, 15, 16, 17, 18, 19]
+    custom string[] clothdojo:armJointNames = ["left/fr3v2_joint1", "left/fr3v2_joint2", "left/fr3v2_joint3", "left/fr3v2_joint4", "left/fr3v2_joint5", "left/fr3v2_joint6", "left/fr3v2_joint7", "right/fr3v2_joint1", "right/fr3v2_joint2", "right/fr3v2_joint3", "right/fr3v2_joint4", "right/fr3v2_joint5", "right/fr3v2_joint6", "right/fr3v2_joint7"]
+    custom string[] clothdojo:bodyNames = ["fr3_duo_mount_mounting_point", "fr3_duo_mount_origin", "fr3_duo_mount_left", "left/base", "left/fr3v2_link0", "left/fr3v2_link1", "left/fr3v2_link2", "left/fr3v2_link3", "left/fr3v2_link4", "left/fr3v2_link5", "left/fr3v2_link6", "left/fr3v2_link7", "left/fr3v2_link8", "left/ur_to_robotiq_link", "left/robotiq_85_base_adapter_link", "left/robotiq_85_base_link", "left/robotiq_85_left_knuckle_link", "left/robotiq_85_left_finger_link", "left/robotiq_85_left_finger_tip_link", "left/robotiq_85_left_inner_knuckle_link", "left/robotiq_85_right_knuckle_link", "left/robotiq_85_right_finger_link", "left/robotiq_85_right_finger_tip_link", "left/robotiq_85_right_inner_knuckle_link", "left/wrist_cam_mount_link", "left/d405_camera_link", "left/d405_color_frame", "left/d405_color_optical_frame", "left/d405_depth_frame", "left/d405_depth_optical_frame", "left/d405_imu_link", "left/d405_infra1_frame", "left/d405_infra1_optical_frame", "left/d405_infra2_frame", "left/d405_infra2_optical_frame", "left/tcp", "left/fr3v2_link5_accelerometer_bottom", "left/fr3v2_link5_accelerometer_top", "left/fr3v2_link4_accelerometer_bottom", "left/fr3v2_link4_accelerometer_top", "left/fr3v2_link3_accelerometer_bottom", "left/fr3v2_link3_accelerometer_top", "left/fr3v2_link2_accelerometer_bottom", "left/fr3v2_link2_accelerometer_top", "left/fr3v2_link1_accelerometer_bottom", "left/fr3v2_link1_accelerometer_top", "left/fr3v2_link0_accelerometer_bottom", "left/fr3v2_link0_accelerometer_top", "fr3_duo_mount_right", "right/base", "right/fr3v2_link0", "right/fr3v2_link1", "right/fr3v2_link2", "right/fr3v2_link3", "right/fr3v2_link4", "right/fr3v2_link5", "right/fr3v2_link6", "right/fr3v2_link7", "right/fr3v2_link8", "right/ur_to_robotiq_link", "right/robotiq_85_base_adapter_link", "right/robotiq_85_base_link", "right/robotiq_85_left_knuckle_link", "right/robotiq_85_left_finger_link", "right/robotiq_85_left_finger_tip_link", "right/robotiq_85_left_inner_knuckle_link", "right/robotiq_85_right_knuckle_link", "right/robotiq_85_right_finger_link", "right/robotiq_85_right_finger_tip_link", "right/robotiq_85_right_inner_knuckle_link", "right/wrist_cam_mount_link", "right/d405_camera_link", "right/d405_color_frame", "right/d405_color_optical_frame", "right/d405_depth_frame", "right/d405_depth_optical_frame", "right/d405_imu_link", "right/d405_infra1_frame", "right/d405_infra1_optical_frame", "right/d405_infra2_frame", "right/d405_infra2_optical_frame", "right/tcp", "right/fr3v2_link5_accelerometer_bottom", "right/fr3v2_link5_accelerometer_top", "right/fr3v2_link4_accelerometer_bottom", "right/fr3v2_link4_accelerometer_top", "right/fr3v2_link3_accelerometer_bottom", "right/fr3v2_link3_accelerometer_top", "right/fr3v2_link2_accelerometer_bottom", "right/fr3v2_link2_accelerometer_top", "right/fr3v2_link1_accelerometer_bottom", "right/fr3v2_link1_accelerometer_top", "right/fr3v2_link0_accelerometer_bottom", "right/fr3v2_link0_accelerometer_top", "head_link", "zed_mini_camera_link", "zed_mini_imu_link", "zed_mini_left_camera_frame", "zed_mini_left_camera_optical_frame", "zed_mini_right_camera_frame", "zed_mini_right_camera_optical_frame", "head_camera_mounting_point"]
+    custom int[] clothdojo:bodyParents = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 15, 15, 20, 21, 15, 15, 24, 25, 26, 25, 28, 25, 25, 31, 25, 33, 15, 9, 9, 8, 8, 7, 7, 6, 6, 5, 5, 4, 4, 1, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 61, 61, 66, 67, 61, 61, 70, 71, 72, 71, 74, 71, 71, 77, 71, 79, 61, 55, 55, 54, 54, 53, 53, 52, 52, 51, 51, 50, 50, 0, 94, 95, 95, 97, 95, 99, 94]
+    custom double[] clothdojo:gripperClosedPositions = [0.8000066006619417]
+    custom int[] clothdojo:gripperCoordIndices = [7, 20]
+    custom int[] clothdojo:gripperDofIndices = [7, 20]
+    custom double[] clothdojo:gripperOpenPositions = [0]
+    custom double[] clothdojo:homeJointQ = [0.18974100647287132, -0.49410499889497106, -0.29285001518622394, -2.623324993861615, 0.7409709771976102, 1.7712500652001797, 0.06504200047359854, 0, 0, 0, 0, 0, 0, -0.020019999324885827, -0.4740829876351055, 0.1399369979007041, -2.615130979819659, -0.7920550008582103, 1.7192180227705387, -0.018384086046277403, 0, 0, 0, 0, 0, 0]
+    custom int clothdojo:jointDofCount = 26
+    custom string clothdojo:robotId = "fr3_duo"
+    custom double[] clothdojo:rootBodyFrames = [0.12999999523162842, 0, 0.949999988079071, 0, 0, 0, 1]
+    custom int clothdojo:workstationSchema = 1
+
     over "Duo"
     {
         over "Physics"
         {
             over "left_fr3v2_joint1"
             {
+                custom string clothdojo:jointLabel = "left/fr3v2_joint1"
                 float drive:angular:physics:damping = 7.8539815
                 float drive:angular:physics:maxForce = 87
                 float drive:angular:physics:stiffness = 78.53982
@@ -39,6 +55,7 @@ over "Robot"
 
             over "left_fr3v2_joint2"
             {
+                custom string clothdojo:jointLabel = "left/fr3v2_joint2"
                 float drive:angular:physics:damping = 7.8539815
                 float drive:angular:physics:maxForce = 87
                 float drive:angular:physics:stiffness = 78.53982
@@ -57,6 +74,7 @@ over "Robot"
 
             over "left_fr3v2_joint3"
             {
+                custom string clothdojo:jointLabel = "left/fr3v2_joint3"
                 float drive:angular:physics:damping = 6.1086526
                 float drive:angular:physics:maxForce = 87
                 float drive:angular:physics:stiffness = 61.086525
@@ -75,6 +93,7 @@ over "Robot"
 
             over "left_fr3v2_joint4"
             {
+                custom string clothdojo:jointLabel = "left/fr3v2_joint4"
                 float drive:angular:physics:damping = 6.1086526
                 float drive:angular:physics:maxForce = 87
                 float drive:angular:physics:stiffness = 61.086525
@@ -93,6 +112,7 @@ over "Robot"
 
             over "left_fr3v2_joint5"
             {
+                custom string clothdojo:jointLabel = "left/fr3v2_joint5"
                 float drive:angular:physics:damping = 3.4906585
                 float drive:angular:physics:maxForce = 12
                 float drive:angular:physics:stiffness = 34.906586
@@ -111,6 +131,7 @@ over "Robot"
 
             over "left_fr3v2_joint6"
             {
+                custom string clothdojo:jointLabel = "left/fr3v2_joint6"
                 float drive:angular:physics:damping = 3.4906585
                 float drive:angular:physics:maxForce = 12
                 float drive:angular:physics:stiffness = 34.906586
@@ -129,6 +150,7 @@ over "Robot"
 
             over "left_fr3v2_joint7"
             {
+                custom string clothdojo:jointLabel = "left/fr3v2_joint7"
                 float drive:angular:physics:damping = 3.4906585
                 float drive:angular:physics:maxForce = 12
                 float drive:angular:physics:stiffness = 34.906586
@@ -147,6 +169,7 @@ over "Robot"
 
             over "right_fr3v2_joint1"
             {
+                custom string clothdojo:jointLabel = "right/fr3v2_joint1"
                 float drive:angular:physics:damping = 7.8539815
                 float drive:angular:physics:maxForce = 87
                 float drive:angular:physics:stiffness = 78.53982
@@ -165,6 +188,7 @@ over "Robot"
 
             over "right_fr3v2_joint2"
             {
+                custom string clothdojo:jointLabel = "right/fr3v2_joint2"
                 float drive:angular:physics:damping = 7.8539815
                 float drive:angular:physics:maxForce = 87
                 float drive:angular:physics:stiffness = 78.53982
@@ -183,6 +207,7 @@ over "Robot"
 
             over "right_fr3v2_joint3"
             {
+                custom string clothdojo:jointLabel = "right/fr3v2_joint3"
                 float drive:angular:physics:damping = 6.1086526
                 float drive:angular:physics:maxForce = 87
                 float drive:angular:physics:stiffness = 61.086525
@@ -201,6 +226,7 @@ over "Robot"
 
             over "right_fr3v2_joint4"
             {
+                custom string clothdojo:jointLabel = "right/fr3v2_joint4"
                 float drive:angular:physics:damping = 6.1086526
                 float drive:angular:physics:maxForce = 87
                 float drive:angular:physics:stiffness = 61.086525
@@ -219,6 +245,7 @@ over "Robot"
 
             over "right_fr3v2_joint5"
             {
+                custom string clothdojo:jointLabel = "right/fr3v2_joint5"
                 float drive:angular:physics:damping = 3.4906585
                 float drive:angular:physics:maxForce = 12
                 float drive:angular:physics:stiffness = 34.906586
@@ -237,6 +264,7 @@ over "Robot"
 
             over "right_fr3v2_joint6"
             {
+                custom string clothdojo:jointLabel = "right/fr3v2_joint6"
                 float drive:angular:physics:damping = 3.4906585
                 float drive:angular:physics:maxForce = 12
                 float drive:angular:physics:stiffness = 34.906586
@@ -255,6 +283,7 @@ over "Robot"
 
             over "right_fr3v2_joint7"
             {
+                custom string clothdojo:jointLabel = "right/fr3v2_joint7"
                 float drive:angular:physics:damping = 3.4906585
                 float drive:angular:physics:maxForce = 12
                 float drive:angular:physics:stiffness = 34.906586
@@ -270,6 +299,181 @@ over "Robot"
                 float physxJoint:maxJointVelocity = 301.3758
                 custom float state:angular:physics:position = -1.0533305
             }
+
+            over "fr3_duo_mount_origin_joint"
+            {
+                custom string clothdojo:jointLabel = "fr3_duo_mount_origin_joint"
+            }
+
+            over "fr3_duo_mount_left_joint"
+            {
+                custom string clothdojo:jointLabel = "fr3_duo_mount_left_joint"
+            }
+
+            over "left_base_joint"
+            {
+                custom string clothdojo:jointLabel = "left/base_joint"
+            }
+
+            over "left_fr3v2_left_base_joint"
+            {
+                custom string clothdojo:jointLabel = "left/fr3v2_left_base_joint"
+            }
+
+            over "left_fr3v2_joint8"
+            {
+                custom string clothdojo:jointLabel = "left/fr3v2_joint8"
+            }
+
+            over "left_fr3v2_link5_accelerometer_bottom_joint"
+            {
+                custom string clothdojo:jointLabel = "left/fr3v2_link5_accelerometer_bottom_joint"
+            }
+
+            over "left_fr3v2_link5_accelerometer_top_joint"
+            {
+                custom string clothdojo:jointLabel = "left/fr3v2_link5_accelerometer_top_joint"
+            }
+
+            over "left_fr3v2_link4_accelerometer_bottom_joint"
+            {
+                custom string clothdojo:jointLabel = "left/fr3v2_link4_accelerometer_bottom_joint"
+            }
+
+            over "left_fr3v2_link4_accelerometer_top_joint"
+            {
+                custom string clothdojo:jointLabel = "left/fr3v2_link4_accelerometer_top_joint"
+            }
+
+            over "left_fr3v2_link3_accelerometer_bottom_joint"
+            {
+                custom string clothdojo:jointLabel = "left/fr3v2_link3_accelerometer_bottom_joint"
+            }
+
+            over "left_fr3v2_link3_accelerometer_top_joint"
+            {
+                custom string clothdojo:jointLabel = "left/fr3v2_link3_accelerometer_top_joint"
+            }
+
+            over "left_fr3v2_link2_accelerometer_bottom_joint"
+            {
+                custom string clothdojo:jointLabel = "left/fr3v2_link2_accelerometer_bottom_joint"
+            }
+
+            over "left_fr3v2_link2_accelerometer_top_joint"
+            {
+                custom string clothdojo:jointLabel = "left/fr3v2_link2_accelerometer_top_joint"
+            }
+
+            over "left_fr3v2_link1_accelerometer_bottom_joint"
+            {
+                custom string clothdojo:jointLabel = "left/fr3v2_link1_accelerometer_bottom_joint"
+            }
+
+            over "left_fr3v2_link1_accelerometer_top_joint"
+            {
+                custom string clothdojo:jointLabel = "left/fr3v2_link1_accelerometer_top_joint"
+            }
+
+            over "left_fr3v2_link0_accelerometer_bottom_joint"
+            {
+                custom string clothdojo:jointLabel = "left/fr3v2_link0_accelerometer_bottom_joint"
+            }
+
+            over "left_fr3v2_link0_accelerometer_top_joint"
+            {
+                custom string clothdojo:jointLabel = "left/fr3v2_link0_accelerometer_top_joint"
+            }
+
+            over "fr3_duo_mount_right_joint"
+            {
+                custom string clothdojo:jointLabel = "fr3_duo_mount_right_joint"
+            }
+
+            over "right_base_joint"
+            {
+                custom string clothdojo:jointLabel = "right/base_joint"
+            }
+
+            over "right_fr3v2_right_base_joint"
+            {
+                custom string clothdojo:jointLabel = "right/fr3v2_right_base_joint"
+            }
+
+            over "right_fr3v2_joint8"
+            {
+                custom string clothdojo:jointLabel = "right/fr3v2_joint8"
+            }
+
+            over "right_fr3v2_link5_accelerometer_bottom_joint"
+            {
+                custom string clothdojo:jointLabel = "right/fr3v2_link5_accelerometer_bottom_joint"
+            }
+
+            over "right_fr3v2_link5_accelerometer_top_joint"
+            {
+                custom string clothdojo:jointLabel = "right/fr3v2_link5_accelerometer_top_joint"
+            }
+
+            over "right_fr3v2_link4_accelerometer_bottom_joint"
+            {
+                custom string clothdojo:jointLabel = "right/fr3v2_link4_accelerometer_bottom_joint"
+            }
+
+            over "right_fr3v2_link4_accelerometer_top_joint"
+            {
+                custom string clothdojo:jointLabel = "right/fr3v2_link4_accelerometer_top_joint"
+            }
+
+            over "right_fr3v2_link3_accelerometer_bottom_joint"
+            {
+                custom string clothdojo:jointLabel = "right/fr3v2_link3_accelerometer_bottom_joint"
+            }
+
+            over "right_fr3v2_link3_accelerometer_top_joint"
+            {
+                custom string clothdojo:jointLabel = "right/fr3v2_link3_accelerometer_top_joint"
+            }
+
+            over "right_fr3v2_link2_accelerometer_bottom_joint"
+            {
+                custom string clothdojo:jointLabel = "right/fr3v2_link2_accelerometer_bottom_joint"
+            }
+
+            over "right_fr3v2_link2_accelerometer_top_joint"
+            {
+                custom string clothdojo:jointLabel = "right/fr3v2_link2_accelerometer_top_joint"
+            }
+
+            over "right_fr3v2_link1_accelerometer_bottom_joint"
+            {
+                custom string clothdojo:jointLabel = "right/fr3v2_link1_accelerometer_bottom_joint"
+            }
+
+            over "right_fr3v2_link1_accelerometer_top_joint"
+            {
+                custom string clothdojo:jointLabel = "right/fr3v2_link1_accelerometer_top_joint"
+            }
+
+            over "right_fr3v2_link0_accelerometer_bottom_joint"
+            {
+                custom string clothdojo:jointLabel = "right/fr3v2_link0_accelerometer_bottom_joint"
+            }
+
+            over "right_fr3v2_link0_accelerometer_top_joint"
+            {
+                custom string clothdojo:jointLabel = "right/fr3v2_link0_accelerometer_top_joint"
+            }
+
+            over "head_joint"
+            {
+                custom string clothdojo:jointLabel = "head_joint"
+            }
+
+            over "head_camera_mounting_point_joint"
+            {
+                custom string clothdojo:jointLabel = "head_camera_mounting_point_joint"
+            }
         }
 
         over "Geometry"
@@ -278,6 +482,7 @@ over "Robot"
             {
                 over "fr3_duo_mount_mounting_point"
                 {
+                    custom string clothdojo:bodyLabel = "fr3_duo_mount_mounting_point"
                     point3f physics:centerOfMass = (-0.011817, -0.00005, 0.044431)
                     float3 physics:diagonalInertia = (0.016419318, 0.020476788, 0.023695728)
                     float physics:mass = 4.093846
@@ -285,12 +490,19 @@ over "Robot"
 
                     over "fr3_duo_mount_origin"
                     {
+                        custom string clothdojo:bodyLabel = "fr3_duo_mount_origin"
+
                         over "fr3_duo_mount_left"
                         {
+                            custom string clothdojo:bodyLabel = "fr3_duo_mount_left"
+
                             over "left_base"
                             {
+                                custom string clothdojo:bodyLabel = "left/base"
+
                                 over "left_fr3v2_link0"
                                 {
+                                    custom string clothdojo:bodyLabel = "left/fr3v2_link0"
                                     point3f physics:centerOfMass = (-0.0172, 0.0004, 0.0745)
                                     float3 physics:diagonalInertia = (0.0067344354, 0.010765565, 0.0115)
                                     float physics:mass = 2.3966
@@ -298,6 +510,7 @@ over "Robot"
 
                                     over "left_fr3v2_link1"
                                     {
+                                        custom string clothdojo:bodyLabel = "left/fr3v2_link1"
                                         point3f physics:centerOfMass = (-0.00458, 0.027016, -0.0618)
                                         float3 physics:diagonalInertia = (0.004638654, 0.022261089, 0.023300257)
                                         float physics:mass = 2.4377
@@ -305,6 +518,7 @@ over "Robot"
 
                                         over "left_fr3v2_link2"
                                         {
+                                            custom string clothdojo:bodyLabel = "left/fr3v2_link2"
                                             point3f physics:centerOfMass = (0.004541, -0.180691, -0.010479)
                                             float3 physics:diagonalInertia = (0.005259303, 0.017340638, 0.019200059)
                                             float physics:mass = 2.2375
@@ -312,6 +526,7 @@ over "Robot"
 
                                             over "left_fr3v2_link3"
                                             {
+                                                custom string clothdojo:bodyLabel = "left/fr3v2_link3"
                                                 point3f physics:centerOfMass = (0.08254, 0.019082, 0.042027)
                                                 float3 physics:diagonalInertia = (0.0044736224, 0.010421152, 0.014605225)
                                                 float physics:mass = 2.193082
@@ -319,6 +534,7 @@ over "Robot"
 
                                                 over "left_fr3v2_link4"
                                                 {
+                                                    custom string clothdojo:bodyLabel = "left/fr3v2_link4"
                                                     point3f physics:centerOfMass = (-0.087533, 0.096335, 0.01012)
                                                     float3 physics:diagonalInertia = (0.0044261836, 0.009736058, 0.012638758)
                                                     float physics:mass = 2.181537
@@ -326,6 +542,7 @@ over "Robot"
 
                                                     over "left_fr3v2_link5"
                                                     {
+                                                        custom string clothdojo:bodyLabel = "left/fr3v2_link5"
                                                         point3f physics:centerOfMass = (0.008383, 0.01018, -0.053265)
                                                         float3 physics:diagonalInertia = (0.0038800961, 0.030519126, 0.03189978)
                                                         float physics:mass = 2.186881
@@ -333,6 +550,7 @@ over "Robot"
 
                                                         over "left_fr3v2_link6"
                                                         {
+                                                            custom string clothdojo:bodyLabel = "left/fr3v2_link6"
                                                             point3f physics:centerOfMass = (0.070391, -0.016074, -0.035025)
                                                             float3 physics:diagonalInertia = (0.0024043, 0.0041460977, 0.004749602)
                                                             float physics:mass = 1.579681
@@ -340,6 +558,7 @@ over "Robot"
 
                                                             over "left_fr3v2_link7"
                                                             {
+                                                                custom string clothdojo:bodyLabel = "left/fr3v2_link7"
                                                                 point3f physics:centerOfMass = (-0.009108, 0.018151, 0.064946)
                                                                 float3 physics:diagonalInertia = (0.00069993816, 0.0008998439, 0.001100218)
                                                                 float physics:mass = 0.694841
@@ -347,95 +566,334 @@ over "Robot"
 
                                                                 over "left_fr3v2_link8"
                                                                 {
+                                                                    custom string clothdojo:bodyLabel = "left/fr3v2_link8"
+
                                                                     over "VMKit"
                                                                     {
                                                                         over "left_robotiq_85_base_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "left/robotiq_85_base_link"
                                                                             point3f physics:centerOfMass = (0, 0.00002274, 0.03232288)
                                                                             float3 physics:diagonalInertia = (0.00039462722, 0.00051617814, 0.00058802264)
                                                                             float physics:mass = 0.663202
                                                                             quatf physics:principalAxes = (0.4996847, -0.5003153, 0.5005193, 0.49947998)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "left_robotiq_85_left_finger_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "left/robotiq_85_left_finger_link"
                                                                             point3f physics:centerOfMass = (0.00346899, -0.00079447, 0.01867121)
                                                                             float3 physics:diagonalInertia = (0.000004682275, 0.00001183208, 0.000014372365)
                                                                             float physics:mass = 0.04260377
                                                                             quatf physics:principalAxes = (0.78435075, -1.7693344e-17, -0.6203176, 1.3536424e-16)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "left_robotiq_85_left_finger_tip_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "left/robotiq_85_left_finger_tip_link"
                                                                             point3f physics:centerOfMass = (-0.01456706, -0.0008, 0.01649701)
                                                                             float3 physics:diagonalInertia = (0.0000026440466, 0.00001197888, 0.000012065313)
                                                                             float physics:mass = 0.04268589
                                                                             quatf physics:principalAxes = (0, 0.8396458, 0, -0.54313433)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "left_robotiq_85_left_inner_knuckle_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "left/robotiq_85_left_inner_knuckle_link"
                                                                             point3f physics:centerOfMass = (0.01897699, 0.00015001, 0.02247101)
                                                                             float3 physics:diagonalInertia = (0.000004887118, 0.00000869056, 0.000012875682)
                                                                             float physics:mass = 0.029693764
                                                                             quatf physics:principalAxes = (0.9064055, -3.0621588e-17, -0.4224086, -2.0734926e-16)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "left_robotiq_85_left_knuckle_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "left/robotiq_85_left_knuckle_link"
                                                                             point3f physics:centerOfMass = (0.01213197, 0.0002, -0.00058647)
                                                                             float3 physics:diagonalInertia = (3.4500846e-7, 0.0000022386716, 0.00000231944)
                                                                             float physics:mass = 0.013847732
                                                                             quatf physics:principalAxes = (0.7067651, 0.7067651, 0.021979524, -0.021979524)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "left_robotiq_85_right_finger_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "left/robotiq_85_right_finger_link"
                                                                             point3f physics:centerOfMass = (-0.00346899, -0.00000553, 0.01867121)
                                                                             float3 physics:diagonalInertia = (0.000004682275, 0.00001183208, 0.000014372365)
                                                                             float physics:mass = 0.04260377
                                                                             quatf physics:principalAxes = (-1.7693344e-17, 0.78435075, 1.3536424e-16, -0.6203176)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "left_robotiq_85_right_finger_tip_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "left/robotiq_85_right_finger_tip_link"
                                                                             point3f physics:centerOfMass = (0.01456706, 0.00005, 0.01649701)
                                                                             float3 physics:diagonalInertia = (0.0000026440466, 0.00001197888, 0.000012065313)
                                                                             float physics:mass = 0.04268589
                                                                             quatf physics:principalAxes = (0.8396458, 0, -0.54313433, -0)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "left_robotiq_85_right_inner_knuckle_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "left/robotiq_85_right_inner_knuckle_link"
                                                                             point3f physics:centerOfMass = (-0.01926824, 0.00005001, 0.02222178)
                                                                             float3 physics:diagonalInertia = (0.0000048807565, 0.00000869056, 0.000012882044)
                                                                             float physics:mass = 0.029693764
                                                                             quatf physics:principalAxes = (6.098e-17, 0.9103173, 2.0694741e-16, -0.41391107)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "left_robotiq_85_right_knuckle_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "left/robotiq_85_right_knuckle_link"
                                                                             point3f physics:centerOfMass = (-0.01213197, 0.0002, -0.00058647)
                                                                             float3 physics:diagonalInertia = (3.4500846e-7, 0.0000022386716, 0.00000231944)
                                                                             float physics:mass = 0.013847732
                                                                             quatf physics:principalAxes = (-0.7067651, 0.7067651, 0.021979524, 0.021979524)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "left_ur_to_robotiq_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "left/ur_to_robotiq_link"
                                                                             point3f physics:centerOfMass = (0, 0, 0)
                                                                             float3 physics:diagonalInertia = (0.000027, 0.000027, 0.000044)
                                                                             float physics:mass = 0.01
                                                                             quatf physics:principalAxes = (0.5, 0.5, 0.5, 0.5)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
+                                                                        }
+
+                                                                        over "left_robotiq_85_base_adapter_link"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "left/robotiq_85_base_adapter_link"
+                                                                        }
+
+                                                                        over "left_wrist_cam_mount_link"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "left/wrist_cam_mount_link"
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
+                                                                        }
+
+                                                                        over "left_d405_camera_link"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "left/d405_camera_link"
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
+                                                                        }
+
+                                                                        over "left_d405_color_frame"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "left/d405_color_frame"
+
+                                                                            over "left_wrist_cam"
+                                                                            {
+                                                                                custom string clothdojo:cameraName = "cam_left_wrist"
+                                                                                custom string clothdojo:parentBody = "left/d405_color_frame"
+                                                                            }
+                                                                        }
+
+                                                                        over "left_d405_color_optical_frame"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "left/d405_color_optical_frame"
+                                                                        }
+
+                                                                        over "left_d405_depth_frame"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "left/d405_depth_frame"
+                                                                        }
+
+                                                                        over "left_d405_depth_optical_frame"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "left/d405_depth_optical_frame"
+                                                                        }
+
+                                                                        over "left_d405_imu_link"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "left/d405_imu_link"
+                                                                        }
+
+                                                                        over "left_d405_infra1_frame"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "left/d405_infra1_frame"
+                                                                        }
+
+                                                                        over "left_d405_infra1_optical_frame"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "left/d405_infra1_optical_frame"
+                                                                        }
+
+                                                                        over "left_d405_infra2_frame"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "left/d405_infra2_frame"
+                                                                        }
+
+                                                                        over "left_d405_infra2_optical_frame"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "left/d405_infra2_optical_frame"
+                                                                        }
+
+                                                                        over "left_tcp"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "left/tcp"
                                                                         }
                                                                     }
                                                                 }
                                                             }
                                                         }
+
+                                                        over "left_fr3v2_link5_accelerometer_bottom"
+                                                        {
+                                                            custom string clothdojo:bodyLabel = "left/fr3v2_link5_accelerometer_bottom"
+                                                        }
+
+                                                        over "left_fr3v2_link5_accelerometer_top"
+                                                        {
+                                                            custom string clothdojo:bodyLabel = "left/fr3v2_link5_accelerometer_top"
+                                                        }
+                                                    }
+
+                                                    over "left_fr3v2_link4_accelerometer_bottom"
+                                                    {
+                                                        custom string clothdojo:bodyLabel = "left/fr3v2_link4_accelerometer_bottom"
+                                                    }
+
+                                                    over "left_fr3v2_link4_accelerometer_top"
+                                                    {
+                                                        custom string clothdojo:bodyLabel = "left/fr3v2_link4_accelerometer_top"
                                                     }
                                                 }
+
+                                                over "left_fr3v2_link3_accelerometer_bottom"
+                                                {
+                                                    custom string clothdojo:bodyLabel = "left/fr3v2_link3_accelerometer_bottom"
+                                                }
+
+                                                over "left_fr3v2_link3_accelerometer_top"
+                                                {
+                                                    custom string clothdojo:bodyLabel = "left/fr3v2_link3_accelerometer_top"
+                                                }
+                                            }
+
+                                            over "left_fr3v2_link2_accelerometer_bottom"
+                                            {
+                                                custom string clothdojo:bodyLabel = "left/fr3v2_link2_accelerometer_bottom"
+                                            }
+
+                                            over "left_fr3v2_link2_accelerometer_top"
+                                            {
+                                                custom string clothdojo:bodyLabel = "left/fr3v2_link2_accelerometer_top"
                                             }
                                         }
+
+                                        over "left_fr3v2_link1_accelerometer_bottom"
+                                        {
+                                            custom string clothdojo:bodyLabel = "left/fr3v2_link1_accelerometer_bottom"
+                                        }
+
+                                        over "left_fr3v2_link1_accelerometer_top"
+                                        {
+                                            custom string clothdojo:bodyLabel = "left/fr3v2_link1_accelerometer_top"
+                                        }
+                                    }
+
+                                    over "left_fr3v2_link0_accelerometer_bottom"
+                                    {
+                                        custom string clothdojo:bodyLabel = "left/fr3v2_link0_accelerometer_bottom"
+                                    }
+
+                                    over "left_fr3v2_link0_accelerometer_top"
+                                    {
+                                        custom string clothdojo:bodyLabel = "left/fr3v2_link0_accelerometer_top"
                                     }
                                 }
                             }
@@ -443,10 +901,15 @@ over "Robot"
 
                         over "fr3_duo_mount_right"
                         {
+                            custom string clothdojo:bodyLabel = "fr3_duo_mount_right"
+
                             over "right_base"
                             {
+                                custom string clothdojo:bodyLabel = "right/base"
+
                                 over "right_fr3v2_link0"
                                 {
+                                    custom string clothdojo:bodyLabel = "right/fr3v2_link0"
                                     point3f physics:centerOfMass = (-0.0172, 0.0004, 0.0745)
                                     float3 physics:diagonalInertia = (0.0067344354, 0.010765565, 0.0115)
                                     float physics:mass = 2.3966
@@ -454,6 +917,7 @@ over "Robot"
 
                                     over "right_fr3v2_link1"
                                     {
+                                        custom string clothdojo:bodyLabel = "right/fr3v2_link1"
                                         point3f physics:centerOfMass = (-0.00458, 0.027016, -0.0618)
                                         float3 physics:diagonalInertia = (0.004638654, 0.022261089, 0.023300257)
                                         float physics:mass = 2.4377
@@ -461,6 +925,7 @@ over "Robot"
 
                                         over "right_fr3v2_link2"
                                         {
+                                            custom string clothdojo:bodyLabel = "right/fr3v2_link2"
                                             point3f physics:centerOfMass = (0.004541, -0.180691, -0.010479)
                                             float3 physics:diagonalInertia = (0.005259303, 0.017340638, 0.019200059)
                                             float physics:mass = 2.2375
@@ -468,6 +933,7 @@ over "Robot"
 
                                             over "right_fr3v2_link3"
                                             {
+                                                custom string clothdojo:bodyLabel = "right/fr3v2_link3"
                                                 point3f physics:centerOfMass = (0.08254, 0.019082, 0.042027)
                                                 float3 physics:diagonalInertia = (0.0044736224, 0.010421152, 0.014605225)
                                                 float physics:mass = 2.193082
@@ -475,6 +941,7 @@ over "Robot"
 
                                                 over "right_fr3v2_link4"
                                                 {
+                                                    custom string clothdojo:bodyLabel = "right/fr3v2_link4"
                                                     point3f physics:centerOfMass = (-0.087533, 0.096335, 0.01012)
                                                     float3 physics:diagonalInertia = (0.0044261836, 0.009736058, 0.012638758)
                                                     float physics:mass = 2.181537
@@ -482,6 +949,7 @@ over "Robot"
 
                                                     over "right_fr3v2_link5"
                                                     {
+                                                        custom string clothdojo:bodyLabel = "right/fr3v2_link5"
                                                         point3f physics:centerOfMass = (0.008383, 0.01018, -0.053265)
                                                         float3 physics:diagonalInertia = (0.0038800961, 0.030519126, 0.03189978)
                                                         float physics:mass = 2.186881
@@ -489,6 +957,7 @@ over "Robot"
 
                                                         over "right_fr3v2_link6"
                                                         {
+                                                            custom string clothdojo:bodyLabel = "right/fr3v2_link6"
                                                             point3f physics:centerOfMass = (0.070391, -0.016074, -0.035025)
                                                             float3 physics:diagonalInertia = (0.0024043, 0.0041460977, 0.004749602)
                                                             float physics:mass = 1.579681
@@ -496,6 +965,7 @@ over "Robot"
 
                                                             over "right_fr3v2_link7"
                                                             {
+                                                                custom string clothdojo:bodyLabel = "right/fr3v2_link7"
                                                                 point3f physics:centerOfMass = (-0.009108, 0.018151, 0.064946)
                                                                 float3 physics:diagonalInertia = (0.00069993816, 0.0008998439, 0.001100218)
                                                                 float physics:mass = 0.694841
@@ -503,95 +973,334 @@ over "Robot"
 
                                                                 over "right_fr3v2_link8"
                                                                 {
+                                                                    custom string clothdojo:bodyLabel = "right/fr3v2_link8"
+
                                                                     over "VMKit"
                                                                     {
                                                                         over "right_robotiq_85_base_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "right/robotiq_85_base_link"
                                                                             point3f physics:centerOfMass = (0, 0.00002274, 0.03232288)
                                                                             float3 physics:diagonalInertia = (0.00039462722, 0.00051617814, 0.00058802264)
                                                                             float physics:mass = 0.663202
                                                                             quatf physics:principalAxes = (0.4996847, -0.5003153, 0.5005193, 0.49947998)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "right_robotiq_85_left_finger_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "right/robotiq_85_left_finger_link"
                                                                             point3f physics:centerOfMass = (0.00346899, -0.00079447, 0.01867121)
                                                                             float3 physics:diagonalInertia = (0.000004682275, 0.00001183208, 0.000014372365)
                                                                             float physics:mass = 0.04260377
                                                                             quatf physics:principalAxes = (0.78435075, -1.7693344e-17, -0.6203176, 1.3536424e-16)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "right_robotiq_85_left_finger_tip_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "right/robotiq_85_left_finger_tip_link"
                                                                             point3f physics:centerOfMass = (-0.01456706, -0.0008, 0.01649701)
                                                                             float3 physics:diagonalInertia = (0.0000026440466, 0.00001197888, 0.000012065313)
                                                                             float physics:mass = 0.04268589
                                                                             quatf physics:principalAxes = (0, 0.8396458, 0, -0.54313433)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "right_robotiq_85_left_inner_knuckle_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "right/robotiq_85_left_inner_knuckle_link"
                                                                             point3f physics:centerOfMass = (0.01897699, 0.00015001, 0.02247101)
                                                                             float3 physics:diagonalInertia = (0.000004887118, 0.00000869056, 0.000012875682)
                                                                             float physics:mass = 0.029693764
                                                                             quatf physics:principalAxes = (0.9064055, -3.0621588e-17, -0.4224086, -2.0734926e-16)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "right_robotiq_85_left_knuckle_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "right/robotiq_85_left_knuckle_link"
                                                                             point3f physics:centerOfMass = (0.01213197, 0.0002, -0.00058647)
                                                                             float3 physics:diagonalInertia = (3.4500846e-7, 0.0000022386716, 0.00000231944)
                                                                             float physics:mass = 0.013847732
                                                                             quatf physics:principalAxes = (0.7067651, 0.7067651, 0.021979524, -0.021979524)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "right_robotiq_85_right_finger_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "right/robotiq_85_right_finger_link"
                                                                             point3f physics:centerOfMass = (-0.00346899, -0.00000553, 0.01867121)
                                                                             float3 physics:diagonalInertia = (0.000004682275, 0.00001183208, 0.000014372365)
                                                                             float physics:mass = 0.04260377
                                                                             quatf physics:principalAxes = (-1.7693344e-17, 0.78435075, 1.3536424e-16, -0.6203176)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "right_robotiq_85_right_finger_tip_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "right/robotiq_85_right_finger_tip_link"
                                                                             point3f physics:centerOfMass = (0.01456706, 0.00005, 0.01649701)
                                                                             float3 physics:diagonalInertia = (0.0000026440466, 0.00001197888, 0.000012065313)
                                                                             float physics:mass = 0.04268589
                                                                             quatf physics:principalAxes = (0.8396458, 0, -0.54313433, -0)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "right_robotiq_85_right_inner_knuckle_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "right/robotiq_85_right_inner_knuckle_link"
                                                                             point3f physics:centerOfMass = (-0.01926824, 0.00005001, 0.02222178)
                                                                             float3 physics:diagonalInertia = (0.0000048807565, 0.00000869056, 0.000012882044)
                                                                             float physics:mass = 0.029693764
                                                                             quatf physics:principalAxes = (6.098e-17, 0.9103173, 2.0694741e-16, -0.41391107)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "right_robotiq_85_right_knuckle_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "right/robotiq_85_right_knuckle_link"
                                                                             point3f physics:centerOfMass = (-0.01213197, 0.0002, -0.00058647)
                                                                             float3 physics:diagonalInertia = (3.4500846e-7, 0.0000022386716, 0.00000231944)
                                                                             float physics:mass = 0.013847732
                                                                             quatf physics:principalAxes = (-0.7067651, 0.7067651, 0.021979524, 0.021979524)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
                                                                         }
 
                                                                         over "right_ur_to_robotiq_link"
                                                                         {
+                                                                            custom string clothdojo:bodyLabel = "right/ur_to_robotiq_link"
                                                                             point3f physics:centerOfMass = (0, 0, 0)
                                                                             float3 physics:diagonalInertia = (0.000027, 0.000027, 0.000044)
                                                                             float physics:mass = 0.01
                                                                             quatf physics:principalAxes = (0.5, 0.5, 0.5, 0.5)
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
+                                                                        }
+
+                                                                        over "right_robotiq_85_base_adapter_link"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "right/robotiq_85_base_adapter_link"
+                                                                        }
+
+                                                                        over "right_wrist_cam_mount_link"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "right/wrist_cam_mount_link"
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
+                                                                        }
+
+                                                                        over "right_d405_camera_link"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "right/d405_camera_link"
+
+                                                                            over "Collisions"
+                                                                            {
+                                                                                over "collision_00"
+                                                                                {
+                                                                                    custom int clothdojo:shapeFlags = 7
+                                                                                }
+                                                                            }
+                                                                        }
+
+                                                                        over "right_d405_color_frame"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "right/d405_color_frame"
+
+                                                                            over "right_wrist_cam"
+                                                                            {
+                                                                                custom string clothdojo:cameraName = "cam_right_wrist"
+                                                                                custom string clothdojo:parentBody = "right/d405_color_frame"
+                                                                            }
+                                                                        }
+
+                                                                        over "right_d405_color_optical_frame"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "right/d405_color_optical_frame"
+                                                                        }
+
+                                                                        over "right_d405_depth_frame"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "right/d405_depth_frame"
+                                                                        }
+
+                                                                        over "right_d405_depth_optical_frame"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "right/d405_depth_optical_frame"
+                                                                        }
+
+                                                                        over "right_d405_imu_link"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "right/d405_imu_link"
+                                                                        }
+
+                                                                        over "right_d405_infra1_frame"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "right/d405_infra1_frame"
+                                                                        }
+
+                                                                        over "right_d405_infra1_optical_frame"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "right/d405_infra1_optical_frame"
+                                                                        }
+
+                                                                        over "right_d405_infra2_frame"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "right/d405_infra2_frame"
+                                                                        }
+
+                                                                        over "right_d405_infra2_optical_frame"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "right/d405_infra2_optical_frame"
+                                                                        }
+
+                                                                        over "right_tcp"
+                                                                        {
+                                                                            custom string clothdojo:bodyLabel = "right/tcp"
                                                                         }
                                                                     }
                                                                 }
                                                             }
                                                         }
+
+                                                        over "right_fr3v2_link5_accelerometer_bottom"
+                                                        {
+                                                            custom string clothdojo:bodyLabel = "right/fr3v2_link5_accelerometer_bottom"
+                                                        }
+
+                                                        over "right_fr3v2_link5_accelerometer_top"
+                                                        {
+                                                            custom string clothdojo:bodyLabel = "right/fr3v2_link5_accelerometer_top"
+                                                        }
+                                                    }
+
+                                                    over "right_fr3v2_link4_accelerometer_bottom"
+                                                    {
+                                                        custom string clothdojo:bodyLabel = "right/fr3v2_link4_accelerometer_bottom"
+                                                    }
+
+                                                    over "right_fr3v2_link4_accelerometer_top"
+                                                    {
+                                                        custom string clothdojo:bodyLabel = "right/fr3v2_link4_accelerometer_top"
                                                     }
                                                 }
+
+                                                over "right_fr3v2_link3_accelerometer_bottom"
+                                                {
+                                                    custom string clothdojo:bodyLabel = "right/fr3v2_link3_accelerometer_bottom"
+                                                }
+
+                                                over "right_fr3v2_link3_accelerometer_top"
+                                                {
+                                                    custom string clothdojo:bodyLabel = "right/fr3v2_link3_accelerometer_top"
+                                                }
+                                            }
+
+                                            over "right_fr3v2_link2_accelerometer_bottom"
+                                            {
+                                                custom string clothdojo:bodyLabel = "right/fr3v2_link2_accelerometer_bottom"
+                                            }
+
+                                            over "right_fr3v2_link2_accelerometer_top"
+                                            {
+                                                custom string clothdojo:bodyLabel = "right/fr3v2_link2_accelerometer_top"
                                             }
                                         }
+
+                                        over "right_fr3v2_link1_accelerometer_bottom"
+                                        {
+                                            custom string clothdojo:bodyLabel = "right/fr3v2_link1_accelerometer_bottom"
+                                        }
+
+                                        over "right_fr3v2_link1_accelerometer_top"
+                                        {
+                                            custom string clothdojo:bodyLabel = "right/fr3v2_link1_accelerometer_top"
+                                        }
+                                    }
+
+                                    over "right_fr3v2_link0_accelerometer_bottom"
+                                    {
+                                        custom string clothdojo:bodyLabel = "right/fr3v2_link0_accelerometer_bottom"
+                                    }
+
+                                    over "right_fr3v2_link0_accelerometer_top"
+                                    {
+                                        custom string clothdojo:bodyLabel = "right/fr3v2_link0_accelerometer_top"
                                     }
                                 }
                             }
@@ -600,6 +1309,7 @@ over "Robot"
 
                     over "head_link"
                     {
+                        custom string clothdojo:bodyLabel = "head_link"
                         point3f physics:centerOfMass = (0, 0, 0)
                         float3 physics:diagonalInertia = (0.0001503193, 0.003017061, 0.0030805666)
                         float physics:mass = 0.350865
@@ -607,10 +1317,114 @@ over "Robot"
 
                         over "head_camera_mounting_point"
                         {
+                            custom string clothdojo:bodyLabel = "head_camera_mounting_point"
                             point3f physics:centerOfMass = (0, 0, 0)
                             float3 physics:diagonalInertia = (1e-7, 1e-7, 1e-7)
                             float physics:mass = 0.001
                             quatf physics:principalAxes = (1, 0, 0, 0)
+                        }
+
+                        over "zed_mini_camera_link"
+                        {
+                            custom string clothdojo:bodyLabel = "zed_mini_camera_link"
+
+                            over "zed_mini_imu_link"
+                            {
+                                custom string clothdojo:bodyLabel = "zed_mini_imu_link"
+
+                                over "zed_mini_imu_joint"
+                                {
+                                    custom string clothdojo:jointLabel = "zed_mini_imu_joint"
+                                }
+                            }
+
+                            over "zed_mini_left_camera_frame"
+                            {
+                                custom string clothdojo:bodyLabel = "zed_mini_left_camera_frame"
+
+                                over "zed_mini_left_camera_joint"
+                                {
+                                    custom string clothdojo:jointLabel = "zed_mini_left_camera_joint"
+                                }
+
+                                over "head_cam"
+                                {
+                                    custom string clothdojo:cameraName = "cam_high"
+                                    custom string clothdojo:parentBody = "zed_mini_left_camera_frame"
+                                }
+                            }
+
+                            over "zed_mini_left_camera_optical_frame"
+                            {
+                                custom string clothdojo:bodyLabel = "zed_mini_left_camera_optical_frame"
+
+                                over "zed_mini_left_camera_optical_joint"
+                                {
+                                    custom string clothdojo:jointLabel = "zed_mini_left_camera_optical_joint"
+                                }
+                            }
+
+                            over "zed_mini_right_camera_frame"
+                            {
+                                custom string clothdojo:bodyLabel = "zed_mini_right_camera_frame"
+
+                                over "zed_mini_right_camera_joint"
+                                {
+                                    custom string clothdojo:jointLabel = "zed_mini_right_camera_joint"
+                                }
+                            }
+
+                            over "zed_mini_right_camera_optical_frame"
+                            {
+                                custom string clothdojo:bodyLabel = "zed_mini_right_camera_optical_frame"
+
+                                over "zed_mini_right_camera_optical_joint"
+                                {
+                                    custom string clothdojo:jointLabel = "zed_mini_right_camera_optical_joint"
+                                }
+                            }
+
+                            over "zed_mini_camera_joint"
+                            {
+                                custom string clothdojo:jointLabel = "zed_mini_camera_joint"
+                            }
+
+                            over "appearance"
+                            {
+                                over "left_lens"
+                                {
+                                    over "yellow_ring"
+                                    {
+                                        custom int clothdojo:shapeFlags = 1
+                                    }
+
+                                    over "glass"
+                                    {
+                                        custom int clothdojo:shapeFlags = 1
+                                    }
+                                }
+
+                                over "right_lens"
+                                {
+                                    over "yellow_ring"
+                                    {
+                                        custom int clothdojo:shapeFlags = 1
+                                    }
+
+                                    over "glass"
+                                    {
+                                        custom int clothdojo:shapeFlags = 1
+                                    }
+                                }
+                            }
+
+                            over "Collisions"
+                            {
+                                over "collision_00"
+                                {
+                                    custom int clothdojo:shapeFlags = 7
+                                }
+                            }
                         }
                     }
                 }
@@ -623,6 +1437,7 @@ over "Robot"
             {
                 over "joint_03_left_gripper_ctrl"
                 {
+                    custom string clothdojo:jointLabel = "joint_03_left_gripper_ctrl"
                     float drive:angular:physics:damping = 0.87266463
                     float drive:angular:physics:maxForce = 100
                     float drive:angular:physics:stiffness = 8.726646
@@ -636,6 +1451,7 @@ over "Robot"
 
                 over "joint_04_left_robotiq_85_left_inner_knuckle_joint"
                 {
+                    custom string clothdojo:jointLabel = "joint_04_left_robotiq_85_left_inner_knuckle_joint"
                     float physics:lowerLimit = -1000000000
                     float physics:upperLimit = 1000000000
                     custom float state:angular:physics:position = 0
@@ -643,6 +1459,7 @@ over "Robot"
 
                 over "joint_05_left_robotiq_85_right_knuckle_joint"
                 {
+                    custom string clothdojo:jointLabel = "joint_05_left_robotiq_85_right_knuckle_joint"
                     float physics:lowerLimit = -45.837
                     float physics:upperLimit = 0
                     custom float state:angular:physics:position = 0
@@ -650,6 +1467,7 @@ over "Robot"
 
                 over "joint_06_left_robotiq_85_right_inner_knuckle_joint"
                 {
+                    custom string clothdojo:jointLabel = "joint_06_left_robotiq_85_right_inner_knuckle_joint"
                     float physics:lowerLimit = -1000000000
                     float physics:upperLimit = 1000000000
                     custom float state:angular:physics:position = 0
@@ -657,6 +1475,7 @@ over "Robot"
 
                 over "joint_12_left_robotiq_85_left_finger_tip_joint"
                 {
+                    custom string clothdojo:jointLabel = "joint_12_left_robotiq_85_left_finger_tip_joint"
                     float physics:lowerLimit = -1000000000
                     float physics:upperLimit = 1000000000
                     custom float state:angular:physics:position = 0
@@ -664,9 +1483,95 @@ over "Robot"
 
                 over "joint_13_left_robotiq_85_right_finger_tip_joint"
                 {
+                    custom string clothdojo:jointLabel = "joint_13_left_robotiq_85_right_finger_tip_joint"
                     float physics:lowerLimit = -1000000000
                     float physics:upperLimit = 1000000000
                     custom float state:angular:physics:position = 0
+                }
+
+                over "joint_00_left_ur_to_robotiq_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_00_left_ur_to_robotiq_joint"
+                }
+
+                over "joint_01_left_gripper_side_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_01_left_gripper_side_joint"
+                }
+
+                over "joint_02_left_robotiq_85_base_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_02_left_robotiq_85_base_joint"
+                }
+
+                over "joint_09_left_robotiq_85_left_finger_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_09_left_robotiq_85_left_finger_joint"
+                }
+
+                over "joint_10_left_robotiq_85_right_finger_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_10_left_robotiq_85_right_finger_joint"
+                }
+
+                over "joint_07_left_wrist_cam_mount_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_07_left_wrist_cam_mount_joint"
+                }
+
+                over "joint_11_left_d405_camera_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_11_left_d405_camera_joint"
+                }
+
+                over "joint_14_left_d405_color_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_14_left_d405_color_joint"
+                }
+
+                over "joint_19_left_d405_color_optical_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_19_left_d405_color_optical_joint"
+                }
+
+                over "joint_15_left_d405_depth_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_15_left_d405_depth_joint"
+                }
+
+                over "joint_20_left_d405_depth_optical_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_20_left_d405_depth_optical_joint"
+                }
+
+                over "joint_16_left_d405_imu_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_16_left_d405_imu_joint"
+                }
+
+                over "joint_17_left_d405_infra1_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_17_left_d405_infra1_joint"
+                }
+
+                over "joint_21_left_d405_infra1_optical_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_21_left_d405_infra1_optical_joint"
+                }
+
+                over "joint_18_left_d405_infra2_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_18_left_d405_infra2_joint"
+                }
+
+                over "joint_22_left_d405_infra2_optical_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_22_left_d405_infra2_optical_joint"
+                }
+
+                over "joint_08_left_tcp_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_08_left_tcp_joint"
                 }
             }
 
@@ -674,6 +1579,7 @@ over "Robot"
             {
                 over "joint_03_right_gripper_ctrl"
                 {
+                    custom string clothdojo:jointLabel = "joint_03_right_gripper_ctrl"
                     float drive:angular:physics:damping = 0.87266463
                     float drive:angular:physics:maxForce = 100
                     float drive:angular:physics:stiffness = 8.726646
@@ -687,6 +1593,7 @@ over "Robot"
 
                 over "joint_04_right_robotiq_85_left_inner_knuckle_joint"
                 {
+                    custom string clothdojo:jointLabel = "joint_04_right_robotiq_85_left_inner_knuckle_joint"
                     float physics:lowerLimit = -1000000000
                     float physics:upperLimit = 1000000000
                     custom float state:angular:physics:position = 0
@@ -694,6 +1601,7 @@ over "Robot"
 
                 over "joint_05_right_robotiq_85_right_knuckle_joint"
                 {
+                    custom string clothdojo:jointLabel = "joint_05_right_robotiq_85_right_knuckle_joint"
                     float physics:lowerLimit = -45.837
                     float physics:upperLimit = 0
                     custom float state:angular:physics:position = 0
@@ -701,6 +1609,7 @@ over "Robot"
 
                 over "joint_06_right_robotiq_85_right_inner_knuckle_joint"
                 {
+                    custom string clothdojo:jointLabel = "joint_06_right_robotiq_85_right_inner_knuckle_joint"
                     float physics:lowerLimit = -1000000000
                     float physics:upperLimit = 1000000000
                     custom float state:angular:physics:position = 0
@@ -708,6 +1617,7 @@ over "Robot"
 
                 over "joint_12_right_robotiq_85_left_finger_tip_joint"
                 {
+                    custom string clothdojo:jointLabel = "joint_12_right_robotiq_85_left_finger_tip_joint"
                     float physics:lowerLimit = -1000000000
                     float physics:upperLimit = 1000000000
                     custom float state:angular:physics:position = 0
@@ -715,10 +1625,197 @@ over "Robot"
 
                 over "joint_13_right_robotiq_85_right_finger_tip_joint"
                 {
+                    custom string clothdojo:jointLabel = "joint_13_right_robotiq_85_right_finger_tip_joint"
                     float physics:lowerLimit = -1000000000
                     float physics:upperLimit = 1000000000
                     custom float state:angular:physics:position = 0
                 }
+
+                over "joint_00_right_ur_to_robotiq_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_00_right_ur_to_robotiq_joint"
+                }
+
+                over "joint_01_right_gripper_side_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_01_right_gripper_side_joint"
+                }
+
+                over "joint_02_right_robotiq_85_base_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_02_right_robotiq_85_base_joint"
+                }
+
+                over "joint_09_right_robotiq_85_left_finger_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_09_right_robotiq_85_left_finger_joint"
+                }
+
+                over "joint_10_right_robotiq_85_right_finger_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_10_right_robotiq_85_right_finger_joint"
+                }
+
+                over "joint_07_right_wrist_cam_mount_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_07_right_wrist_cam_mount_joint"
+                }
+
+                over "joint_11_right_d405_camera_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_11_right_d405_camera_joint"
+                }
+
+                over "joint_14_right_d405_color_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_14_right_d405_color_joint"
+                }
+
+                over "joint_19_right_d405_color_optical_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_19_right_d405_color_optical_joint"
+                }
+
+                over "joint_15_right_d405_depth_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_15_right_d405_depth_joint"
+                }
+
+                over "joint_20_right_d405_depth_optical_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_20_right_d405_depth_optical_joint"
+                }
+
+                over "joint_16_right_d405_imu_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_16_right_d405_imu_joint"
+                }
+
+                over "joint_17_right_d405_infra1_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_17_right_d405_infra1_joint"
+                }
+
+                over "joint_21_right_d405_infra1_optical_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_21_right_d405_infra1_optical_joint"
+                }
+
+                over "joint_18_right_d405_infra2_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_18_right_d405_infra2_joint"
+                }
+
+                over "joint_22_right_d405_infra2_optical_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_22_right_d405_infra2_optical_joint"
+                }
+
+                over "joint_08_right_tcp_joint"
+                {
+                    custom string clothdojo:jointLabel = "joint_08_right_tcp_joint"
+                }
+            }
+        }
+    }
+
+    over "Installation"
+    {
+        over "TableMount"
+        {
+            over "varidee_profile_120x80_150"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "mount_bolt_M8x25_0_0"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "bottom_bolt_M8x70_0_0"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "bottom_washer_M8_0_0"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "mount_bolt_M8x25_0_1"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "bottom_bolt_M8x70_0_1"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "bottom_washer_M8_0_1"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "mount_bolt_M8x25_1_0"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "bottom_bolt_M8x70_1_0"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "bottom_washer_M8_1_0"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "mount_bolt_M8x25_1_1"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "bottom_bolt_M8x70_1_1"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "bottom_washer_M8_1_1"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "mount_bolt_M8x25_2_0"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "bottom_bolt_M8x70_2_0"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "bottom_washer_M8_2_0"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "mount_bolt_M8x25_2_1"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "bottom_bolt_M8x70_2_1"
+            {
+                custom int clothdojo:shapeFlags = 7
+            }
+
+            over "bottom_washer_M8_2_1"
+            {
+                custom int clothdojo:shapeFlags = 7
             }
         }
     }
