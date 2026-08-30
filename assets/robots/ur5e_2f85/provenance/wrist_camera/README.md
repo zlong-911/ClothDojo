@@ -36,14 +36,33 @@ installation and third-person cameras are unchanged.
 
 Each assembly is rigid geometry on its existing `wrist_3_link`. There are no
 additional robot bodies, joints or control coordinates. The generated component
-preserves 1,034 adapter visual triangles with the DAE's white/green material
-split, all 186 collision triangles, and all **425,160 D415 visual triangles**.
-The camera material comes from upstream `aluminum`; no lens colors/textures
-are invented. This STL has no UV map or image texture, and its single material
-does not reproduce the real camera's black front panel and lens appearance.
-Physical geometry is installed, but full visual appearance is not complete.
+preserves 1,034 adapter visual triangles, all 186 collision triangles, and all
+**425,160 D415 visual triangles**. At the user's request, the adapter now copies
+the fixed UR5 payload's `Material_source_00_black`, including all shader inputs,
+instead of the DAE's white/green colors. The coupling and arm materials are unchanged.
 The hidden D415 collision box uses the dimensions and offset
 already defined by its official Xacro. It is not the visible camera model.
+
+### User-approved appearance completion
+
+The ROS STL has no original UV map/image texture. The user approved a project
+appearance supplement, retaining the same D415 model and calibration. The
+offline converter recovers 19 connected CAD pieces by welded vertex connectivity,
+without altering exported vertices or faces. It assigns a silver housing,
+dark interior, and a front-cover material using a baked `d415_front.png`.
+
+The front cover would hide every window in Newton, which does not import
+PreviewSurface opacity. Its baked opaque albedo uses the **308 original rear
+mask triangles** at source-local Z = -0.675 mm. Their unpainted apertures are
+the three circular windows at X = -35/20/35 mm (radius 2.5 mm) and the rounded
+projector window centered at X = -8 mm. No aperture is manually drawn or moved.
+Planar UVs and the bake preserve these original outlines. Panel/glass colors
+and roughness are project visual approximations, not factory measurements;
+the housing base color retains the ROS aluminum value. This does not restore
+OEM textures, detailed lens optics, logos or optical transmission. The same
+opaque appearance is used by Newton and other USD viewers, not a hidden
+renderer-specific geometry replacement. The generated PNG is an external asset
+alongside the component USD and is included by the fixed deployment command.
 
 The camera chain is: flange -> adapter -> D415 bottom screw
 `(0,-0.067,0.0171)`, RPY `(0,-pi/2+6deg,pi/2)` -> camera link
@@ -69,8 +88,9 @@ PickNik's adapter Xacro contains no inertial block. RealSense lists mass
 reliable and should not be used for modeling. We therefore do not merge that
 tensor or guess bracket density. Accessory shapes have zero authored mass and
 density, and all 42 existing body mass/COM/inertia values remain unchanged.
-This is a geometric/kinematic camera installation, not complete appearance,
-a fully calibrated end-effector payload model or real-hardware mechanical certification.
+This is a geometric/kinematic camera installation with approximate surface
+appearance, not a fully calibrated end-effector payload model or real-hardware
+mechanical certification.
 
 ## Offline rebuild
 

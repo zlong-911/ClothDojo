@@ -44,12 +44,71 @@ def test_ur5_has_exact_source_camera_geometry_and_hidden_colliders(stage):
             assert prim.GetAttribute("clothdojo:shapeFlags").Get() == 6
             assert UsdGeom.Imageable(prim).ComputeVisibility() == "invisible"
             assert UsdPhysics.MassAPI(prim).GetMassAttr().Get() == 0
-        for name, expected in (
-            ("white_material", (0.8, 0.8, 0.8)),
-            ("green_material", (0, 0.8, 0.3)),
-        ):
-            shader = stage.GetPrimAtPath(f"{root}/Materials/{name}/PreviewSurface")
-            np.testing.assert_allclose(shader.GetAttribute("inputs:diffuseColor").Get(), expected)
+
+
+def test_ur5_camera_adapter_reuses_arm_black_material(stage):
+    from pxr import UsdShade
+
+    source = UsdShade.Material(
+        stage.GetPrimAtPath("/Robot/Materials/SourceMJCF/Material_source_00_black")
+    )
+    source_shader = source.GetSurfaceOutput().GetConnectedSource()[0]
+    for wrist in (6, 27):
+        root = f"/Robot/Bodies/body_{wrist:03}/WristCameraAssembly"
+        actual, _ = UsdShade.MaterialBindingAPI(
+            stage.GetPrimAtPath(f"{root}/AdapterVisual")
+        ).ComputeBoundMaterial()
+        assert str(actual.GetPath()) == f"{root}/Materials/UR5Black"
+        actual_shader = actual.GetSurfaceOutput().GetConnectedSource()[0]
+        assert str(actual_shader.GetPrim().GetPath()).startswith(str(actual.GetPath()))
+        for value in source_shader.GetInputs():
+            assert actual_shader.GetInput(value.GetBaseName()).Get() == value.Get()
+
+
+def test_d415_material_partition_and_uv_preserve_original_mesh(stage):
+    import trimesh
+    from pxr import UsdGeom, UsdShade
+
+    source = trimesh.load_mesh(ROOT / "provenance/wrist_camera/d415.stl", process=False)
+    for wrist in (6, 27):
+        root = f"/Robot/Bodies/body_{wrist:03}/WristCameraAssembly"
+        visual = UsdGeom.Mesh(stage.GetPrimAtPath(f"{root}/D415/Visual"))
+        np.testing.assert_array_equal(
+            visual.GetPointsAttr().Get(), source.vertices.astype(np.float32)
+        )
+        np.testing.assert_array_equal(visual.GetFaceVertexIndicesAttr().Get(), source.faces.ravel())
+        groups = UsdShade.MaterialBindingAPI(visual.GetPrim()).GetMaterialBindSubsets()
+        assert {group.GetPrim().GetName() for group in groups} == {
+            "Housing", "Interior", "FrontCover",
+        }
+        indices = np.concatenate([np.asarray(group.GetIndicesAttr().Get()) for group in groups])
+        np.testing.assert_array_equal(np.sort(indices), np.arange(len(source.faces)))
+        cover = next(group for group in groups if group.GetPrim().GetName() == "FrontCover")
+        assert len(cover.GetIndicesAttr().Get()) == 1592
+        uv = np.asarray(UsdGeom.PrimvarsAPI(visual).GetPrimvar("st").Get())
+        cover_vertices = source.faces[np.asarray(cover.GetIndicesAttr().Get())].ravel()
+        assert np.isfinite(uv).all()
+        assert uv[cover_vertices].min() >= -1e-6
+        assert uv[cover_vertices].max() <= 1 + 1e-6
+        texture = stage.GetPrimAtPath(f"{root}/Materials/D415FrontCover/Texture")
+        assert Path(texture.GetAttribute("inputs:file").Get().resolvedPath).is_file()
+        assert texture.GetAttribute("inputs:sourceColorSpace").Get() == "sRGB"
+
+
+def test_d415_bake_uses_original_three_windows_and_projector():
+    from PIL import Image
+
+    with Image.open(ROOT / "components/d415_front.png") as image:
+        assert image.size == (1536, 264)
+
+        def pixel(x_mm, y_mm):
+            return image.getpixel((round((x_mm + 45.9) / 91.8 * 1535),
+                                   round((7.9 - y_mm) / 15.8 * 263)))
+
+        for x in (-35, 20, 35, -8):
+            assert pixel(x, 0) == (56, 63, 69)
+        for x, y in ((0, 0), (-32, 0), (-8, 3), (35, 3)):
+            assert pixel(x, y) == (28, 30, 33)
 
 
 def test_ur5_coupling_and_attach_shift_only_seven_mm(stage):

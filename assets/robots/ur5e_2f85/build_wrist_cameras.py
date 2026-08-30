@@ -16,7 +16,10 @@ os.environ.setdefault("PXR_WORK_THREAD_LIMIT", "1")
 
 import numpy as np
 import trimesh
+from PIL import Image, ImageDraw
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, Vt
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import connected_components
 from scipy.spatial.transform import Rotation
 
 ROOT = Path(__file__).resolve().parent
@@ -40,14 +43,128 @@ def author_transform(prim, matrix):
     xform.SetXformOpOrder([UsdGeom.XformOp(attribute)])
 
 
-def material(stage, name, color):
+def material(stage, name, color, *, roughness=None, metallic=None):
     name = name.replace("-", "_")
     result = UsdShade.Material.Define(stage, f"/WristCameraAssembly/Materials/{name}")
     shader = UsdShade.Shader.Define(stage, f"{result.GetPath()}/PreviewSurface")
     shader.CreateIdAttr("UsdPreviewSurface")
     shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*color))
+    if roughness is not None:
+        shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(roughness)
+    if metallic is not None:
+        shader.CreateInput("metallic", Sdf.ValueTypeNames.Float).Set(metallic)
     result.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), "surface")
     return result
+
+
+def ur5_black_material(stage):
+    """Copy the existing arm material, not a visually guessed black swatch."""
+    source = Usd.Stage.Open(str(ROOT / "payloads/workstation.usdc"))
+    path = "/Robot/Materials/SourceMJCF/Material_source_00_black"
+    target = "/WristCameraAssembly/Materials/UR5Black"
+    UsdGeom.Scope.Define(stage, "/WristCameraAssembly/Materials")
+    if not source.GetPrimAtPath(path) or not Sdf.CopySpec(
+        source.GetRootLayer(), path, stage.GetRootLayer(), target
+    ):
+        raise ValueError("fixed UR5 payload must provide its original black material")
+    return UsdShade.Material(stage.GetPrimAtPath(target))
+
+
+def d415_components(source):
+    """Find original CAD pieces without changing a single output vertex/face.
+
+    STL repeats vertices and has non-manifold overlaps. Vertex connectivity,
+    rather than manifold face adjacency, recovers its 19 original pieces.
+    Component IDs are tied to the adjacent fixed ROS source, not arbitrary CADs.
+    """
+    welded = source.copy()
+    welded.merge_vertices()
+    edges = welded.edges
+    count, labels = connected_components(
+        coo_matrix(
+            (np.ones(len(edges)), (edges[:, 0], edges[:, 1])),
+            shape=(len(welded.vertices), len(welded.vertices)),
+        ),
+        directed=False,
+    )
+    face_labels = labels[welded.faces[:, 0]]
+    if count != 19 or len(source.faces) != 425160 or np.count_nonzero(face_labels == 1) != 1592:
+        raise ValueError("D415 appearance requires the audited 19-piece ROS STL")
+    cover = source.triangles[face_labels == 1].reshape(-1, 3)
+    bounds = np.stack((cover.min(0), cover.max(0)))
+    if not np.allclose(bounds, [[-.0459, -.0079, -.000675], [.0459, .0079, -.0001]], atol=2e-6):
+        raise ValueError("D415 cover geometry differs from the audited source")
+    return face_labels, bounds
+
+
+def bake_d415_front(source, labels, bounds, path):
+    """Bake the source cover's rear aperture mask for opaque renderers.
+
+    No camera photo, invented aperture, or changed geometry is used. This is
+    a project-authored material approximation, not measured optical appearance.
+    Newton does not import PreviewSurface opacity, so a transparent cover alone
+    would hide every lens. Orthographic painter projection uses the original
+    rear-mask triangles; its three circular and one projector aperture stay
+    exactly where the original CAD put them. Detailed optics are not modeled.
+    """
+    size = (1536, 264)
+    panel_rgb = (28, 30, 33)
+    image = Image.new("RGB", size, (56, 63, 69))
+    draw = ImageDraw.Draw(image)
+    selected = (labels == 1) & np.all(
+        np.isclose(source.triangles[:, :, 2], -.000675, atol=1e-9), axis=1
+    ) & (source.face_normals[:, 2] < -.99)
+    triangles = source.triangles[selected]
+    if len(triangles) != 308:
+        raise ValueError("D415 rear aperture mask differs from the audited source")
+    low, high = bounds[:, :2]
+    uv = (triangles[:, :, :2] - low) / (high - low)
+    pixels = uv * np.asarray((size[0] - 1, -(size[1] - 1))) + (0, size[1] - 1)
+    for triangle in pixels:
+        draw.polygon([tuple(point) for point in triangle], fill=panel_rgb)
+    image.save(path)
+
+
+def d415_appearance(stage, visual, source, aluminum):
+    labels, bounds = d415_components(source)
+    bake_d415_front(source, labels, bounds, ROOT / "components/d415_front.png")
+    materials = {
+        "Housing": material(stage, "D415Aluminum", aluminum, roughness=.35, metallic=.7),
+        "Interior": material(stage, "D415Interior", (.012, .013, .015), roughness=.45),
+        "FrontCover": material(stage, "D415FrontCover", (.012, .013, .015), roughness=.18),
+    }
+    front = materials["FrontCover"]
+    shader = UsdShade.Shader(stage.GetPrimAtPath(f"{front.GetPath()}/PreviewSurface"))
+    texture = UsdShade.Shader.Define(stage, f"{front.GetPath()}/Texture")
+    texture.CreateIdAttr("UsdUVTexture")
+    texture.CreateInput("file", Sdf.ValueTypeNames.Asset).Set(Sdf.AssetPath("./d415_front.png"))
+    texture.CreateInput("sourceColorSpace", Sdf.ValueTypeNames.Token).Set("sRGB")
+    texture.CreateInput("wrapS", Sdf.ValueTypeNames.Token).Set("clamp")
+    texture.CreateInput("wrapT", Sdf.ValueTypeNames.Token).Set("clamp")
+    reader = UsdShade.Shader.Define(stage, f"{front.GetPath()}/UV")
+    reader.CreateIdAttr("UsdPrimvarReader_float2")
+    reader.CreateInput("varname", Sdf.ValueTypeNames.Token).Set("st")
+    texture.CreateInput("st", Sdf.ValueTypeNames.Float2).ConnectToSource(
+        reader.CreateOutput("result", Sdf.ValueTypeNames.Float2)
+    )
+    shader.GetInput("diffuseColor").ConnectToSource(
+        texture.CreateOutput("rgb", Sdf.ValueTypeNames.Float3)
+    )
+    uv = (source.vertices[:, :2] - bounds[0, :2]) / (bounds[1, :2] - bounds[0, :2])
+    UsdGeom.PrimvarsAPI(visual).CreatePrimvar(
+        "st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.vertex
+    ).Set(Vt.Vec2fArray.FromNumpy(uv.astype(np.float32)))
+    groups = {
+        "Housing": np.isin(labels, (0, 11, 18)),
+        "FrontCover": labels == 1,
+    }
+    groups["Interior"] = ~np.logical_or.reduce(list(groups.values()))
+    for name, mask in groups.items():
+        subset = UsdGeom.Subset.CreateGeomSubset(
+            visual, name, UsdGeom.Tokens.face, np.flatnonzero(mask).tolist(),
+            "materialBind", UsdGeom.Tokens.partition,
+        )
+        UsdShade.MaterialBindingAPI.Apply(subset.GetPrim()).Bind(materials[name])
 
 
 def shape_properties(prim, *, collision, label):
@@ -95,9 +212,14 @@ def build_component():
     stage.GetRootLayer().customLayerData = {
         "source": "../provenance/wrist_camera/README.md",
         "payloadInertia": "Not modeled: PickNik absent; RealSense tensor explicitly unreliable",
+        "appearance": (
+            "User-approved UR5 black adapter and source-geometry D415 front albedo bake; "
+            "not OEM textures"
+        ),
     }
 
-    # Preserve the DAE's exact mesh, authored corner normals, and material split.
+    # Preserve the DAE's exact mesh and authored corner normals. The user chose
+    # the existing UR5 black material for the whole adapter instead of CAD colors.
     dae = ET.parse(SOURCE / "picknik_ur5_realsense_camera_adapter_rev2.dae")
     geometry = dae.find(".//c:geometry", NS)
     arrays = {}
@@ -106,7 +228,7 @@ def build_component():
         arrays[item.get("id")] = np.fromstring(values.text, sep=" ").reshape(-1, 3)
     source_points = arrays["shape0-mesh-positions"]
     source_normals = arrays["shape0-mesh-normals"]
-    faces, normals, subsets = [], [], {}
+    faces, normals = [], []
     for item in geometry.findall("c:mesh/c:polylist", NS):
         counts = np.fromstring(item.findtext("c:vcount", namespaces=NS), sep=" ", dtype=int)
         if not np.all(counts == 3):
@@ -114,21 +236,12 @@ def build_component():
         packed = np.fromstring(item.findtext("c:p", namespaces=NS), sep=" ", dtype=int).reshape(
             -1, 2
         )
-        subsets[item.get("material")] = list(range(len(faces), len(faces) + len(counts)))
         faces.extend(packed[:, 0].reshape(-1, 3))
         normals.extend(source_normals[packed[:, 1]])
     adapter = mesh(stage, "/WristCameraAssembly/AdapterVisual", source_points, faces)
     adapter.CreateNormalsAttr(Vt.Vec3fArray.FromNumpy(np.asarray(normals, dtype=np.float32)))
     adapter.SetNormalsInterpolation(UsdGeom.Tokens.faceVarying)
-    for binding in dae.findall(".//c:library_materials/c:material", NS):
-        effect_id = binding.find("c:instance_effect", NS).get("url").lstrip("#")
-        effect = dae.find(f".//c:effect[@id='{effect_id}']", NS)
-        color = np.fromstring(effect.findtext(".//c:diffuse/c:color", namespaces=NS), sep=" ")[:3]
-        name = binding.get("id")
-        subset = UsdGeom.Subset.CreateGeomSubset(
-            adapter, name.replace("-", "_"), UsdGeom.Tokens.face, subsets[name]
-        )
-        UsdShade.MaterialBindingAPI.Apply(subset.GetPrim()).Bind(material(stage, name, color))
+    UsdShade.MaterialBindingAPI.Apply(adapter.GetPrim()).Bind(ur5_black_material(stage))
     collision = trimesh.load_mesh(
         SOURCE / "picknik_ur5_realsense_camera_adapter_rev2_collision.stl", process=False
     )
@@ -159,9 +272,7 @@ def build_component():
     aluminum = np.fromstring(
         materials.find(".//material[@name='aluminum']/color").get("rgba"), sep=" "
     )[:3]
-    UsdShade.MaterialBindingAPI.Apply(visual.GetPrim()).Bind(
-        material(stage, "D415Aluminum", aluminum)
-    )
+    d415_appearance(stage, visual, d415, aluminum)
 
     # Official simplified collision only; the visible camera remains the exact
     # 425,160-triangle mesh, including its authored front/lens geometry.
