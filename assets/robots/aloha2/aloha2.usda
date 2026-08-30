@@ -6,3 +6,28 @@
     subLayers = [@./payloads/workstation.usdc@]
     upAxis = "Z"
 )
+
+over "Robot"
+{
+    over "Joints"
+    {
+        # Restore the two affine finger equalities from aloha.xml. The
+        # workstation payload retains only the leader's position drive.
+        over "joint_009" (
+            prepend apiSchemas = ["MjcEqualityJointAPI", "NewtonMimicAPI"]
+        )
+        {
+            rel newton:mimicJoint = </Robot/Joints/joint_008>
+            float newton:mimicCoef0 = 0
+            float newton:mimicCoef1 = 1
+        }
+        over "joint_019" (
+            prepend apiSchemas = ["MjcEqualityJointAPI", "NewtonMimicAPI"]
+        )
+        {
+            rel newton:mimicJoint = </Robot/Joints/joint_018>
+            float newton:mimicCoef0 = 0
+            float newton:mimicCoef1 = 1
+        }
+    }
+}

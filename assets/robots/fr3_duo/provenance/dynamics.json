@@ -1,0 +1,1435 @@
+{
+  "franka_revision": "02afaae282d4a8e10d7d2f781b23b3515c303ce5",
+  "robotiq_revision": "2c047340aeb2440f7a60e429264221aab9658707",
+  "restored_bodies": [
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point",
+      "source": "franka_description generated fr3_duo.urdf",
+      "mass": 4.093846,
+      "com": [
+        -0.011817,
+        -5e-05,
+        0.044431
+      ],
+      "tensor": [
+        [
+          0.0224318121,
+          1.38076e-06,
+          -0.0015719371
+        ],
+        [
+          1.38076e-06,
+          0.0164193182,
+          -1.442621e-06
+        ],
+        [
+          -0.0015719371,
+          -1.442621e-06,
+          0.0217407036
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0",
+      "source": "franka_description/robots/fr3v2/inertials.yaml",
+      "mass": 2.3966,
+      "com": [
+        -0.0172,
+        0.0004,
+        0.0745
+      ],
+      "tensor": [
+        [
+          0.009,
+          0.0,
+          0.002
+        ],
+        [
+          0.0,
+          0.0115,
+          0.0
+        ],
+        [
+          0.002,
+          0.0,
+          0.0085
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1",
+      "source": "franka_description/robots/fr3v2/inertials.yaml",
+      "mass": 2.4377,
+      "com": [
+        -0.00458,
+        0.027016,
+        -0.0618
+      ],
+      "tensor": [
+        [
+          0.02324,
+          0.000333,
+          -0.000676
+        ],
+        [
+          0.000333,
+          0.02146,
+          0.003739
+        ],
+        [
+          -0.000676,
+          0.003739,
+          0.0055
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2",
+      "source": "franka_description/robots/fr3v2/inertials.yaml",
+      "mass": 2.2375,
+      "com": [
+        0.004541,
+        -0.180691,
+        -0.010479
+      ],
+      "tensor": [
+        [
+          0.019026,
+          0.001241,
+          0.000499
+        ],
+        [
+          0.001241,
+          0.00566,
+          -0.001804
+        ],
+        [
+          0.000499,
+          -0.001804,
+          0.017114
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3",
+      "source": "franka_description/robots/fr3v2/inertials.yaml",
+      "mass": 2.193082,
+      "com": [
+        0.08254,
+        0.019082,
+        0.042027
+      ],
+      "tensor": [
+        [
+          0.010225,
+          0.001144,
+          0.003497
+        ],
+        [
+          0.001144,
+          0.012398,
+          0.002156
+        ],
+        [
+          0.003497,
+          0.002156,
+          0.006877
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4",
+      "source": "franka_description/robots/fr3v2/inertials.yaml",
+      "mass": 2.181537,
+      "com": [
+        -0.087533,
+        0.096335,
+        0.01012
+      ],
+      "tensor": [
+        [
+          0.008878,
+          -0.003749,
+          0.001139
+        ],
+        [
+          -0.003749,
+          0.007628,
+          -0.00046
+        ],
+        [
+          0.001139,
+          -0.00046,
+          0.010295
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5",
+      "source": "franka_description/robots/fr3v2/inertials.yaml",
+      "mass": 2.186881,
+      "com": [
+        0.008383,
+        0.01018,
+        -0.053265
+      ],
+      "tensor": [
+        [
+          0.031874,
+          0.000134,
+          -0.000265
+        ],
+        [
+          0.000134,
+          0.029674,
+          -0.004734
+        ],
+        [
+          -0.000265,
+          -0.004734,
+          0.004751
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6",
+      "source": "franka_description/robots/fr3v2/inertials.yaml",
+      "mass": 1.579681,
+      "com": [
+        0.070391,
+        -0.016074,
+        -0.035025
+      ],
+      "tensor": [
+        [
+          0.00286,
+          -0.000553,
+          -0.000638
+        ],
+        [
+          -0.000553,
+          0.00391,
+          -0.00024
+        ],
+        [
+          -0.000638,
+          -0.00024,
+          0.00453
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7",
+      "source": "franka_description/robots/fr3v2/inertials.yaml",
+      "mass": 0.694841,
+      "com": [
+        -0.009108,
+        0.018151,
+        0.064946
+      ],
+      "tensor": [
+        [
+          0.000899,
+          0.0,
+          -1.3e-05
+        ],
+        [
+          0.0,
+          0.001099,
+          -2.2e-05
+        ],
+        [
+          -1.3e-05,
+          -2.2e-05,
+          0.000702
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_base_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.66320197,
+      "com": [
+        0.0,
+        2.274e-05,
+        0.03232288
+      ],
+      "tensor": [
+        [
+          0.00051617816,
+          2.936e-08,
+          0.0
+        ],
+        [
+          2.936e-08,
+          0.00058802208,
+          -3.2296e-07
+        ],
+        [
+          0.0,
+          -3.2296e-07,
+          0.00039462776
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 1200,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/robotiq_base.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_left_finger_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.04260376752,
+      "com": [
+        0.00346899,
+        -0.00079447,
+        0.01867121
+      ],
+      "tensor": [
+        [
+          1.385792e-05,
+          0.0,
+          -2.17264e-06
+        ],
+        [
+          0.0,
+          1.183208e-05,
+          0.0
+        ],
+        [
+          -2.17264e-06,
+          0.0,
+          5.19672e-06
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 1176,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/left_finger.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_left_finger_tip_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.04268588744,
+      "com": [
+        -0.01456706,
+        -0.0008,
+        0.01649701
+      ],
+      "tensor": [
+        [
+          1.048152e-05,
+          0.0,
+          3.5232e-06
+        ],
+        [
+          0.0,
+          1.197888e-05,
+          0.0
+        ],
+        [
+          3.5232e-06,
+          0.0,
+          4.22784e-06
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 672,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/left_finger_tip.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_left_inner_knuckle_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.02969376448,
+      "com": [
+        0.01897699,
+        0.00015001,
+        0.02247101
+      ],
+      "tensor": [
+        [
+          9.57136e-06,
+          0.0,
+          -3.93424e-06
+        ],
+        [
+          0.0,
+          8.69056e-06,
+          0.0
+        ],
+        [
+          -3.93424e-06,
+          0.0,
+          8.19144e-06
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 1074,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/left_inner_knuckle.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_left_knuckle_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.01384773208,
+      "com": [
+        0.01213197,
+        0.0002,
+        -0.00058647
+      ],
+      "tensor": [
+        [
+          3.5232e-07,
+          0.0,
+          1.1744e-07
+        ],
+        [
+          0.0,
+          2.31944e-06,
+          0.0
+        ],
+        [
+          1.1744e-07,
+          0.0,
+          2.23136e-06
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 258,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/left_knuckle.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_right_finger_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.04260376752,
+      "com": [
+        -0.00346899,
+        -5.53e-06,
+        0.01867121
+      ],
+      "tensor": [
+        [
+          1.385792e-05,
+          0.0,
+          2.17264e-06
+        ],
+        [
+          0.0,
+          1.183208e-05,
+          0.0
+        ],
+        [
+          2.17264e-06,
+          0.0,
+          5.19672e-06
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 1176,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/right_finger.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_right_finger_tip_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.04268588744,
+      "com": [
+        0.01456706,
+        5e-05,
+        0.01649701
+      ],
+      "tensor": [
+        [
+          1.048152e-05,
+          0.0,
+          -3.5232e-06
+        ],
+        [
+          0.0,
+          1.197888e-05,
+          0.0
+        ],
+        [
+          -3.5232e-06,
+          0.0,
+          4.22784e-06
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 672,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/right_finger_tip.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_right_inner_knuckle_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.02969376448,
+      "com": [
+        -0.01926824,
+        5.001e-05,
+        0.02222178
+      ],
+      "tensor": [
+        [
+          9.42456e-06,
+          0.0,
+          3.9636e-06
+        ],
+        [
+          0.0,
+          8.69056e-06,
+          0.0
+        ],
+        [
+          3.9636e-06,
+          0.0,
+          8.33824e-06
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 1062,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/right_inner_knuckle.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_right_knuckle_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.01384773208,
+      "com": [
+        -0.01213197,
+        0.0002,
+        -0.00058647
+      ],
+      "tensor": [
+        [
+          3.5232e-07,
+          0.0,
+          -1.1744e-07
+        ],
+        [
+          0.0,
+          2.31944e-06,
+          0.0
+        ],
+        [
+          -1.1744e-07,
+          0.0,
+          2.23136e-06
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 258,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/right_knuckle.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_ur_to_robotiq_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/ur_to_robotiq_adapter.urdf.xacro",
+      "mass": 0.01,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "tensor": [
+        [
+          4.4e-05,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          2.7e-05,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          2.7e-05
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 2928,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/ur_to_robotiq_adapter.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0",
+      "source": "franka_description/robots/fr3v2/inertials.yaml",
+      "mass": 2.3966,
+      "com": [
+        -0.0172,
+        0.0004,
+        0.0745
+      ],
+      "tensor": [
+        [
+          0.009,
+          0.0,
+          0.002
+        ],
+        [
+          0.0,
+          0.0115,
+          0.0
+        ],
+        [
+          0.002,
+          0.0,
+          0.0085
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1",
+      "source": "franka_description/robots/fr3v2/inertials.yaml",
+      "mass": 2.4377,
+      "com": [
+        -0.00458,
+        0.027016,
+        -0.0618
+      ],
+      "tensor": [
+        [
+          0.02324,
+          0.000333,
+          -0.000676
+        ],
+        [
+          0.000333,
+          0.02146,
+          0.003739
+        ],
+        [
+          -0.000676,
+          0.003739,
+          0.0055
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2",
+      "source": "franka_description/robots/fr3v2/inertials.yaml",
+      "mass": 2.2375,
+      "com": [
+        0.004541,
+        -0.180691,
+        -0.010479
+      ],
+      "tensor": [
+        [
+          0.019026,
+          0.001241,
+          0.000499
+        ],
+        [
+          0.001241,
+          0.00566,
+          -0.001804
+        ],
+        [
+          0.000499,
+          -0.001804,
+          0.017114
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3",
+      "source": "franka_description/robots/fr3v2/inertials.yaml",
+      "mass": 2.193082,
+      "com": [
+        0.08254,
+        0.019082,
+        0.042027
+      ],
+      "tensor": [
+        [
+          0.010225,
+          0.001144,
+          0.003497
+        ],
+        [
+          0.001144,
+          0.012398,
+          0.002156
+        ],
+        [
+          0.003497,
+          0.002156,
+          0.006877
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4",
+      "source": "franka_description/robots/fr3v2/inertials.yaml",
+      "mass": 2.181537,
+      "com": [
+        -0.087533,
+        0.096335,
+        0.01012
+      ],
+      "tensor": [
+        [
+          0.008878,
+          -0.003749,
+          0.001139
+        ],
+        [
+          -0.003749,
+          0.007628,
+          -0.00046
+        ],
+        [
+          0.001139,
+          -0.00046,
+          0.010295
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5",
+      "source": "franka_description/robots/fr3v2/inertials.yaml",
+      "mass": 2.186881,
+      "com": [
+        0.008383,
+        0.01018,
+        -0.053265
+      ],
+      "tensor": [
+        [
+          0.031874,
+          0.000134,
+          -0.000265
+        ],
+        [
+          0.000134,
+          0.029674,
+          -0.004734
+        ],
+        [
+          -0.000265,
+          -0.004734,
+          0.004751
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6",
+      "source": "franka_description/robots/fr3v2/inertials.yaml",
+      "mass": 1.579681,
+      "com": [
+        0.070391,
+        -0.016074,
+        -0.035025
+      ],
+      "tensor": [
+        [
+          0.00286,
+          -0.000553,
+          -0.000638
+        ],
+        [
+          -0.000553,
+          0.00391,
+          -0.00024
+        ],
+        [
+          -0.000638,
+          -0.00024,
+          0.00453
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7",
+      "source": "franka_description/robots/fr3v2/inertials.yaml",
+      "mass": 0.694841,
+      "com": [
+        -0.009108,
+        0.018151,
+        0.064946
+      ],
+      "tensor": [
+        [
+          0.000899,
+          0.0,
+          -1.3e-05
+        ],
+        [
+          0.0,
+          0.001099,
+          -2.2e-05
+        ],
+        [
+          -1.3e-05,
+          -2.2e-05,
+          0.000702
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_base_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.66320197,
+      "com": [
+        0.0,
+        2.274e-05,
+        0.03232288
+      ],
+      "tensor": [
+        [
+          0.00051617816,
+          2.936e-08,
+          0.0
+        ],
+        [
+          2.936e-08,
+          0.00058802208,
+          -3.2296e-07
+        ],
+        [
+          0.0,
+          -3.2296e-07,
+          0.00039462776
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 1200,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/robotiq_base.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_left_finger_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.04260376752,
+      "com": [
+        0.00346899,
+        -0.00079447,
+        0.01867121
+      ],
+      "tensor": [
+        [
+          1.385792e-05,
+          0.0,
+          -2.17264e-06
+        ],
+        [
+          0.0,
+          1.183208e-05,
+          0.0
+        ],
+        [
+          -2.17264e-06,
+          0.0,
+          5.19672e-06
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 1176,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/left_finger.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_left_finger_tip_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.04268588744,
+      "com": [
+        -0.01456706,
+        -0.0008,
+        0.01649701
+      ],
+      "tensor": [
+        [
+          1.048152e-05,
+          0.0,
+          3.5232e-06
+        ],
+        [
+          0.0,
+          1.197888e-05,
+          0.0
+        ],
+        [
+          3.5232e-06,
+          0.0,
+          4.22784e-06
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 672,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/left_finger_tip.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_left_inner_knuckle_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.02969376448,
+      "com": [
+        0.01897699,
+        0.00015001,
+        0.02247101
+      ],
+      "tensor": [
+        [
+          9.57136e-06,
+          0.0,
+          -3.93424e-06
+        ],
+        [
+          0.0,
+          8.69056e-06,
+          0.0
+        ],
+        [
+          -3.93424e-06,
+          0.0,
+          8.19144e-06
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 1074,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/left_inner_knuckle.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_left_knuckle_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.01384773208,
+      "com": [
+        0.01213197,
+        0.0002,
+        -0.00058647
+      ],
+      "tensor": [
+        [
+          3.5232e-07,
+          0.0,
+          1.1744e-07
+        ],
+        [
+          0.0,
+          2.31944e-06,
+          0.0
+        ],
+        [
+          1.1744e-07,
+          0.0,
+          2.23136e-06
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 258,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/left_knuckle.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_right_finger_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.04260376752,
+      "com": [
+        -0.00346899,
+        -5.53e-06,
+        0.01867121
+      ],
+      "tensor": [
+        [
+          1.385792e-05,
+          0.0,
+          2.17264e-06
+        ],
+        [
+          0.0,
+          1.183208e-05,
+          0.0
+        ],
+        [
+          2.17264e-06,
+          0.0,
+          5.19672e-06
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 1176,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/right_finger.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_right_finger_tip_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.04268588744,
+      "com": [
+        0.01456706,
+        5e-05,
+        0.01649701
+      ],
+      "tensor": [
+        [
+          1.048152e-05,
+          0.0,
+          -3.5232e-06
+        ],
+        [
+          0.0,
+          1.197888e-05,
+          0.0
+        ],
+        [
+          -3.5232e-06,
+          0.0,
+          4.22784e-06
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 672,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/right_finger_tip.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_right_inner_knuckle_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.02969376448,
+      "com": [
+        -0.01926824,
+        5.001e-05,
+        0.02222178
+      ],
+      "tensor": [
+        [
+          9.42456e-06,
+          0.0,
+          3.9636e-06
+        ],
+        [
+          0.0,
+          8.69056e-06,
+          0.0
+        ],
+        [
+          3.9636e-06,
+          0.0,
+          8.33824e-06
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 1062,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/right_inner_knuckle.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_right_knuckle_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
+      "mass": 0.01384773208,
+      "com": [
+        -0.01213197,
+        0.0002,
+        -0.00058647
+      ],
+      "tensor": [
+        [
+          3.5232e-07,
+          0.0,
+          -1.1744e-07
+        ],
+        [
+          0.0,
+          2.31944e-06,
+          0.0
+        ],
+        [
+          -1.1744e-07,
+          0.0,
+          2.23136e-06
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 258,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/right_knuckle.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_ur_to_robotiq_link",
+      "source": "PickNikRobotics/ros2_robotiq_gripper/ur_to_robotiq_adapter.urdf.xacro",
+      "mass": 0.01,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "tensor": [
+        [
+          4.4e-05,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          2.7e-05,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          2.7e-05
+        ]
+      ],
+      "geometry_identity": {
+        "vertex_count": 2928,
+        "max_bidirectional_vertex_error_m": 0.0,
+        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/ur_to_robotiq_adapter.stl"
+      }
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/head_link",
+      "source": "franka_description generated fr3_duo.urdf",
+      "mass": 0.350865,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "tensor": [
+        [
+          0.003020352,
+          -2.194e-05,
+          0.00016159
+        ],
+        [
+          -2.194e-05,
+          0.003067069,
+          -5.8102e-05
+        ],
+        [
+          0.00016159,
+          -5.8102e-05,
+          0.000160526
+        ]
+      ],
+      "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/head_link/head_camera_mounting_point",
+      "source": "franka_description generated fr3_duo.urdf",
+      "mass": 0.001,
+      "com": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "tensor": [
+        [
+          1e-07,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1e-07,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1e-07
+        ]
+      ],
+      "geometry_identity": null
+    }
+  ],
+  "arm_joints": [
+    {
+      "path": "/Robot/Duo/Physics/left_fr3v2_joint1",
+      "kp_Nm_per_rad": 4500.0,
+      "kd_Nm_s_per_rad": 450.0,
+      "limits": {
+        "lower": -2.9007400166666666,
+        "upper": 2.9007400166666666,
+        "velocity": 2.62,
+        "effort": 87.0
+      },
+      "passive_damping_Nm_s_per_rad": 0.003,
+      "friction_Nm": 0.2
+    },
+    {
+      "path": "/Robot/Duo/Physics/left_fr3v2_joint2",
+      "kp_Nm_per_rad": 4500.0,
+      "kd_Nm_s_per_rad": 450.0,
+      "limits": {
+        "lower": -1.8360900166666667,
+        "upper": 1.8360900166666667,
+        "velocity": 2.62,
+        "effort": 87.0
+      },
+      "passive_damping_Nm_s_per_rad": 0.003,
+      "friction_Nm": 0.2
+    },
+    {
+      "path": "/Robot/Duo/Physics/left_fr3v2_joint3",
+      "kp_Nm_per_rad": 3500.0,
+      "kd_Nm_s_per_rad": 350.0,
+      "limits": {
+        "lower": -2.9007400166666666,
+        "upper": 2.9007400166666666,
+        "velocity": 2.62,
+        "effort": 87.0
+      },
+      "passive_damping_Nm_s_per_rad": 0.003,
+      "friction_Nm": 0.2
+    },
+    {
+      "path": "/Robot/Duo/Physics/left_fr3v2_joint4",
+      "kp_Nm_per_rad": 3500.0,
+      "kd_Nm_s_per_rad": 350.0,
+      "limits": {
+        "lower": -3.077020016666667,
+        "upper": -0.11693708333333333,
+        "velocity": 2.62,
+        "effort": 87.0
+      },
+      "passive_damping_Nm_s_per_rad": 0.003,
+      "friction_Nm": 0.2
+    },
+    {
+      "path": "/Robot/Duo/Physics/left_fr3v2_joint5",
+      "kp_Nm_per_rad": 2000.0,
+      "kd_Nm_s_per_rad": 200.0,
+      "limits": {
+        "lower": -2.87630335,
+        "upper": 2.87630335,
+        "velocity": 5.26,
+        "effort": 12.0
+      },
+      "passive_damping_Nm_s_per_rad": 0.003,
+      "friction_Nm": 0.2
+    },
+    {
+      "path": "/Robot/Duo/Physics/left_fr3v2_joint6",
+      "kp_Nm_per_rad": 2000.0,
+      "kd_Nm_s_per_rad": 200.0,
+      "limits": {
+        "lower": 0.43982265,
+        "upper": 4.62163335,
+        "velocity": 4.18,
+        "effort": 12.0
+      },
+      "passive_damping_Nm_s_per_rad": 0.003,
+      "friction_Nm": 0.2
+    },
+    {
+      "path": "/Robot/Duo/Physics/left_fr3v2_joint7",
+      "kp_Nm_per_rad": 2000.0,
+      "kd_Nm_s_per_rad": 200.0,
+      "limits": {
+        "lower": -3.05083335,
+        "upper": 3.05083335,
+        "velocity": 5.26,
+        "effort": 12.0
+      },
+      "passive_damping_Nm_s_per_rad": 0.003,
+      "friction_Nm": 0.2
+    },
+    {
+      "path": "/Robot/Duo/Physics/right_fr3v2_joint1",
+      "kp_Nm_per_rad": 4500.0,
+      "kd_Nm_s_per_rad": 450.0,
+      "limits": {
+        "lower": -2.9007400166666666,
+        "upper": 2.9007400166666666,
+        "velocity": 2.62,
+        "effort": 87.0
+      },
+      "passive_damping_Nm_s_per_rad": 0.003,
+      "friction_Nm": 0.2
+    },
+    {
+      "path": "/Robot/Duo/Physics/right_fr3v2_joint2",
+      "kp_Nm_per_rad": 4500.0,
+      "kd_Nm_s_per_rad": 450.0,
+      "limits": {
+        "lower": -1.8360900166666667,
+        "upper": 1.8360900166666667,
+        "velocity": 2.62,
+        "effort": 87.0
+      },
+      "passive_damping_Nm_s_per_rad": 0.003,
+      "friction_Nm": 0.2
+    },
+    {
+      "path": "/Robot/Duo/Physics/right_fr3v2_joint3",
+      "kp_Nm_per_rad": 3500.0,
+      "kd_Nm_s_per_rad": 350.0,
+      "limits": {
+        "lower": -2.9007400166666666,
+        "upper": 2.9007400166666666,
+        "velocity": 2.62,
+        "effort": 87.0
+      },
+      "passive_damping_Nm_s_per_rad": 0.003,
+      "friction_Nm": 0.2
+    },
+    {
+      "path": "/Robot/Duo/Physics/right_fr3v2_joint4",
+      "kp_Nm_per_rad": 3500.0,
+      "kd_Nm_s_per_rad": 350.0,
+      "limits": {
+        "lower": -3.077020016666667,
+        "upper": -0.11693708333333333,
+        "velocity": 2.62,
+        "effort": 87.0
+      },
+      "passive_damping_Nm_s_per_rad": 0.003,
+      "friction_Nm": 0.2
+    },
+    {
+      "path": "/Robot/Duo/Physics/right_fr3v2_joint5",
+      "kp_Nm_per_rad": 2000.0,
+      "kd_Nm_s_per_rad": 200.0,
+      "limits": {
+        "lower": -2.87630335,
+        "upper": 2.87630335,
+        "velocity": 5.26,
+        "effort": 12.0
+      },
+      "passive_damping_Nm_s_per_rad": 0.003,
+      "friction_Nm": 0.2
+    },
+    {
+      "path": "/Robot/Duo/Physics/right_fr3v2_joint6",
+      "kp_Nm_per_rad": 2000.0,
+      "kd_Nm_s_per_rad": 200.0,
+      "limits": {
+        "lower": 0.43982265,
+        "upper": 4.62163335,
+        "velocity": 4.18,
+        "effort": 12.0
+      },
+      "passive_damping_Nm_s_per_rad": 0.003,
+      "friction_Nm": 0.2
+    },
+    {
+      "path": "/Robot/Duo/Physics/right_fr3v2_joint7",
+      "kp_Nm_per_rad": 2000.0,
+      "kd_Nm_s_per_rad": 200.0,
+      "limits": {
+        "lower": -3.05083335,
+        "upper": 3.05083335,
+        "velocity": 5.26,
+        "effort": 12.0
+      },
+      "passive_damping_Nm_s_per_rad": 0.003,
+      "friction_Nm": 0.2
+    }
+  ],
+  "debug_drive_note": "arm gains from old franka_fr3_duo.yaml SI control; gripper 500/50 and 100 Nm limit remain prototype assumptions, not vendor-certified",
+  "deferred": [
+    "unverified accessory/frame inertias",
+    "motor inertia/gear ratio model and armature",
+    "Robotiq torque/velocity control calibration",
+    "position-dependent arm velocity limits"
+  ],
+  "unverified_body_paths": [
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_d405_camera_link",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_d405_color_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_d405_color_optical_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_d405_depth_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_d405_depth_optical_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_d405_imu_link",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_d405_infra1_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_d405_infra1_optical_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_d405_infra2_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_d405_infra2_optical_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_base_adapter_link",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_tcp",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_wrist_cam_mount_link",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link5_accelerometer_top",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link5_accelerometer_bottom",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link4_accelerometer_top",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link4_accelerometer_bottom",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link3_accelerometer_top",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link3_accelerometer_bottom",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link2_accelerometer_top",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link2_accelerometer_bottom",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link1_accelerometer_top",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link1_accelerometer_bottom",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link0_accelerometer_top",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link0_accelerometer_bottom",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_d405_camera_link",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_d405_color_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_d405_color_optical_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_d405_depth_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_d405_depth_optical_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_d405_imu_link",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_d405_infra1_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_d405_infra1_optical_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_d405_infra2_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_d405_infra2_optical_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_base_adapter_link",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_tcp",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_wrist_cam_mount_link",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link5_accelerometer_top",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link5_accelerometer_bottom",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link4_accelerometer_top",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link4_accelerometer_bottom",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link3_accelerometer_top",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link3_accelerometer_bottom",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link2_accelerometer_top",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link2_accelerometer_bottom",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link1_accelerometer_top",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link1_accelerometer_bottom",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link0_accelerometer_top",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link0_accelerometer_bottom",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/head_link/zed_mini_camera_link",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/head_link/zed_mini_camera_link/zed_mini_imu_link",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/head_link/zed_mini_camera_link/zed_mini_left_camera_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/head_link/zed_mini_camera_link/zed_mini_left_camera_optical_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/head_link/zed_mini_camera_link/zed_mini_right_camera_frame",
+    "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/head_link/zed_mini_camera_link/zed_mini_right_camera_optical_frame"
+  ],
+  "packaging": "Fully composed accepted tabletop USD frozen into the external payload; home/attach/geometry unchanged"
+}

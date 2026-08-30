@@ -329,6 +329,8 @@ over "piper_dual"
 
     over "Physics"
     {
+        # Arm velocity: legacy ClothDojo baseline 3 rad/s, authored in deg/s.
+        # This is not an official hardware rating; SolverMuJoCo does not enforce it.
         over "left"
         {
             over "clamp_mount" (
@@ -345,6 +347,7 @@ over "piper_dual"
                 float drive:angular:physics:targetPosition = 0
                 custom bool mjc:actuatorgravcomp = true
                 custom float newton:armature = 0.1
+                custom float newton:velocityLimit = 171.88733853924697
                 float physics:lowerLimit = -90
                 float physics:upperLimit = 90
             }
@@ -357,6 +360,7 @@ over "piper_dual"
                 float drive:angular:physics:targetPosition = 0
                 custom bool mjc:actuatorgravcomp = true
                 custom float newton:armature = 0.1
+                custom float newton:velocityLimit = 171.88733853924697
             }
 
             over "joint3"
@@ -367,6 +371,7 @@ over "piper_dual"
                 float drive:angular:physics:targetPosition = 0
                 custom bool mjc:actuatorgravcomp = true
                 custom float newton:armature = 0.1
+                custom float newton:velocityLimit = 171.88733853924697
             }
 
             over "joint4"
@@ -377,6 +382,7 @@ over "piper_dual"
                 float drive:angular:physics:targetPosition = 0
                 custom bool mjc:actuatorgravcomp = true
                 custom float newton:armature = 0.1
+                custom float newton:velocityLimit = 171.88733853924697
             }
 
             over "joint5"
@@ -387,6 +393,7 @@ over "piper_dual"
                 float drive:angular:physics:targetPosition = 0
                 custom bool mjc:actuatorgravcomp = true
                 custom float newton:armature = 0.1
+                custom float newton:velocityLimit = 171.88733853924697
             }
 
             over "joint6"
@@ -397,6 +404,7 @@ over "piper_dual"
                 float drive:angular:physics:targetPosition = 0
                 custom bool mjc:actuatorgravcomp = true
                 custom float newton:armature = 0.1
+                custom float newton:velocityLimit = 171.88733853924697
             }
 
             over "joint7" (
@@ -447,6 +455,7 @@ over "piper_dual"
                 float drive:angular:physics:targetPosition = 0
                 custom bool mjc:actuatorgravcomp = true
                 custom float newton:armature = 0.1
+                custom float newton:velocityLimit = 171.88733853924697
                 float physics:lowerLimit = -90
                 float physics:upperLimit = 90
             }
@@ -459,6 +468,7 @@ over "piper_dual"
                 float drive:angular:physics:targetPosition = 0
                 custom bool mjc:actuatorgravcomp = true
                 custom float newton:armature = 0.1
+                custom float newton:velocityLimit = 171.88733853924697
             }
 
             over "joint3"
@@ -469,6 +479,7 @@ over "piper_dual"
                 float drive:angular:physics:targetPosition = 0
                 custom bool mjc:actuatorgravcomp = true
                 custom float newton:armature = 0.1
+                custom float newton:velocityLimit = 171.88733853924697
             }
 
             over "joint4"
@@ -479,6 +490,7 @@ over "piper_dual"
                 float drive:angular:physics:targetPosition = 0
                 custom bool mjc:actuatorgravcomp = true
                 custom float newton:armature = 0.1
+                custom float newton:velocityLimit = 171.88733853924697
             }
 
             over "joint5"
@@ -489,6 +501,7 @@ over "piper_dual"
                 float drive:angular:physics:targetPosition = 0
                 custom bool mjc:actuatorgravcomp = true
                 custom float newton:armature = 0.1
+                custom float newton:velocityLimit = 171.88733853924697
             }
 
             over "joint6"
@@ -499,6 +512,7 @@ over "piper_dual"
                 float drive:angular:physics:targetPosition = 0
                 custom bool mjc:actuatorgravcomp = true
                 custom float newton:armature = 0.1
+                custom float newton:velocityLimit = 171.88733853924697
             }
 
             over "joint7" (

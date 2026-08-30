@@ -1,12 +1,104 @@
 #usda 1.0
 (
-    defaultPrim = "Robot"
     customLayerData = {
-        string installation = "OpenDriveLab/kai0 integrated mount assembly with two complete RoboDojo ARX X5 references"
+        string installation = "OpenDriveLab/kai0 integrated base with two complete RoboDojo ARX X5 references and a direct-mounted RoboDojo D455 stand"
         string robot = "RoboDojo Assets/Robots/x5/ARX.usd, including its camera_base and full-resolution camera geometry"
     }
+    defaultPrim = "Robot"
     kilogramsPerUnit = 1
     metersPerUnit = 1
-    subLayers = [@./payloads/workstation.usdc@]
+    subLayers = [
+        @./payloads/workstation.usdc@
+    ]
     upAxis = "Z"
 )
+
+over "Robot"
+{
+    over "Arms"
+    {
+        over "left"
+        {
+            over "joints"
+            {
+                over "joint1"
+                {
+                    float physxJoint:armature = 0.01
+                    float physxJoint:maxJointVelocity = 286.4789
+                }
+
+                over "joint2"
+                {
+                    float physxJoint:armature = 0.01
+                    float physxJoint:maxJointVelocity = 286.4789
+                }
+
+                over "joint3"
+                {
+                    float physxJoint:armature = 0.01
+                    float physxJoint:maxJointVelocity = 286.4789
+                }
+
+                over "joint4"
+                {
+                    float physxJoint:armature = 0.01
+                    float physxJoint:maxJointVelocity = 286.4789
+                }
+
+                over "joint5"
+                {
+                    float physxJoint:armature = 0.01
+                    float physxJoint:maxJointVelocity = 286.4789
+                }
+
+                over "joint6"
+                {
+                    float physxJoint:armature = 0.01
+                    float physxJoint:maxJointVelocity = 286.4789
+                }
+            }
+        }
+
+        over "right"
+        {
+            over "joints"
+            {
+                over "joint1"
+                {
+                    float physxJoint:armature = 0.01
+                    float physxJoint:maxJointVelocity = 286.4789
+                }
+
+                over "joint2"
+                {
+                    float physxJoint:armature = 0.01
+                    float physxJoint:maxJointVelocity = 286.4789
+                }
+
+                over "joint3"
+                {
+                    float physxJoint:armature = 0.01
+                    float physxJoint:maxJointVelocity = 286.4789
+                }
+
+                over "joint4"
+                {
+                    float physxJoint:armature = 0.01
+                    float physxJoint:maxJointVelocity = 286.4789
+                }
+
+                over "joint5"
+                {
+                    float physxJoint:armature = 0.01
+                    float physxJoint:maxJointVelocity = 286.4789
+                }
+
+                over "joint6"
+                {
+                    float physxJoint:armature = 0.01
+                    float physxJoint:maxJointVelocity = 286.4789
+                }
+            }
+        }
+    }
+}

@@ -1,6 +1,9 @@
 #usda 1.0
 (
     defaultPrim = "Robot"
+    customLayerData = {
+        string installation = "Dual Franka Panda workstation at x=0.25, y=+-0.55, with the complete legacy RoboDojo D455 stand on the X5 column axis"
+    }
     kilogramsPerUnit = 1
     metersPerUnit = 1
     subLayers = [@./payloads/workstation.usdc@]

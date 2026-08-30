@@ -1,8 +1,245 @@
 #usda 1.0
 (
     defaultPrim = "Robot"
+    customLayerData = {
+        string installation = "Dual UR5e plus Robotiq 2F-85 workstation at x=0.25, y=+-0.55, with the complete legacy RoboDojo D455 stand on the X5 column axis"
+    }
     kilogramsPerUnit = 1
     metersPerUnit = 1
     subLayers = [@./payloads/workstation.usdc@]
     upAxis = "Z"
 )
+
+# Dynamics units: Newton USD revolute coefficients use degrees.
+# Source payload values are legacy SI; only these angular properties are converted.
+# 1e6 rad/s is the source's effectively unlimited fallback, not a hardware rating.
+# Robotiq spring values come from the fixed Menagerie 2f85.xml.
+over "Robot"
+{
+    over "Joints"
+    {
+        over "joint_001"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 43.63323129985824
+            float newton:limitDamping = 1.74532925199433
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_002"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 43.63323129985824
+            float newton:limitDamping = 1.74532925199433
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_003"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 43.63323129985824
+            float newton:limitDamping = 1.74532925199433
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_004"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 43.63323129985824
+            float newton:limitDamping = 1.74532925199433
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_005"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 43.63323129985824
+            float newton:limitDamping = 1.74532925199433
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_006"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 43.63323129985824
+            float newton:limitDamping = 1.74532925199433
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_009"
+        {
+            float newton:damping = 0.001745329278001762
+            float newton:limitStiffness = 698.1317007977318
+            float newton:limitDamping = 6.981317007977318
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_010"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 698.1317007977318
+            float newton:limitDamping = 6.981317007977318
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_011"
+        {
+            float newton:damping = 2.181661516228976e-05
+            float newton:limitStiffness = 43.63323129985824
+            float newton:limitDamping = 1.74532925199433
+            float newton:velocityLimit = 57295779.51308233
+            custom float mjc:stiffness = 0.05
+            custom float mjc:springref = 2.62
+        }
+        over "joint_012"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 698.1317007977318
+            float newton:limitDamping = 6.981317007977318
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_015"
+        {
+            float newton:damping = 0.001745329278001762
+            float newton:limitStiffness = 698.1317007977318
+            float newton:limitDamping = 6.981317007977318
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_016"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 698.1317007977318
+            float newton:limitDamping = 6.981317007977318
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_017"
+        {
+            float newton:damping = 2.181661516228976e-05
+            float newton:limitStiffness = 43.63323129985824
+            float newton:limitDamping = 1.74532925199433
+            float newton:velocityLimit = 57295779.51308233
+            custom float mjc:stiffness = 0.05
+            custom float mjc:springref = 2.62
+        }
+        over "joint_018"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 698.1317007977318
+            float newton:limitDamping = 6.981317007977318
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_024"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 43.63323129985824
+            float newton:limitDamping = 1.74532925199433
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_025"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 43.63323129985824
+            float newton:limitDamping = 1.74532925199433
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_026"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 43.63323129985824
+            float newton:limitDamping = 1.74532925199433
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_027"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 43.63323129985824
+            float newton:limitDamping = 1.74532925199433
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_028"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 43.63323129985824
+            float newton:limitDamping = 1.74532925199433
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_029"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 43.63323129985824
+            float newton:limitDamping = 1.74532925199433
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_032"
+        {
+            float newton:damping = 0.001745329278001762
+            float newton:limitStiffness = 698.1317007977318
+            float newton:limitDamping = 6.981317007977318
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_033"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 698.1317007977318
+            float newton:limitDamping = 6.981317007977318
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_034"
+        {
+            float newton:damping = 2.181661516228976e-05
+            float newton:limitStiffness = 43.63323129985824
+            float newton:limitDamping = 1.74532925199433
+            float newton:velocityLimit = 57295779.51308233
+            custom float mjc:stiffness = 0.05
+            custom float mjc:springref = 2.62
+        }
+        over "joint_035"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 698.1317007977318
+            float newton:limitDamping = 6.981317007977318
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_038"
+        {
+            float newton:damping = 0.001745329278001762
+            float newton:limitStiffness = 698.1317007977318
+            float newton:limitDamping = 6.981317007977318
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_039"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 698.1317007977318
+            float newton:limitDamping = 6.981317007977318
+            float newton:velocityLimit = 57295779.51308233
+        }
+        over "joint_040"
+        {
+            float newton:damping = 2.181661516228976e-05
+            float newton:limitStiffness = 43.63323129985824
+            float newton:limitDamping = 1.74532925199433
+            float newton:velocityLimit = 57295779.51308233
+            custom float mjc:stiffness = 0.05
+            custom float mjc:springref = 2.62
+        }
+        over "joint_041"
+        {
+            float newton:damping = 0
+            float newton:limitStiffness = 698.1317007977318
+            float newton:limitDamping = 6.981317007977318
+            float newton:velocityLimit = 57295779.51308233
+        }
+    }
+    over "Bodies"
+    {
+        # Source 2f85.xml omits explicit inertia only for this mounting body.
+        # Preserve MuJoCo 3.11 geometry/density inference, not a measured rating.
+        over "body_007"
+        {
+            float physics:mass = 0.1500028551637798
+            point3f physics:centerOfMass = (-0.0003605835958214157, 8.536274800937428e-05, -5.919914145050651e-05)
+            float3 physics:diagonalInertia = (0.0001023454890179491, 5.35996872189825e-05, 5.217176310506675e-05)
+            quatf physics:principalAxes = (-0.0005222230216346269, 0.7060997694368749, 0.0005237112247473696, 0.7081119746275054)
+        }
+        over "body_028"
+        {
+            float physics:mass = 0.1500028551637798
+            point3f physics:centerOfMass = (-0.0003605835958214157, 8.536274800937428e-05, -5.919914145050651e-05)
+            float3 physics:diagonalInertia = (0.0001023454890179491, 5.35996872189825e-05, 5.217176310506675e-05)
+            quatf physics:principalAxes = (-0.0005222230216346269, 0.7060997694368749, 0.0005237112247473696, 0.7081119746275054)
+        }
+    }
+}

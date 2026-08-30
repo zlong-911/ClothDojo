@@ -37,3 +37,13 @@ checkpoints/
 !/assets/robots/x5/
 /assets/robots/x5/*
 !/assets/robots/x5/x5.usda
+!/assets/robots/x5/build_workstation.py
+!/assets/robots/x5/CLOTHDOJO.md
+!/assets/robots/ur5e_2f85/CLOTHDOJO.md
+!/assets/robots/fr3_duo/
+/assets/robots/fr3_duo/*
+!/assets/robots/fr3_duo/fr3_duo.usda
+!/assets/robots/fr3_duo/CLOTHDOJO.md
+!/assets/robots/fr3_duo/provenance/
+/assets/robots/fr3_duo/provenance/*
+!/assets/robots/fr3_duo/provenance/dynamics.json

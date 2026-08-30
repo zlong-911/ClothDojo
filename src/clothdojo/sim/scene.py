@@ -18,6 +18,7 @@ import numpy as np
 
 from clothdojo.assets import GarmentLibrary
 from clothdojo.robots import (
+    ALOHA2,
     PIPER,
     RobotProfile,
     robot_profile,
@@ -331,6 +332,8 @@ def _add_robot(
             ],
         )
     imported = builder.add_usd(**import_options)
+    if profile.robot_id == ALOHA2:
+        _restore_exported_joint_dynamics(stage, imported, builder)
     legacy_contract = None
     if not embedded_shape_contract:
         legacy_contract = _robot_asset_contract(path)
@@ -472,6 +475,31 @@ def _add_robot(
     )):
         raise RuntimeError(f"{profile.robot_id} USD control DOF layout is invalid")
     return body_count, arm_joints, gripper_joints, arm_coords, end_effectors
+
+
+def _restore_exported_joint_dynamics(stage, imported, builder) -> None:
+    """Restore SI joint values written by Newton's ModelBuilder USD exporter."""
+
+    attributes = {
+        "newton:damping": "joint_damping",
+        "newton:limitStiffness": "joint_limit_ke",
+        "newton:limitDamping": "joint_limit_kd",
+        "newton:velocityLimit": "joint_velocity_limit",
+    }
+    for prim_path, joint in imported["path_joint_map"].items():
+        joint = int(joint)
+        linear_dofs, angular_dofs = builder.joint_dof_dim[joint]
+        if int(linear_dofs) + int(angular_dofs) != 1:
+            continue
+        dof = int(builder.joint_qd_start[joint])
+        prim = stage.GetPrimAtPath(prim_path)
+        for usd_name, builder_name in attributes.items():
+            attribute = prim.GetAttribute(usd_name)
+            if not attribute or not attribute.HasAuthoredValue():
+                continue
+            value = float(attribute.Get())
+            if np.isfinite(value):
+                getattr(builder, builder_name)[dof] = value
 
 
 @dataclass(frozen=True, slots=True)

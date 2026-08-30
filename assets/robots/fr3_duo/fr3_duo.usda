@@ -1,0 +1,725 @@
+#usda 1.0
+(
+    customLayerData = {
+        string dynamicsSources = "provenance/dynamics.json"
+        string status = "Accepted workstation snapshot; robot profile integration pending"
+    }
+    defaultPrim = "Robot"
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    subLayers = [
+        @./payloads/workstation.usdc@
+    ]
+    upAxis = "Z"
+)
+
+over "Robot"
+{
+    over "Duo"
+    {
+        over "Physics"
+        {
+            over "left_fr3v2_joint1"
+            {
+                float drive:angular:physics:damping = 7.8539815
+                float drive:angular:physics:maxForce = 87
+                float drive:angular:physics:stiffness = 78.53982
+                float drive:angular:physics:targetPosition = 10.871359
+                float drive:angular:physics:targetVelocity = 0
+                uniform token drive:angular:physics:type = "force"
+                custom float newton:damping = 0.00005235988
+                custom float newton:friction = 0.2
+                custom float newton:velocityLimit = 150.11494
+                float physics:lowerLimit = -166.20016
+                float physics:upperLimit = 166.20016
+                float physxJoint:jointFriction = 0.2
+                float physxJoint:maxJointVelocity = 150.11494
+                custom float state:angular:physics:position = 10.871359
+            }
+
+            over "left_fr3v2_joint2"
+            {
+                float drive:angular:physics:damping = 7.8539815
+                float drive:angular:physics:maxForce = 87
+                float drive:angular:physics:stiffness = 78.53982
+                float drive:angular:physics:targetPosition = -28.310131
+                float drive:angular:physics:targetVelocity = 0
+                uniform token drive:angular:physics:type = "force"
+                custom float newton:damping = 0.00005235988
+                custom float newton:friction = 0.2
+                custom float newton:velocityLimit = 150.11494
+                float physics:lowerLimit = -105.20021
+                float physics:upperLimit = 105.20021
+                float physxJoint:jointFriction = 0.2
+                float physxJoint:maxJointVelocity = 150.11494
+                custom float state:angular:physics:position = -28.310131
+            }
+
+            over "left_fr3v2_joint3"
+            {
+                float drive:angular:physics:damping = 6.1086526
+                float drive:angular:physics:maxForce = 87
+                float drive:angular:physics:stiffness = 61.086525
+                float drive:angular:physics:targetPosition = -16.77907
+                float drive:angular:physics:targetVelocity = 0
+                uniform token drive:angular:physics:type = "force"
+                custom float newton:damping = 0.00005235988
+                custom float newton:friction = 0.2
+                custom float newton:velocityLimit = 150.11494
+                float physics:lowerLimit = -166.20016
+                float physics:upperLimit = 166.20016
+                float physxJoint:jointFriction = 0.2
+                float physxJoint:maxJointVelocity = 150.11494
+                custom float state:angular:physics:position = -16.77907
+            }
+
+            over "left_fr3v2_joint4"
+            {
+                float drive:angular:physics:damping = 6.1086526
+                float drive:angular:physics:maxForce = 87
+                float drive:angular:physics:stiffness = 61.086525
+                float drive:angular:physics:targetPosition = -150.30545
+                float drive:angular:physics:targetVelocity = 0
+                uniform token drive:angular:physics:type = "force"
+                custom float newton:damping = 0.00005235988
+                custom float newton:friction = 0.2
+                custom float newton:velocityLimit = 150.11494
+                float physics:lowerLimit = -176.30026
+                float physics:upperLimit = -6.7000012
+                float physxJoint:jointFriction = 0.2
+                float physxJoint:maxJointVelocity = 150.11494
+                custom float state:angular:physics:position = -150.30545
+            }
+
+            over "left_fr3v2_joint5"
+            {
+                float drive:angular:physics:damping = 3.4906585
+                float drive:angular:physics:maxForce = 12
+                float drive:angular:physics:stiffness = 34.906586
+                float drive:angular:physics:targetPosition = 42.45451
+                float drive:angular:physics:targetVelocity = 0
+                uniform token drive:angular:physics:type = "force"
+                custom float newton:damping = 0.00005235988
+                custom float newton:friction = 0.2
+                custom float newton:velocityLimit = 301.3758
+                float physics:lowerLimit = -164.80005
+                float physics:upperLimit = 164.80005
+                float physxJoint:jointFriction = 0.2
+                float physxJoint:maxJointVelocity = 301.3758
+                custom float state:angular:physics:position = 42.45451
+            }
+
+            over "left_fr3v2_joint6"
+            {
+                float drive:angular:physics:damping = 3.4906585
+                float drive:angular:physics:maxForce = 12
+                float drive:angular:physics:stiffness = 34.906586
+                float drive:angular:physics:targetPosition = 101.48515
+                float drive:angular:physics:targetVelocity = 0
+                uniform token drive:angular:physics:type = "force"
+                custom float newton:damping = 0.00005235988
+                custom float newton:friction = 0.2
+                custom float newton:velocityLimit = 239.49635
+                float physics:lowerLimit = 25.199982
+                float physics:upperLimit = 264.80008
+                float physxJoint:jointFriction = 0.2
+                float physxJoint:maxJointVelocity = 239.49635
+                custom float state:angular:physics:position = 101.48515
+            }
+
+            over "left_fr3v2_joint7"
+            {
+                float drive:angular:physics:damping = 3.4906585
+                float drive:angular:physics:maxForce = 12
+                float drive:angular:physics:stiffness = 34.906586
+                float drive:angular:physics:targetPosition = 3.726632
+                float drive:angular:physics:targetVelocity = 0
+                uniform token drive:angular:physics:type = "force"
+                custom float newton:damping = 0.00005235988
+                custom float newton:friction = 0.2
+                custom float newton:velocityLimit = 301.3758
+                float physics:lowerLimit = -174.79988
+                float physics:upperLimit = 174.79988
+                float physxJoint:jointFriction = 0.2
+                float physxJoint:maxJointVelocity = 301.3758
+                custom float state:angular:physics:position = 3.726632
+            }
+
+            over "right_fr3v2_joint1"
+            {
+                float drive:angular:physics:damping = 7.8539815
+                float drive:angular:physics:maxForce = 87
+                float drive:angular:physics:stiffness = 78.53982
+                float drive:angular:physics:targetPosition = -1.1470615
+                float drive:angular:physics:targetVelocity = 0
+                uniform token drive:angular:physics:type = "force"
+                custom float newton:damping = 0.00005235988
+                custom float newton:friction = 0.2
+                custom float newton:velocityLimit = 150.11494
+                float physics:lowerLimit = -166.20016
+                float physics:upperLimit = 166.20016
+                float physxJoint:jointFriction = 0.2
+                float physxJoint:maxJointVelocity = 150.11494
+                custom float state:angular:physics:position = -1.1470615
+            }
+
+            over "right_fr3v2_joint2"
+            {
+                float drive:angular:physics:damping = 7.8539815
+                float drive:angular:physics:maxForce = 87
+                float drive:angular:physics:stiffness = 78.53982
+                float drive:angular:physics:targetPosition = -27.162954
+                float drive:angular:physics:targetVelocity = 0
+                uniform token drive:angular:physics:type = "force"
+                custom float newton:damping = 0.00005235988
+                custom float newton:friction = 0.2
+                custom float newton:velocityLimit = 150.11494
+                float physics:lowerLimit = -105.20021
+                float physics:upperLimit = 105.20021
+                float physxJoint:jointFriction = 0.2
+                float physxJoint:maxJointVelocity = 150.11494
+                custom float state:angular:physics:position = -27.162954
+            }
+
+            over "right_fr3v2_joint3"
+            {
+                float drive:angular:physics:damping = 6.1086526
+                float drive:angular:physics:maxForce = 87
+                float drive:angular:physics:stiffness = 61.086525
+                float drive:angular:physics:targetPosition = 8.017799
+                float drive:angular:physics:targetVelocity = 0
+                uniform token drive:angular:physics:type = "force"
+                custom float newton:damping = 0.00005235988
+                custom float newton:friction = 0.2
+                custom float newton:velocityLimit = 150.11494
+                float physics:lowerLimit = -166.20016
+                float physics:upperLimit = 166.20016
+                float physxJoint:jointFriction = 0.2
+                float physxJoint:maxJointVelocity = 150.11494
+                custom float state:angular:physics:position = 8.017799
+            }
+
+            over "right_fr3v2_joint4"
+            {
+                float drive:angular:physics:damping = 6.1086526
+                float drive:angular:physics:maxForce = 87
+                float drive:angular:physics:stiffness = 61.086525
+                float drive:angular:physics:targetPosition = -149.83597
+                float drive:angular:physics:targetVelocity = 0
+                uniform token drive:angular:physics:type = "force"
+                custom float newton:damping = 0.00005235988
+                custom float newton:friction = 0.2
+                custom float newton:velocityLimit = 150.11494
+                float physics:lowerLimit = -176.30026
+                float physics:upperLimit = -6.7000012
+                float physxJoint:jointFriction = 0.2
+                float physxJoint:maxJointVelocity = 150.11494
+                custom float state:angular:physics:position = -149.83597
+            }
+
+            over "right_fr3v2_joint5"
+            {
+                float drive:angular:physics:damping = 3.4906585
+                float drive:angular:physics:maxForce = 12
+                float drive:angular:physics:stiffness = 34.906586
+                float drive:angular:physics:targetPosition = -45.38141
+                float drive:angular:physics:targetVelocity = 0
+                uniform token drive:angular:physics:type = "force"
+                custom float newton:damping = 0.00005235988
+                custom float newton:friction = 0.2
+                custom float newton:velocityLimit = 301.3758
+                float physics:lowerLimit = -164.80005
+                float physics:upperLimit = 164.80005
+                float physxJoint:jointFriction = 0.2
+                float physxJoint:maxJointVelocity = 301.3758
+                custom float state:angular:physics:position = -45.38141
+            }
+
+            over "right_fr3v2_joint6"
+            {
+                float drive:angular:physics:damping = 3.4906585
+                float drive:angular:physics:maxForce = 12
+                float drive:angular:physics:stiffness = 34.906586
+                float drive:angular:physics:targetPosition = 98.50394
+                float drive:angular:physics:targetVelocity = 0
+                uniform token drive:angular:physics:type = "force"
+                custom float newton:damping = 0.00005235988
+                custom float newton:friction = 0.2
+                custom float newton:velocityLimit = 239.49635
+                float physics:lowerLimit = 25.199982
+                float physics:upperLimit = 264.80008
+                float physxJoint:jointFriction = 0.2
+                float physxJoint:maxJointVelocity = 239.49635
+                custom float state:angular:physics:position = 98.50394
+            }
+
+            over "right_fr3v2_joint7"
+            {
+                float drive:angular:physics:damping = 3.4906585
+                float drive:angular:physics:maxForce = 12
+                float drive:angular:physics:stiffness = 34.906586
+                float drive:angular:physics:targetPosition = -1.0533305
+                float drive:angular:physics:targetVelocity = 0
+                uniform token drive:angular:physics:type = "force"
+                custom float newton:damping = 0.00005235988
+                custom float newton:friction = 0.2
+                custom float newton:velocityLimit = 301.3758
+                float physics:lowerLimit = -174.79988
+                float physics:upperLimit = 174.79988
+                float physxJoint:jointFriction = 0.2
+                float physxJoint:maxJointVelocity = 301.3758
+                custom float state:angular:physics:position = -1.0533305
+            }
+        }
+
+        over "Geometry"
+        {
+            over "base"
+            {
+                over "fr3_duo_mount_mounting_point"
+                {
+                    point3f physics:centerOfMass = (-0.011817, -0.00005, 0.044431)
+                    float3 physics:diagonalInertia = (0.016419318, 0.020476788, 0.023695728)
+                    float physics:mass = 4.093846
+                    quatf physics:principalAxes = (0.6376734, -0.30542856, -0.3056216, 0.6377158)
+
+                    over "fr3_duo_mount_origin"
+                    {
+                        over "fr3_duo_mount_left"
+                        {
+                            over "left_base"
+                            {
+                                over "left_fr3v2_link0"
+                                {
+                                    point3f physics:centerOfMass = (-0.0172, 0.0004, 0.0745)
+                                    float3 physics:diagonalInertia = (0.0067344354, 0.010765565, 0.0115)
+                                    float physics:mass = 2.3966
+                                    quatf physics:principalAxes = (-0.29077372, -0.29077372, 0.6445546, -0.6445546)
+
+                                    over "left_fr3v2_link1"
+                                    {
+                                        point3f physics:centerOfMass = (-0.00458, 0.027016, -0.0618)
+                                        float3 physics:diagonalInertia = (0.004638654, 0.022261089, 0.023300257)
+                                        float physics:mass = 2.4377
+                                        quatf physics:principalAxes = (0.6928866, 0.015482842, 0.70691735, 0.14119582)
+
+                                        over "left_fr3v2_link2"
+                                        {
+                                            point3f physics:centerOfMass = (0.004541, -0.180691, -0.010479)
+                                            float3 physics:diagonalInertia = (0.005259303, 0.017340638, 0.019200059)
+                                            float physics:mass = 2.2375
+                                            quatf physics:principalAxes = (0.47845262, 0.47324845, 0.43276584, 0.59986055)
+
+                                            over "left_fr3v2_link3"
+                                            {
+                                                point3f physics:centerOfMass = (0.08254, 0.019082, 0.042027)
+                                                float3 physics:diagonalInertia = (0.0044736224, 0.010421152, 0.014605225)
+                                                float physics:mass = 2.193082
+                                                quatf physics:principalAxes = (0.8083412, -0.30163306, 0.43241614, 0.26195094)
+
+                                                over "left_fr3v2_link4"
+                                                {
+                                                    point3f physics:centerOfMass = (-0.087533, 0.096335, 0.01012)
+                                                    float3 physics:diagonalInertia = (0.0044261836, 0.009736058, 0.012638758)
+                                                    float physics:mass = 2.181537
+                                                    quatf physics:principalAxes = (-0.33762142, 0.24422844, -0.46501783, 0.7811035)
+
+                                                    over "left_fr3v2_link5"
+                                                    {
+                                                        point3f physics:centerOfMass = (0.008383, 0.01018, -0.053265)
+                                                        float3 physics:diagonalInertia = (0.0038800961, 0.030519126, 0.03189978)
+                                                        float physics:mass = 2.186881
+                                                        quatf physics:principalAxes = (0.70986634, -0.01769611, -0.69550407, 0.109775834)
+
+                                                        over "left_fr3v2_link6"
+                                                        {
+                                                            point3f physics:centerOfMass = (0.070391, -0.016074, -0.035025)
+                                                            float3 physics:diagonalInertia = (0.0024043, 0.0041460977, 0.004749602)
+                                                            float physics:mass = 1.579681
+                                                            quatf physics:principalAxes = (0.9687735, 0.007590724, -0.15597427, 0.19259371)
+
+                                                            over "left_fr3v2_link7"
+                                                            {
+                                                                point3f physics:centerOfMass = (-0.009108, 0.018151, 0.064946)
+                                                                float3 physics:diagonalInertia = (0.00069993816, 0.0008998439, 0.001100218)
+                                                                float physics:mass = 0.694841
+                                                                quatf physics:principalAxes = (-0.5006586, 0.53091955, 0.49574527, 0.47085246)
+
+                                                                over "left_fr3v2_link8"
+                                                                {
+                                                                    over "VMKit"
+                                                                    {
+                                                                        over "left_robotiq_85_base_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (0, 0.00002274, 0.03232288)
+                                                                            float3 physics:diagonalInertia = (0.00039462722, 0.00051617814, 0.00058802264)
+                                                                            float physics:mass = 0.663202
+                                                                            quatf physics:principalAxes = (0.4996847, -0.5003153, 0.5005193, 0.49947998)
+                                                                        }
+
+                                                                        over "left_robotiq_85_left_finger_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (0.00346899, -0.00079447, 0.01867121)
+                                                                            float3 physics:diagonalInertia = (0.000004682275, 0.00001183208, 0.000014372365)
+                                                                            float physics:mass = 0.04260377
+                                                                            quatf physics:principalAxes = (0.78435075, -1.7693344e-17, -0.6203176, 1.3536424e-16)
+                                                                        }
+
+                                                                        over "left_robotiq_85_left_finger_tip_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (-0.01456706, -0.0008, 0.01649701)
+                                                                            float3 physics:diagonalInertia = (0.0000026440466, 0.00001197888, 0.000012065313)
+                                                                            float physics:mass = 0.04268589
+                                                                            quatf physics:principalAxes = (0, 0.8396458, 0, -0.54313433)
+                                                                        }
+
+                                                                        over "left_robotiq_85_left_inner_knuckle_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (0.01897699, 0.00015001, 0.02247101)
+                                                                            float3 physics:diagonalInertia = (0.000004887118, 0.00000869056, 0.000012875682)
+                                                                            float physics:mass = 0.029693764
+                                                                            quatf physics:principalAxes = (0.9064055, -3.0621588e-17, -0.4224086, -2.0734926e-16)
+                                                                        }
+
+                                                                        over "left_robotiq_85_left_knuckle_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (0.01213197, 0.0002, -0.00058647)
+                                                                            float3 physics:diagonalInertia = (3.4500846e-7, 0.0000022386716, 0.00000231944)
+                                                                            float physics:mass = 0.013847732
+                                                                            quatf physics:principalAxes = (0.7067651, 0.7067651, 0.021979524, -0.021979524)
+                                                                        }
+
+                                                                        over "left_robotiq_85_right_finger_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (-0.00346899, -0.00000553, 0.01867121)
+                                                                            float3 physics:diagonalInertia = (0.000004682275, 0.00001183208, 0.000014372365)
+                                                                            float physics:mass = 0.04260377
+                                                                            quatf physics:principalAxes = (-1.7693344e-17, 0.78435075, 1.3536424e-16, -0.6203176)
+                                                                        }
+
+                                                                        over "left_robotiq_85_right_finger_tip_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (0.01456706, 0.00005, 0.01649701)
+                                                                            float3 physics:diagonalInertia = (0.0000026440466, 0.00001197888, 0.000012065313)
+                                                                            float physics:mass = 0.04268589
+                                                                            quatf physics:principalAxes = (0.8396458, 0, -0.54313433, -0)
+                                                                        }
+
+                                                                        over "left_robotiq_85_right_inner_knuckle_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (-0.01926824, 0.00005001, 0.02222178)
+                                                                            float3 physics:diagonalInertia = (0.0000048807565, 0.00000869056, 0.000012882044)
+                                                                            float physics:mass = 0.029693764
+                                                                            quatf physics:principalAxes = (6.098e-17, 0.9103173, 2.0694741e-16, -0.41391107)
+                                                                        }
+
+                                                                        over "left_robotiq_85_right_knuckle_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (-0.01213197, 0.0002, -0.00058647)
+                                                                            float3 physics:diagonalInertia = (3.4500846e-7, 0.0000022386716, 0.00000231944)
+                                                                            float physics:mass = 0.013847732
+                                                                            quatf physics:principalAxes = (-0.7067651, 0.7067651, 0.021979524, 0.021979524)
+                                                                        }
+
+                                                                        over "left_ur_to_robotiq_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (0, 0, 0)
+                                                                            float3 physics:diagonalInertia = (0.000027, 0.000027, 0.000044)
+                                                                            float physics:mass = 0.01
+                                                                            quatf physics:principalAxes = (0.5, 0.5, 0.5, 0.5)
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        over "fr3_duo_mount_right"
+                        {
+                            over "right_base"
+                            {
+                                over "right_fr3v2_link0"
+                                {
+                                    point3f physics:centerOfMass = (-0.0172, 0.0004, 0.0745)
+                                    float3 physics:diagonalInertia = (0.0067344354, 0.010765565, 0.0115)
+                                    float physics:mass = 2.3966
+                                    quatf physics:principalAxes = (-0.29077372, -0.29077372, 0.6445546, -0.6445546)
+
+                                    over "right_fr3v2_link1"
+                                    {
+                                        point3f physics:centerOfMass = (-0.00458, 0.027016, -0.0618)
+                                        float3 physics:diagonalInertia = (0.004638654, 0.022261089, 0.023300257)
+                                        float physics:mass = 2.4377
+                                        quatf physics:principalAxes = (0.6928866, 0.015482842, 0.70691735, 0.14119582)
+
+                                        over "right_fr3v2_link2"
+                                        {
+                                            point3f physics:centerOfMass = (0.004541, -0.180691, -0.010479)
+                                            float3 physics:diagonalInertia = (0.005259303, 0.017340638, 0.019200059)
+                                            float physics:mass = 2.2375
+                                            quatf physics:principalAxes = (0.47845262, 0.47324845, 0.43276584, 0.59986055)
+
+                                            over "right_fr3v2_link3"
+                                            {
+                                                point3f physics:centerOfMass = (0.08254, 0.019082, 0.042027)
+                                                float3 physics:diagonalInertia = (0.0044736224, 0.010421152, 0.014605225)
+                                                float physics:mass = 2.193082
+                                                quatf physics:principalAxes = (0.8083412, -0.30163306, 0.43241614, 0.26195094)
+
+                                                over "right_fr3v2_link4"
+                                                {
+                                                    point3f physics:centerOfMass = (-0.087533, 0.096335, 0.01012)
+                                                    float3 physics:diagonalInertia = (0.0044261836, 0.009736058, 0.012638758)
+                                                    float physics:mass = 2.181537
+                                                    quatf physics:principalAxes = (-0.33762142, 0.24422844, -0.46501783, 0.7811035)
+
+                                                    over "right_fr3v2_link5"
+                                                    {
+                                                        point3f physics:centerOfMass = (0.008383, 0.01018, -0.053265)
+                                                        float3 physics:diagonalInertia = (0.0038800961, 0.030519126, 0.03189978)
+                                                        float physics:mass = 2.186881
+                                                        quatf physics:principalAxes = (0.70986634, -0.01769611, -0.69550407, 0.109775834)
+
+                                                        over "right_fr3v2_link6"
+                                                        {
+                                                            point3f physics:centerOfMass = (0.070391, -0.016074, -0.035025)
+                                                            float3 physics:diagonalInertia = (0.0024043, 0.0041460977, 0.004749602)
+                                                            float physics:mass = 1.579681
+                                                            quatf physics:principalAxes = (0.9687735, 0.007590724, -0.15597427, 0.19259371)
+
+                                                            over "right_fr3v2_link7"
+                                                            {
+                                                                point3f physics:centerOfMass = (-0.009108, 0.018151, 0.064946)
+                                                                float3 physics:diagonalInertia = (0.00069993816, 0.0008998439, 0.001100218)
+                                                                float physics:mass = 0.694841
+                                                                quatf physics:principalAxes = (-0.5006586, 0.53091955, 0.49574527, 0.47085246)
+
+                                                                over "right_fr3v2_link8"
+                                                                {
+                                                                    over "VMKit"
+                                                                    {
+                                                                        over "right_robotiq_85_base_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (0, 0.00002274, 0.03232288)
+                                                                            float3 physics:diagonalInertia = (0.00039462722, 0.00051617814, 0.00058802264)
+                                                                            float physics:mass = 0.663202
+                                                                            quatf physics:principalAxes = (0.4996847, -0.5003153, 0.5005193, 0.49947998)
+                                                                        }
+
+                                                                        over "right_robotiq_85_left_finger_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (0.00346899, -0.00079447, 0.01867121)
+                                                                            float3 physics:diagonalInertia = (0.000004682275, 0.00001183208, 0.000014372365)
+                                                                            float physics:mass = 0.04260377
+                                                                            quatf physics:principalAxes = (0.78435075, -1.7693344e-17, -0.6203176, 1.3536424e-16)
+                                                                        }
+
+                                                                        over "right_robotiq_85_left_finger_tip_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (-0.01456706, -0.0008, 0.01649701)
+                                                                            float3 physics:diagonalInertia = (0.0000026440466, 0.00001197888, 0.000012065313)
+                                                                            float physics:mass = 0.04268589
+                                                                            quatf physics:principalAxes = (0, 0.8396458, 0, -0.54313433)
+                                                                        }
+
+                                                                        over "right_robotiq_85_left_inner_knuckle_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (0.01897699, 0.00015001, 0.02247101)
+                                                                            float3 physics:diagonalInertia = (0.000004887118, 0.00000869056, 0.000012875682)
+                                                                            float physics:mass = 0.029693764
+                                                                            quatf physics:principalAxes = (0.9064055, -3.0621588e-17, -0.4224086, -2.0734926e-16)
+                                                                        }
+
+                                                                        over "right_robotiq_85_left_knuckle_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (0.01213197, 0.0002, -0.00058647)
+                                                                            float3 physics:diagonalInertia = (3.4500846e-7, 0.0000022386716, 0.00000231944)
+                                                                            float physics:mass = 0.013847732
+                                                                            quatf physics:principalAxes = (0.7067651, 0.7067651, 0.021979524, -0.021979524)
+                                                                        }
+
+                                                                        over "right_robotiq_85_right_finger_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (-0.00346899, -0.00000553, 0.01867121)
+                                                                            float3 physics:diagonalInertia = (0.000004682275, 0.00001183208, 0.000014372365)
+                                                                            float physics:mass = 0.04260377
+                                                                            quatf physics:principalAxes = (-1.7693344e-17, 0.78435075, 1.3536424e-16, -0.6203176)
+                                                                        }
+
+                                                                        over "right_robotiq_85_right_finger_tip_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (0.01456706, 0.00005, 0.01649701)
+                                                                            float3 physics:diagonalInertia = (0.0000026440466, 0.00001197888, 0.000012065313)
+                                                                            float physics:mass = 0.04268589
+                                                                            quatf physics:principalAxes = (0.8396458, 0, -0.54313433, -0)
+                                                                        }
+
+                                                                        over "right_robotiq_85_right_inner_knuckle_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (-0.01926824, 0.00005001, 0.02222178)
+                                                                            float3 physics:diagonalInertia = (0.0000048807565, 0.00000869056, 0.000012882044)
+                                                                            float physics:mass = 0.029693764
+                                                                            quatf physics:principalAxes = (6.098e-17, 0.9103173, 2.0694741e-16, -0.41391107)
+                                                                        }
+
+                                                                        over "right_robotiq_85_right_knuckle_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (-0.01213197, 0.0002, -0.00058647)
+                                                                            float3 physics:diagonalInertia = (3.4500846e-7, 0.0000022386716, 0.00000231944)
+                                                                            float physics:mass = 0.013847732
+                                                                            quatf physics:principalAxes = (-0.7067651, 0.7067651, 0.021979524, 0.021979524)
+                                                                        }
+
+                                                                        over "right_ur_to_robotiq_link"
+                                                                        {
+                                                                            point3f physics:centerOfMass = (0, 0, 0)
+                                                                            float3 physics:diagonalInertia = (0.000027, 0.000027, 0.000044)
+                                                                            float physics:mass = 0.01
+                                                                            quatf physics:principalAxes = (0.5, 0.5, 0.5, 0.5)
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    over "head_link"
+                    {
+                        point3f physics:centerOfMass = (0, 0, 0)
+                        float3 physics:diagonalInertia = (0.0001503193, 0.003017061, 0.0030805666)
+                        float physics:mass = 0.350865
+                        quatf physics:principalAxes = (-0.57952684, 0.3689463, 0.6204666, 0.37821746)
+
+                        over "head_camera_mounting_point"
+                        {
+                            point3f physics:centerOfMass = (0, 0, 0)
+                            float3 physics:diagonalInertia = (1e-7, 1e-7, 1e-7)
+                            float physics:mass = 0.001
+                            quatf physics:principalAxes = (1, 0, 0, 0)
+                        }
+                    }
+                }
+            }
+        }
+
+        over "VMKitJoints"
+        {
+            over "left"
+            {
+                over "joint_03_left_gripper_ctrl"
+                {
+                    float drive:angular:physics:damping = 0.87266463
+                    float drive:angular:physics:maxForce = 100
+                    float drive:angular:physics:stiffness = 8.726646
+                    float drive:angular:physics:targetPosition = 0
+                    float drive:angular:physics:targetVelocity = 0
+                    uniform token drive:angular:physics:type = "force"
+                    float physics:lowerLimit = 0
+                    float physics:upperLimit = 45.837
+                    custom float state:angular:physics:position = 0
+                }
+
+                over "joint_04_left_robotiq_85_left_inner_knuckle_joint"
+                {
+                    float physics:lowerLimit = -1000000000
+                    float physics:upperLimit = 1000000000
+                    custom float state:angular:physics:position = 0
+                }
+
+                over "joint_05_left_robotiq_85_right_knuckle_joint"
+                {
+                    float physics:lowerLimit = -45.837
+                    float physics:upperLimit = 0
+                    custom float state:angular:physics:position = 0
+                }
+
+                over "joint_06_left_robotiq_85_right_inner_knuckle_joint"
+                {
+                    float physics:lowerLimit = -1000000000
+                    float physics:upperLimit = 1000000000
+                    custom float state:angular:physics:position = 0
+                }
+
+                over "joint_12_left_robotiq_85_left_finger_tip_joint"
+                {
+                    float physics:lowerLimit = -1000000000
+                    float physics:upperLimit = 1000000000
+                    custom float state:angular:physics:position = 0
+                }
+
+                over "joint_13_left_robotiq_85_right_finger_tip_joint"
+                {
+                    float physics:lowerLimit = -1000000000
+                    float physics:upperLimit = 1000000000
+                    custom float state:angular:physics:position = 0
+                }
+            }
+
+            over "right"
+            {
+                over "joint_03_right_gripper_ctrl"
+                {
+                    float drive:angular:physics:damping = 0.87266463
+                    float drive:angular:physics:maxForce = 100
+                    float drive:angular:physics:stiffness = 8.726646
+                    float drive:angular:physics:targetPosition = 0
+                    float drive:angular:physics:targetVelocity = 0
+                    uniform token drive:angular:physics:type = "force"
+                    float physics:lowerLimit = 0
+                    float physics:upperLimit = 45.837
+                    custom float state:angular:physics:position = 0
+                }
+
+                over "joint_04_right_robotiq_85_left_inner_knuckle_joint"
+                {
+                    float physics:lowerLimit = -1000000000
+                    float physics:upperLimit = 1000000000
+                    custom float state:angular:physics:position = 0
+                }
+
+                over "joint_05_right_robotiq_85_right_knuckle_joint"
+                {
+                    float physics:lowerLimit = -45.837
+                    float physics:upperLimit = 0
+                    custom float state:angular:physics:position = 0
+                }
+
+                over "joint_06_right_robotiq_85_right_inner_knuckle_joint"
+                {
+                    float physics:lowerLimit = -1000000000
+                    float physics:upperLimit = 1000000000
+                    custom float state:angular:physics:position = 0
+                }
+
+                over "joint_12_right_robotiq_85_left_finger_tip_joint"
+                {
+                    float physics:lowerLimit = -1000000000
+                    float physics:upperLimit = 1000000000
+                    custom float state:angular:physics:position = 0
+                }
+
+                over "joint_13_right_robotiq_85_right_finger_tip_joint"
+                {
+                    float physics:lowerLimit = -1000000000
+                    float physics:upperLimit = 1000000000
+                    custom float state:angular:physics:position = 0
+                }
+            }
+        }
+    }
+}

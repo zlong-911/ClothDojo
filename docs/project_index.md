@@ -16,6 +16,8 @@
 | `assets/` | 项目资产 |
 | `assets/robots/` | Piper、ALOHA2、X5、Panda、UR5e_2F85 的固定源资产、许可证与完整工作站 USD |
 | `assets/robots/<robot>/<robot>.usda` | 每种机器人唯一的双臂工作站入口；固定本体安装、物理、reset/attach、拓扑和四路相机 |
+| `assets/robots/fr3_duo/fr3_duo.usda` | 已接受 FR3 Duo 装配与动力学快照；尚未注册为任务运行 profile |
+| `scripts/robots/check_dynamics.py` | 只读机器人 USD 的空载/接触动态复验；结果写入 outputs |
 | `configs/rendering/materials.json` | 高质量视觉材质与 HDRI 的固定选择清单 |
 | `data/` | 正式数据与模型产物 |
 | `data/visual-assets/polyhaven/` | Poly Haven CC0 材质的本地 2K 工作副本 |
@@ -72,6 +74,7 @@
 - [`development.md`](development.md)：环境、工具和目录约定。
 - [`benchmark.md`](benchmark.md)：严重褶皱服装展平 benchmark 的数据路径与实验规划。
 - [`retargeting.md`](retargeting.md)：机械臂 retarget 的使用入口、产物语义与验证边界。
+- [`robot_dynamics.md`](robot_dynamics.md)：机器人 USD 动力学来源、单位与运行时适用边界。
 - [`reference_index.md`](reference_index.md)：官方文档与源码入口。
 - [`compute_hosts.md`](compute_hosts.md)：远端计算节点。
 - [`experiments/rapid_iteration_evaluation.md`](experiments/rapid_iteration_evaluation.md)：
