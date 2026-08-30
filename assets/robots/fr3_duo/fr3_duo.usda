@@ -2,7 +2,7 @@
 (
     customLayerData = {
         string dynamicsSources = "provenance/dynamics.json"
-        string status = "Fixed workstation; native three-camera FR3 Duo robot profile"
+        string status = "Fixed workstation; native FR3 Duo cameras plus independent Piper cam_low observer"
     }
     defaultPrim = "Robot"
     kilogramsPerUnit = 1
@@ -29,6 +29,22 @@ over "Robot"
     custom string clothdojo:robotId = "fr3_duo"
     custom double[] clothdojo:rootBodyFrames = [0.12999999523162842, 0, 0.949999988079071, 0, 0, 0, 1]
     custom int clothdojo:workstationSchema = 1
+
+    def Scope "cameras"
+    {
+        def Camera "cam_low" (
+            documentation = "Independent virtual observer copied from Piper cam_low; no physical camera or mounting hardware."
+        )
+        {
+            float2 clippingRange = (0.01, 100)
+            float focalLength = 10
+            float horizontalAperture = 14.266
+            token projection = "perspective"
+            float verticalAperture = 10.6995
+            matrix4d xformOp:transform = ( (0, 1, 0, 0), (-0.374606593415912, 0, 0.9271838545667874, 0), (0.9271838545667874, 0, 0.374606593415912, 0), (1.25, 0, 1.35, 1) )
+            uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+        }
+    }
 
     over "Duo"
     {

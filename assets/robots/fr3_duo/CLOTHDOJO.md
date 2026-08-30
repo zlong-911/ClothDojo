@@ -7,8 +7,11 @@
 
 本入口已经脱离 `outputs/`、旧项目绝对路径和官方源 USD 的运行时引用。
 它以 `fr3_duo` 加入 `RobotProfile`、Newton 控制与 retarget，替代已停用的 `panda`。
-保留官方头部和双腕三路相机、原始 aperture 及镜像夹爪 home；不额外制造 `cam_low`。
-现有四路 LeRobot 导出会在创建数据集前明确拒绝 FR3；不复制视角凑数。
+保留官方头部和双腕三路相机、原始 aperture 及镜像夹爪 home。
+另外按用户要求加入独立虚拟观察相机 `/Robot/cameras/cam_low`，世界 pose、投影与裁剪参数
+与当前 Piper 的 `cam_low` 相同；不增加实体相机或支架，也不作为官方 VMkit 硬件的一部分。
+相机定义直接固定在 `fr3_duo.usda`，加载时不引用 Piper 或生成脚本；四路 LeRobot
+相机集合为 `cam_high`、`cam_low`、`cam_left_wrist`、`cam_right_wrist`。
 任务集成仍需要逐轨迹门禁，`shirt_fold` 场景尚未实现。
 旧 `outputs/fr3_duo_migration/` 是迁移过程与审计备份，不再是当前参数入口。
 

@@ -1,3 +1,4 @@
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -71,12 +72,19 @@ def test_workstation_assets_cli_dispatch(monkeypatch):
     assert calls[-1] == ("local",)
 
 
-def test_fr3_four_camera_export_fails_before_creating_dataset(tmp_path, monkeypatch):
+def test_missing_camera_export_fails_before_creating_dataset(tmp_path, monkeypatch):
     import clothdojo.trajectory as trajectory
     from clothdojo.data import rollout
 
     monkeypatch.setattr(trajectory, "TrajectoryReader", lambda *_: SimpleNamespace())
-    monkeypatch.setattr(rollout, "_trajectory_robot", lambda _: robot_profile("fr3_duo"))
+    # Production FR3 now has cam_low. Deliberately remove it to keep testing
+    # the missing-camera guard, rather than expecting a broken production asset.
+    profile = robot_profile("fr3_duo")
+    assert "cam_low" in {camera.name for camera in profile.cameras}
+    incomplete = replace(profile, cameras=tuple(
+        camera for camera in profile.cameras if camera.name != "cam_low"
+    ))
+    monkeypatch.setattr(rollout, "_trajectory_robot", lambda _: incomplete)
 
     def fail(*args, **kwargs):
         raise AssertionError("must reject unsupported camera set before creating writer")

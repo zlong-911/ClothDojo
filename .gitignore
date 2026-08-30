@@ -39,6 +39,9 @@ checkpoints/
 !/assets/robots/x5/x5.usda
 !/assets/robots/x5/build_workstation.py
 !/assets/robots/x5/CLOTHDOJO.md
+!/assets/robots/x5/provenance/
+/assets/robots/x5/provenance/*
+!/assets/robots/x5/provenance/robodojo_wrist_camera.json
 !/assets/robots/ur5e_2f85/CLOTHDOJO.md
 !/assets/robots/ur5e_2f85/build_wrist_cameras.py
 !/assets/robots/ur5e_2f85/provenance/

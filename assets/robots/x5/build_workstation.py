@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 from pathlib import Path
 
@@ -105,35 +106,40 @@ def _set_custom(prim: Usd.Prim, name: str, type_name, value) -> None:
 
 
 def _author_camera(parent: Usd.Prim, name: str) -> None:
+    # Complete upstream virtual-camera preset; not physical RGB calibration.
+    source = json.loads((HERE / "provenance/robodojo_wrist_camera.json").read_text())
     camera = UsdGeom.Camera.Define(parent.GetStage(), parent.GetPath().AppendChild(name))
-    camera.CreateFocalLengthAttr(1.93)
-    camera.CreateHorizontalApertureAttr(3.896)
-    camera.CreateVerticalApertureAttr(2.922)
-    camera.CreateClippingRangeAttr(Gf.Vec2f(0.01, 10.0))
+    camera.CreateFocalLengthAttr(source["focal_length"])
+    camera.CreateHorizontalApertureAttr(source["horizontal_aperture"])
+    camera.CreateVerticalApertureAttr(source["vertical_aperture"])
+    camera.CreateHorizontalApertureOffsetAttr(0)
+    camera.CreateVerticalApertureOffsetAttr(0)
+    camera.CreateClippingRangeAttr(Gf.Vec2f(*source["clipping_range_m"]))
     camera.CreateProjectionAttr(UsdGeom.Tokens.perspective)
     camera.CreateVisibilityAttr(UsdGeom.Tokens.invisible)
+    _set_custom(
+        camera.GetPrim(), "clothdojo:cameraModel", Sdf.ValueTypeNames.String, source["model"],
+    )
+    _set_custom(
+        camera.GetPrim(), "clothdojo:cameraSource", Sdf.ValueTypeNames.String,
+        "provenance/robodojo_wrist_camera.json",
+    )
+    _set_custom(camera.GetPrim(), "clothdojo:cameraStream", Sdf.ValueTypeNames.String, "color")
+    _set_custom(
+        camera.GetPrim(), "clothdojo:cameraOutputRollDegrees", Sdf.ValueTypeNames.Float,
+        source["output_roll_degrees"],
+    )
+    _set_custom(
+        camera.GetPrim(), "clothdojo:cameraCalibration", Sdf.ValueTypeNames.String,
+        source["calibration"],
+    )
+    matrix = Gf.Matrix4d().SetRotate(Gf.Matrix3d(*[
+        value for row in source["usd_rotation_rows"] for value in row
+    ]))
+    matrix.SetTranslateOnly(Gf.Vec3d(*source["position_m"]))
     xform = UsdGeom.Xformable(camera)
     xform.ClearXformOpOrder()
-    xform.AddTransformOp().Set(
-        Gf.Matrix4d(
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            -1.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0109,
-            1.0,
-        )
-    )
+    xform.AddTransformOp().Set(matrix)
 
 
 def _material(stage: Usd.Stage, path: str, color: tuple[float, float, float]):

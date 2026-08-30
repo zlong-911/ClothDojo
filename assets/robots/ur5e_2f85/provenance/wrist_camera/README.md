@@ -31,8 +31,13 @@ The existing Robotiq coupling is not a replaceable empty spacer: its local
 mesh extends from -7 to +6.9 mm, and its original frame was already 7 mm past
 the flange. Its lower face therefore touched the original flange. The camera
 adapter is added before it; both complete gripper chains and their attach
-frames move 7 mm along the tool axis. Arm home joint angles, bases, table
-installation and third-person cameras are unchanged.
+frames move 7 mm along the tool axis. Bases, table installation and third-person
+cameras are unchanged. The accepted home subtracts pi from each final wrist
+joint, turning the tool 180 degrees about its own Z while remaining within joint
+limits. Each attach local frame also rotates 180 degrees about its own Z, so its
+home world pose is preserved relative to the camera-equipped pre-turn assembly.
+The wrist cameras follow the physical tools with unchanged local calibration.
+Home metadata, default body transforms, joint states and drive targets agree.
 
 Each assembly is rigid geometry on its existing `wrist_3_link`. There are no
 additional robot bodies, joints or control coordinates. The generated component
@@ -94,9 +99,11 @@ mechanical certification.
 
 ## Offline rebuild
 
-`python assets/robots/ur5e_2f85/build_wrist_cameras.py` reads only this source
+`.venv/bin/python assets/robots/ur5e_2f85/build_wrist_cameras.py` reads only this source
 directory and the fixed workstation payload. It writes the one internal
 `components/wrist_camera.usdc` and updates `ur5e_2f85.usda`; it does not rebuild
-the arm or download anything. Repeated builds anchor the 7 mm translation to
-the unchanged payload rather than adding it repeatedly. The component and
+the arm or download anything. It uses the project's fixed Newton installation to
+bake wrist/gripper default transforms from the authored home joint states.
+Repeated builds anchor the 7 mm translation and both half-turns to the unchanged
+payload rather than adding them repeatedly. The component and
 large source meshes follow the external-asset deployment convention.

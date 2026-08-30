@@ -40,8 +40,12 @@ D415 源 STL 没有贴图；经用户同意，按原 CAD 前盖的 308 面遮罩
 内部组件为 `components/wrist_camera.usdc`，唯一工作站入口仍是
 `ur5e_2f85.usda`。详见 [完整来源、装配链及边界](provenance/wrist_camera/README.md)。
 
-机械臂关节 home、底座、桌面安装和第三人称相机不变；相机板位于原 coupling
-之前，所以夹爪及 attach 随末端轴向外移 7 mm。两个原有 wrist Camera prim
+底座、桌面安装和第三人称相机不变；相机板位于原 coupling
+之前，所以夹爪及 attach 随末端轴向外移 7 mm。两侧 home 的最后一个腕关节
+相对 payload 各减去 π，令工具绕自身 Z 转 180°；attach 局部定义再绕自身 Z
+转 180°，因此 home 下 attach 世界位置和方向不因这两次旋转改变。
+关节 home、USD 默认 body 姿态、关节初态与驱动目标同步固定在顶层 USD。
+腕部相机随工具旋转，安装标定不变。两个原有 wrist Camera prim
 改用真实 D415 nominal optical chain，镜头比例来自 PickNik 的
 `horizontal_fov=1.047 rad`、640×480，不再是夹爪内部的虚拟观察点。
 

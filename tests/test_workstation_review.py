@@ -159,7 +159,11 @@ def test_preview_preserves_bound_material_and_hides_authored_collision_proxy():
     before = stage.GetRootLayer().ExportToString()
     changes = _apply_authored_appearance(builder, stage)
     assert builder.shape_flags == [collision, visible]
-    np.testing.assert_allclose(builder.shape_color, ((0.3, 0.4, 0.5), (0.1, 0.1, 0.1)))
+    # USD displayColor defaults to linear RGB; imported bound colors stay intact.
+    np.testing.assert_allclose(
+        builder.shape_color, ((0.58383149, 0.66518508, 0.73535698), (0.1, 0.1, 0.1)),
+        atol=1e-7,
+    )
     assert changes["authored_display_color_fallbacks"] == ["/Proxy"]
     assert changes["hidden_authored_proxy_shapes"] == ["/Proxy"]
     assert stage.GetRootLayer().ExportToString() == before

@@ -66,6 +66,14 @@
 - [OpenUSD API reference](https://openusd.org/release/api/index.html)
 - [OpenUSD 官方源码](https://github.com/PixarAnimationStudios/OpenUSD)
 
+## RealSense 相机
+
+- [D435 官方 RGB/深度规格与安装接口](https://www.realsenseai.com/products/stereo-depth-camera-d435/)
+- [RealSense ROS 4.55.1 D435 安装与名义光学坐标](https://github.com/realsenseai/realsense-ros/blob/4.55.1/realsense2_description/urdf/_d435.urdf.xacro)
+- [同版本 D435 原始网格](https://github.com/realsenseai/realsense-ros/blob/4.55.1/realsense2_description/meshes/d435.dae)
+- [librealsense v2.55.1 RGB 内参与画幅换算](https://github.com/realsenseai/librealsense/blob/v2.55.1/src/ds/d400/d400-private.cpp)
+- [RealSense 投影与逐 stream profile 内参 API](https://dev.realsenseai.com/docs/projection-in-realsense-sdk-2-0/)
+
 ## RLINF、OpenPI 与 LeRobot
 
 - [RLINF 官方源码与使用文档](https://github.com/RLinf/RLinf)

@@ -72,7 +72,52 @@ limits [5, 5, 5.5, 5.5, 5, 5] rad/s are research controller safety settings. The
 are retained as audit comparisons only, not substituted into the same-USD
 simulation baseline. The previously selected SDK position ranges remain intact.
 
-Known unresolved upstream parameters:
+## Wrist camera optics
+
+The physical `camera` bodies in `ARX.usd` do not contain Camera prims. At the
+user's request, both wrists use **RoboDojo's complete simulation preset**, not
+the previously evaluated manufacturer-nominal RGB optical frame. Offline
+provenance is `provenance/robodojo_wrist_camera.json`; runtime reads only the
+fixed `x5.usda`. `_author_camera` rebuilds the same definition without a network
+connection or an old-project dependency.
+
+The source `Assets/Robots/x5/robot_config.yml` belongs to the separately pinned
+asset revision `c037c1b3183a030724e694d69a08cb62369ed285`; the code template and
+camera runtime belong to revision `76e16bf8feb6e5934ddb291386bf531ff826c621`.
+The cached source ARX USD and the installed ARX USD are byte-identical.
+
+| Setting | Fixed value |
+| --- | --- |
+| Parent body | Each arm's `camera` |
+| Local position | `(0,0,0.001)` m |
+| Local rotation | intrinsic XYZ Euler `(0,-80,-90)` degrees |
+| Convention | USD camera -Z forward, +Y up; PINHOLE child is identity |
+| Focal / horizontal / vertical aperture | `13 / 20.955 / 15.71625` |
+| Nominal raster | `640 x 480` |
+| Horizontal / vertical field | approximately `77.735 / 62.304` degrees |
+| Clipping | `(0.0001,10)` m |
+
+No extra 180-degree output roll, ROS conversion, mirror or centering crop is
+applied. The source pose is already upright at home. Both arms use identical
+local settings, and the grasp center projects near pixel `(320,289)` at home.
+This virtual camera is near the housing center, rather than the physical D435
+RGB lens; its wider field and additional downward tilt are explicit simulation
+choices, not a manufacturer calibration claim. Clipping is a renderer setting,
+not a sensor measurement range.
+
+Home, attach, physical camera/holder and gripper geometry, materials, inertia
+and third-person cameras remain unchanged. The physical mesh registration
+landmarks are retained in the provenance JSON for geometry checks only; they
+do not define the selected virtual optical frame. The source camera/holder
+rear-hole mismatch (45 mm versus 38.4 mm) remains unresolved.
+
+Native USD review honors this projection. All X5 apertures are now 4:3, so the
+existing policy renderer again uses its historical horizontal-as-vertical FOV
+branch; this asset change does not fix that separate benchmark compatibility
+boundary or pass USD clipping through the runtime CameraSpec. Do not equate
+native review images with policy-renderer pixels.
+
+## Known unresolved upstream parameters
 
 - Each `camera_base` and `camera` has no authored mass or center of mass in the
   USD and no inertial record in the URDF. Their upstream diagonal inertia is

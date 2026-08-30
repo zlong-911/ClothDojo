@@ -35,7 +35,10 @@ def _pose_matrix(position, rotation_xyzw):
 
 def _apply_authored_appearance(builder, stage) -> dict:
     from newton import ShapeFlags
-    from newton._src.usd.utils import resolve_material_properties_for_prim
+    from newton._src.usd.utils import (
+        _color_to_display_space,
+        resolve_material_properties_for_prim,
+    )
     from pxr import UsdGeom
 
     display_colors, hidden_proxies = [], []
@@ -49,12 +52,17 @@ def _apply_authored_appearance(builder, stage) -> dict:
             builder.shape_flags[index] &= ~int(ShapeFlags.VISIBLE)
         # Newton 1.5 resolves bound materials but omits uniform displayColor.
         # Only bridge this omission in memory; never replace a bound material.
-        if resolve_material_properties_for_prim(prim).get("color") is not None:
+        properties = resolve_material_properties_for_prim(prim)
+        if properties.get("color") is not None or properties.get("texture") is not None:
             continue
         attribute = prim.GetAttribute("primvars:displayColor")
         values = attribute.Get() if attribute and attribute.HasAuthoredValue() else None
         if values is not None and len(values) == 1:
-            builder.shape_color[index] = tuple(map(float, values[0]))
+            # Match Newton's bound-material conversion, including USD color-space
+            # metadata. shape_color is display/sRGB, not USD's default linear RGB.
+            builder.shape_color[index] = _color_to_display_space(
+                tuple(map(float, values[0])), attribute
+            )
             display_colors.append(path)
     return {
         "authored_display_color_fallbacks": display_colors,

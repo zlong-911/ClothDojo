@@ -16,8 +16,9 @@
 | `assets/` | 项目资产 |
 | `assets/robots/` | Piper、ALOHA2、X5、UR5e_2F85、FR3 Duo 的固定源资产、许可证与完整工作站 USD；Panda 停用 |
 | `assets/robots/<robot>/<robot>.usda` | 每种机器人唯一的双臂工作站入口；固定安装、物理、home/attach、拓扑和原生相机 |
-| `assets/robots/fr3_duo/fr3_duo.usda` | 已接受 FR3 Duo 桌面装配、原生三相机和动力学快照，正式 profile 为 fr3_duo |
+| `assets/robots/fr3_duo/fr3_duo.usda` | 已接受 FR3 Duo 桌面装配、原生三相机加独立虚拟 cam_low 和动力学快照，正式 profile 为 fr3_duo |
 | `scripts/robots/check_dynamics.py` | 只读机器人 USD 的空载/接触动态复验；结果写入 outputs |
+| `scripts/robots/check_cameras.py` | 五套本体的原生 USD 相机 home 出图检查，保留双轴视场、roll 与 clipping |
 | `configs/rendering/materials.json` | 高质量视觉材质与 HDRI 的固定选择清单 |
 | `data/` | 正式数据与模型产物 |
 | `data/visual-assets/polyhaven/` | Poly Haven CC0 材质的本地 2K 工作副本 |

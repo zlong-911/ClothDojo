@@ -167,31 +167,34 @@ def test_fr3_duo_profile_uses_one_shared_articulation_and_accepted_home() -> Non
         np.testing.assert_allclose(frame.rotation_xyzw, (0.0, 0.0, 0.0, 1.0), atol=1e-9)
 
 
-def test_fr3_duo_keeps_three_native_vmkit_cameras_without_an_extra_stand() -> None:
+def test_fr3_duo_keeps_vmkit_cameras_and_adds_virtual_low_without_an_extra_stand() -> None:
     profile = robot_profile(FR3_DUO)
     assert tuple(camera.name for camera in profile.cameras) == (
-        "cam_high", "cam_left_wrist", "cam_right_wrist",
+        "cam_high", "cam_low", "cam_left_wrist", "cam_right_wrist",
     )
     assert tuple(camera.parent_body for camera in profile.cameras) == (
-        "zed_mini_left_camera_frame", "left/d405_color_frame", "right/d405_color_frame",
+        "zed_mini_left_camera_frame", None, "left/d405_color_frame", "right/d405_color_frame",
     )
+    native_cameras = tuple(camera for camera in profile.cameras if camera.name != "cam_low")
     np.testing.assert_allclose(
-        [camera.focal_length for camera in profile.cameras], (2.4, 2.529072, 2.529072),
+        [camera.focal_length for camera in native_cameras], (2.4, 2.529072, 2.529072),
         atol=1e-6,
     )
-    np.testing.assert_allclose([camera.horizontal_aperture for camera in profile.cameras], 4.8)
+    np.testing.assert_allclose([camera.horizontal_aperture for camera in native_cameras], 4.8)
     np.testing.assert_allclose(
-        [camera.vertical_aperture for camera in profile.cameras], (2.7, 2.716981, 2.716981),
+        [camera.vertical_aperture for camera in native_cameras], (2.7, 2.716981, 2.716981),
         atol=1e-6,
     )
     stage = Usd.Stage.Open(str(Path(__file__).parents[1] / "assets" / profile.asset))
     cameras = [prim for prim in stage.Traverse() if prim.IsA(UsdGeom.Camera)]
-    assert len(cameras) == 3
-    assert {prim.GetName() for prim in cameras} == {"head_cam", "left_wrist_cam", "right_wrist_cam"}
+    assert len(cameras) == 4
+    assert {prim.GetName() for prim in cameras} == {
+        "head_cam", "left_wrist_cam", "right_wrist_cam", "cam_low",
+    }
     assert stage.GetPrimAtPath("/Robot/Installation/TableMount")
     assert not stage.GetPrimAtPath("/Robot/Installation/CameraStand")
     for prim in cameras:
-        name = prim.GetAttribute("clothdojo:cameraName").Get()
+        name = prim.GetAttribute("clothdojo:cameraName").Get() or prim.GetName()
         spec = next(camera for camera in profile.cameras if camera.name == name)
         np.testing.assert_allclose(
             spec.parent_from_camera, np.asarray(UsdGeom.Xformable(prim).GetLocalTransformation()).T,
@@ -223,7 +226,7 @@ def test_fr3_duo_attach_matches_ur5_robotiq_base_local_grasp_depth() -> None:
     assert checked == {"left", "right"}
 
 
-@pytest.mark.parametrize("robot_id", (ALOHA2, FR3_DUO))
+@pytest.mark.parametrize("robot_id", (ALOHA2, FR3_DUO, UR5E_2F85))
 def test_workstation_usd_default_transforms_match_authored_home_fk(robot_id) -> None:
     import newton
     import warp as wp
@@ -271,11 +274,11 @@ def test_workstation_usd_default_transforms_match_authored_home_fk(robot_id) -> 
     assert checked == set(profile.body_names)
 
 
-def test_ur5_usd_opens_directly_in_its_legacy_home_pose() -> None:
+def test_ur5_usd_home_keeps_grasp_positions_and_synchronized_drive_targets() -> None:
     expected_positions = {
         UR5E_2F85: {
             # PickNik's flush camera adapter adds 7 mm along the tool axis;
-            # accepted arm joint home angles and the original coupling stay.
+            # the wrist half-turn keeps the grasp positions and original coupling.
             "left/gripper_base": (0.7001029, 0.4000614, 1.0430008),
             "right/gripper_base": (0.7000490, -0.3999888, 1.0430002),
         },

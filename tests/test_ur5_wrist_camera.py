@@ -111,7 +111,35 @@ def test_d415_bake_uses_original_three_windows_and_projector():
             assert pixel(x, y) == (28, 30, 33)
 
 
-def test_ur5_coupling_and_attach_shift_only_seven_mm(stage):
+def test_d415_texture_is_rgb_albedo_with_unmodified_srgb_import(stage):
+    from newton._src.usd.utils import resolve_material_properties_for_prim
+    from PIL import Image
+    from pxr import UsdShade
+
+    expected = ROOT / "components/d415_front.png"
+    with Image.open(expected) as image:
+        assert image.mode == "RGB"  # No alpha or packed roughness/metalness data.
+    for wrist in (6, 27):
+        root = f"/Robot/Bodies/body_{wrist:03}/WristCameraAssembly"
+        subset = stage.GetPrimAtPath(f"{root}/D415/Visual/FrontCover")
+        material, _ = UsdShade.MaterialBindingAPI(subset).ComputeBoundMaterial()
+        shader, _, _ = material.ComputeSurfaceSource()
+        texture, channel, _ = shader.GetInput("diffuseColor").GetConnectedSource()
+        assert channel == "rgb"
+        assert texture.GetPrim().GetAttribute("info:id").Get() == "UsdUVTexture"
+        assert texture.GetInput("sourceColorSpace").Get() == "sRGB"
+        uv, channel, _ = texture.GetInput("st").GetConnectedSource()
+        assert channel == "result" and uv.GetInput("varname").Get() == "st"
+        for name in ("normal", "roughness", "metallic", "opacity"):
+            attribute = shader.GetInput(name)
+            assert not attribute or not attribute.HasConnectedSource()
+        imported = resolve_material_properties_for_prim(subset)
+        assert Path(imported["texture"]).resolve() == expected.resolve()
+        assert imported["color"] is None  # No extra diffuse multiplier over RGB.
+        assert imported["roughness"] == pytest.approx(.18)
+
+
+def test_ur5_tool_half_turn_preserves_attach_world_frame_and_seven_mm_offset(stage):
     from pxr import Usd, UsdGeom
 
     before = Usd.Stage.Open(str(ROOT / "payloads/workstation.usdc"))
@@ -121,6 +149,8 @@ def test_ur5_coupling_and_attach_shift_only_seven_mm(stage):
         wrist_prim = before.GetPrimAtPath(f"/Robot/Bodies/body_{wrist:03}")
         wrist_world = np.asarray(cache.GetLocalToWorldTransform(wrist_prim)).T
         expected_shift = (wrist_world @ flange)[:3, 2] * 0.007
+        tool = wrist_world @ flange
+        half_turn = tool @ _transform(rpy=(0, 0, math.pi)) @ np.linalg.inv(tool)
         count = 0
         for prim in before.GetPrimAtPath("/Robot/Bodies").GetChildren():
             label = str(prim.GetAttribute("clothdojo:bodyLabel").Get())
@@ -128,9 +158,21 @@ def test_ur5_coupling_and_attach_shift_only_seven_mm(stage):
                 continue
             old = np.asarray(cache.GetLocalToWorldTransform(prim)).T
             new = np.asarray(cache.GetLocalToWorldTransform(stage.GetPrimAtPath(prim.GetPath()))).T
-            np.testing.assert_allclose(new[:3, :3], old[:3, :3], atol=1e-12)
-            shift = expected_shift if label.startswith(side + "/gripper_") else np.zeros(3)
-            np.testing.assert_allclose(new[:3, 3] - old[:3, 3], shift, atol=1e-12)
+            expected = old.copy()
+            if label.startswith(side + "/gripper_"):
+                expected[:3, 3] += expected_shift
+            if label.startswith(side + "/gripper_") or label == side + "/wrist_3_link":
+                expected = half_turn @ expected
+            # The source matrices came from float32 FK with non-unit round-off.
+            # The new default is re-baked from joint frames, not matrix-edited.
+            np.testing.assert_allclose(new[:3, 3], expected[:3, 3], atol=2e-6, rtol=0)
+            relative = Rotation.from_matrix(old[:3, :3]).inv() * Rotation.from_matrix(
+                new[:3, :3]
+            )
+            if label.startswith(side + "/gripper_") or label == side + "/wrist_3_link":
+                assert relative.magnitude() == pytest.approx(math.pi, abs=1e-5)
+            else:
+                np.testing.assert_array_equal(new, old)
             count += label.startswith(side + "/gripper_")
         assert count == 14
         base = 8 if side == "left" else 29
@@ -138,15 +180,78 @@ def test_ur5_coupling_and_attach_shift_only_seven_mm(stage):
         old_attach = np.asarray(cache.GetLocalToWorldTransform(before.GetPrimAtPath(attach_path))).T
         new_attach = np.asarray(cache.GetLocalToWorldTransform(stage.GetPrimAtPath(attach_path))).T
         np.testing.assert_allclose(
-            new_attach[:3, 3] - old_attach[:3, 3], expected_shift, atol=1e-12
+            new_attach[:3, 3] - old_attach[:3, 3], expected_shift, atol=2e-6, rtol=0
         )
-        np.testing.assert_array_equal(new_attach[:3, :3], old_attach[:3, :3])
+        # Both half-turns cancel in world space, but the physical tool/camera turns.
+        relative = Rotation.from_matrix(old_attach[:3, :3]).inv() * Rotation.from_matrix(
+            new_attach[:3, :3]
+        )
+        assert relative.magnitude() < 1e-5
+        old_local = np.asarray(
+            UsdGeom.Xformable(before.GetPrimAtPath(attach_path)).GetLocalTransformation()
+        ).T
+        new_local = np.asarray(
+            UsdGeom.Xformable(stage.GetPrimAtPath(attach_path)).GetLocalTransformation()
+        ).T
+        np.testing.assert_allclose(
+            new_local, old_local @ _transform(rpy=(0, 0, math.pi)), atol=1e-12
+        )
     for name in ("cam_high", "cam_low"):
         path = "/Robot/Semantics/" + name
         np.testing.assert_array_equal(
             cache.GetLocalToWorldTransform(stage.GetPrimAtPath(path)),
             cache.GetLocalToWorldTransform(before.GetPrimAtPath(path)),
         )
+
+
+def test_ur5_half_turn_is_fixed_in_home_state_and_drive_targets(stage):
+    from pxr import Usd
+
+    from clothdojo.robots import robot_profile
+
+    before = Usd.Stage.Open(str(ROOT / "payloads/workstation.usdc"))
+    expected = np.array(before.GetDefaultPrim().GetAttribute("clothdojo:homeJointQ").Get())
+    expected[[5, 27]] -= math.pi
+    actual = np.asarray(stage.GetDefaultPrim().GetAttribute("clothdojo:homeJointQ").Get())
+    np.testing.assert_allclose(actual, expected, atol=1e-7, rtol=0)
+    np.testing.assert_allclose(robot_profile("ur5e_2f85").home_joint_q, actual, atol=1e-6)
+    for joint_id, coord in ((6, 5), (29, 27)):
+        joint = stage.GetPrimAtPath(f"/Robot/Joints/joint_{joint_id:03}")
+        angle = math.degrees(actual[coord])
+        assert joint.GetAttribute("physics:lowerLimit").Get() < angle
+        assert angle < joint.GetAttribute("physics:upperLimit").Get()
+        for attr in ("state:angular:physics:position", "drive:angular:physics:targetPosition"):
+            assert joint.GetAttribute(attr).Get() == pytest.approx(angle, abs=2e-6)
+
+
+def test_ur5_workstation_rebuild_does_not_accumulate_rotations_or_offsets(stage, tmp_path):
+    import importlib.util
+
+    from pxr import Sdf, Usd, UsdGeom
+
+    spec = importlib.util.spec_from_file_location(
+        "ur5_wrist_builder", ROOT / "build_wrist_cameras.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    layer = Sdf.Layer.CreateAnonymous()
+    layer.TransferContent(stage.GetRootLayer())
+    layer.subLayerPaths = [str(ROOT / "payloads/workstation.usdc")]
+    # Keep asset-relative component references resolvable, without editing source.
+    (tmp_path / "components").symlink_to(ROOT / "components", target_is_directory=True)
+    scratch_path = tmp_path / "workstation.usda"
+    layer.Export(str(scratch_path))
+    scratch = Usd.Stage.Open(str(scratch_path))
+    layer = scratch.GetRootLayer()
+    baseline = Usd.Stage.Open(str(ROOT / "payloads/workstation.usdc"))
+    component = Usd.Stage.Open(str(ROOT / "components/wrist_camera.usdc"))
+    optical = np.asarray(UsdGeom.Xformable(
+        component.GetPrimAtPath("/WristCameraAssembly/ColorOpticalUSD")
+    ).GetLocalTransformation()).T
+    module.assemble_workstation(scratch, baseline, optical)
+    once = layer.ExportToString()
+    module.assemble_workstation(scratch, baseline, optical)
+    assert layer.ExportToString() == once
 
 
 def test_ur5_camera_pose_and_lens_follow_published_d415_chain(stage):
@@ -173,7 +278,7 @@ def test_ur5_camera_pose_and_lens_follow_published_d415_chain(stage):
             stage.GetPrimAtPath(f"/Robot/Bodies/body_{base:03}/cam_{side}_wrist")
         )
         actual = np.asarray(cache.GetLocalToWorldTransform(camera.GetPrim())).T
-        np.testing.assert_allclose(actual, wrist_world @ flange @ camera_from_flange, atol=1e-12)
+        np.testing.assert_allclose(actual, wrist_world @ flange @ camera_from_flange, atol=5e-6)
         f = camera.GetFocalLengthAttr().Get()
         h = camera.GetHorizontalApertureAttr().Get()
         v = camera.GetVerticalApertureAttr().Get()

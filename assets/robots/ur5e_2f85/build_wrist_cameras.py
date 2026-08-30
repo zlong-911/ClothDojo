@@ -292,24 +292,69 @@ def build_component():
     return usd_camera
 
 
-def main():
-    usd_camera = build_component()
-    stage = Usd.Stage.Open(str(ROOT / "ur5e_2f85.usda"))
-    baseline = Usd.Stage.Open(str(ROOT / "payloads/workstation.usdc"))
+def bake_tool_home(stage):
+    """Use the imported joint frames, avoiding old float32 matrix round-off."""
+    import newton
+
+    from clothdojo.sim.scene import _register_solver_attributes
+
+    newton.use_coord_layout_targets = True
+    builder = newton.ModelBuilder()
+    _register_solver_attributes(newton, builder)
+    builder.add_usd(
+        stage, floating=False, load_visual_shapes=False, load_static_visual_shapes=False,
+        skip_mesh_approximation=True,
+        schema_resolvers=[newton.usd.SchemaResolverNewton(), newton.usd.SchemaResolverPhysx()],
+    )
+    # Match production _add_robot: Physx resolves state:angular, and the root
+    # home array independently checks that imported coordinates are consistent.
+    home = list(stage.GetDefaultPrim().GetAttribute("clothdojo:homeJointQ").Get())
+    if builder.joint_coord_count != len(home) or not np.allclose(
+        builder.joint_q, home, atol=2e-6, rtol=0,
+    ):
+        raise ValueError("UR5 joint states no longer match the fixed workstation home")
+    model = builder.finalize("cpu")
+    state = model.state()
+    newton.eval_fk(model, model.joint_q, model.joint_qd, state)
+    for path, pose in zip(builder.body_label, state.body_q.numpy(), strict=True):
+        prim = stage.GetPrimAtPath(path)
+        label = str(prim.GetAttribute("clothdojo:bodyLabel").Get())
+        if "/gripper_" not in label and not label.endswith("/wrist_3_link"):
+            continue
+        matrix = Gf.Matrix4d().SetRotate(Gf.Quatd(float(pose[6]), *map(float, pose[3:6])))
+        matrix.SetTranslateOnly(Gf.Vec3d(*map(float, pose[:3])))
+        author_transform(prim, np.asarray(matrix).T)
+
+
+def assemble_workstation(stage, baseline, usd_camera):
+    """Author the fixed assembly and home, always relative to the source payload."""
     cache = UsdGeom.XformCache()
     flange = transform((0, 0.1, 0), (-math.pi / 2, 0, 0))
+    home = list(baseline.GetDefaultPrim().GetAttribute("clothdojo:homeJointQ").Get())
+    # -pi is the requested half-turn, without taking the right wrist past +2pi.
+    # Keep this in the asset, not a runtime offset or an accumulating rebuild edit.
+    for coord in (5, 27):
+        home[coord] -= math.pi
+    stage.GetDefaultPrim().GetAttribute("clothdojo:homeJointQ").Set(home)
+    home = stage.GetDefaultPrim().GetAttribute("clothdojo:homeJointQ").Get()
     for side, wrist_id, base_id, joint_id in (("left", 6, 8, 7), ("right", 27, 29, 30)):
         wrist_path = f"/Robot/Bodies/body_{wrist_id:03}"
-        wrist_world = np.asarray(
+        original_wrist = np.asarray(
             cache.GetLocalToWorldTransform(baseline.GetPrimAtPath(wrist_path))
         ).T
-        shift = (wrist_world @ flange)[:3, 2] * 0.007
+        shift = (original_wrist @ flange)[:3, 2] * 0.007
+        # Reset to the payload before recomputing camera calibration and home.
+        author_transform(stage.GetPrimAtPath(wrist_path), original_wrist)
         for prim in baseline.GetPrimAtPath("/Robot/Bodies").GetChildren():
             label = prim.GetAttribute("clothdojo:bodyLabel").Get()
             if label and label.startswith(f"{side}/gripper_"):
                 matrix = np.asarray(cache.GetLocalToWorldTransform(prim)).T
                 matrix[:3, 3] += shift
                 author_transform(stage.GetPrimAtPath(prim.GetPath()), matrix)
+        wrist_joint = stage.GetPrimAtPath(f"/Robot/Joints/joint_{joint_id - 1:03}")
+        angle = math.degrees(home[5 if side == "left" else 27])
+        wrist_joint.GetAttribute("state:angular:physics:position").Set(angle)
+        wrist_joint.GetAttribute("drive:angular:physics:targetPosition").Set(angle)
         joint_path = f"/Robot/Joints/joint_{joint_id:03}"
         original = baseline.GetPrimAtPath(joint_path).GetAttribute("physics:localPos0").Get()
         stage.GetPrimAtPath(joint_path).GetAttribute("physics:localPos0").Set(
@@ -321,12 +366,19 @@ def main():
         )
         author_transform(assembly.GetPrim(), flange)
         parent_path = f"/Robot/Bodies/body_{base_id:03}"
+        attach_path = f"{parent_path}/Semantics/attach_{side}"
+        attach_local = np.asarray(
+            UsdGeom.Xformable(baseline.GetPrimAtPath(attach_path)).GetLocalTransformation()
+        ).T
+        author_transform(
+            stage.GetPrimAtPath(attach_path), attach_local @ transform(rpy=(0, 0, math.pi))
+        )
         parent_world = np.asarray(
             UsdGeom.XformCache().GetLocalToWorldTransform(stage.GetPrimAtPath(parent_path))
         ).T
         camera = UsdGeom.Camera(stage.GetPrimAtPath(f"{parent_path}/cam_{side}_wrist"))
         author_transform(
-            camera.GetPrim(), np.linalg.inv(parent_world) @ wrist_world @ flange @ usd_camera
+            camera.GetPrim(), np.linalg.inv(parent_world) @ original_wrist @ flange @ usd_camera
         )
         # PickNik's authored horizontal FOV is 1.047 radians at 640x480. Retain
         # the existing 13-unit focal scale; the ratio is the published truth.
@@ -346,6 +398,7 @@ def main():
             "PickNik UR5e D415 nominal optical chain; source horizontal FOV 1.047rad at 640x480"
         )
         print(side, "gripper_world_shift_m", shift.tolist())
+    bake_tool_home(stage)
     metadata = dict(stage.GetRootLayer().customLayerData)
     metadata["wristCameraSource"] = "provenance/wrist_camera/README.md"
     metadata["dynamicsUnits"] = (
@@ -354,6 +407,13 @@ def main():
         "Robotiq spring values come from fixed Menagerie 2f85.xml."
     )
     stage.GetRootLayer().customLayerData = metadata
+
+
+def main():
+    usd_camera = build_component()
+    stage = Usd.Stage.Open(str(ROOT / "ur5e_2f85.usda"))
+    baseline = Usd.Stage.Open(str(ROOT / "payloads/workstation.usdc"))
+    assemble_workstation(stage, baseline, usd_camera)
     stage.GetRootLayer().Save()
 
 
