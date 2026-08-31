@@ -3,8 +3,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 import warp as wp
 
+from clothdojo.data.retarget_dynamics import _gripper_event_validation
 from clothdojo.sim.grasp import (
     ParticleGrasp,
     _attach_local_offsets,
@@ -27,7 +29,8 @@ def test_particle_grasp_uses_robot_profile_attach_centers() -> None:
     )
 
 
-def test_grasp_matches_expert_four_seed_two_ring_patch_and_release() -> None:
+@pytest.mark.parametrize("leader_range", [(0., .04), (.0079, .037), (.8, 0.)])
+def test_grasp_matches_expert_four_seed_two_ring_patch_and_release(leader_range) -> None:
     device = "cpu"
     capacity = 32
     shape2 = (1, 2)
@@ -60,10 +63,19 @@ def test_grasp_matches_expert_four_seed_two_ring_patch_and_release() -> None:
         dtype=wp.int32,
         device=device,
     )
-    gripper_q = wp.array([[[0.0044, -0.04, 0.04, -0.04]]], dtype=wp.float32, device=device)
-    closed = wp.array([0.0, 0.0, 0.0, 0.0], dtype=wp.float32, device=device)
-    open_positions = wp.array([0.04, -0.04, 0.04, -0.04], dtype=wp.float32, device=device)
+    leader_closed, leader_open = leader_range
+    leader_span = leader_open - leader_closed
+    gripper_q = wp.array(
+        [[[leader_closed + .11 * leader_span, -.04, leader_open, -.04]]],
+        dtype=wp.float32, device=device,
+    )
+    closed = wp.array([leader_closed, 0., leader_closed, 0.], dtype=wp.float32, device=device)
+    open_positions = wp.array(
+        [leader_open, -.04, leader_open, -.04], dtype=wp.float32, device=device,
+    )
     body_q = wp.array([wp.transform_identity()], dtype=wp.transform, device=device)
+    finger_history = [np.ones((2, 2))]
+    attached_history = [np.zeros(2, dtype=bool)]
 
     def update() -> None:
         wp.launch(
@@ -106,6 +118,11 @@ def test_grasp_matches_expert_four_seed_two_ring_patch_and_release() -> None:
             ],
             device=device,
         )
+        finger_history.append(
+            ((gripper_q.numpy().reshape(4) - closed.numpy())
+             / (open_positions.numpy() - closed.numpy())).reshape(2, 2)
+        )
+        attached_history.append(attached.numpy()[0].astype(bool))
 
     update()
 
@@ -114,7 +131,7 @@ def test_grasp_matches_expert_four_seed_two_ring_patch_and_release() -> None:
     np.testing.assert_array_equal(pins.numpy()[0, 0, :6], np.arange(6))
 
     opened = gripper_q.numpy()
-    opened[0, 0, 0] = 0.04
+    opened[0, 0, 0] = leader_closed + .695 * leader_span
     gripper_q.assign(opened)
     update()
     assert attached.numpy().tolist() == [[0, 0]]
@@ -130,6 +147,13 @@ def test_grasp_matches_expert_four_seed_two_ring_patch_and_release() -> None:
     update()
     assert release_collision_countdown.numpy().tolist() == [[0, 0]]
     assert shape_flags.numpy().tolist() == [4, 4]
+
+    # Compare retarget against actual runtime kernel transitions, with a
+    # stationary follower and both increasing/decreasing leader joint ranges.
+    events = _gripper_event_validation(np.stack(finger_history), np.stack(attached_history))
+    assert events["valid"]
+    assert events["sides"][0]["runtime_frames"] == [1, 2]
+    assert events["max_frame_error"] == 0
 
     wp.launch(
         _reset_grasp,

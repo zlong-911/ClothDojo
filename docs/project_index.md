@@ -41,8 +41,8 @@
 | `src/clothdojo/tasks.py` | 与机器人独立的任务身份及场景可用性 |
 | `src/clothdojo/trajectory/` | 遥操、rollout 与评测共用的轨迹格式、读写和 Newton capture |
 | `src/clothdojo/data/` | 数据转换与导出 |
-| `src/clothdojo/data/retarget.py` | Piper 到目标 robot profile 的几何参考、动力学 action 重建与门禁入口 |
-| `src/clothdojo/data/retarget_dynamics.py` | 目标机械臂刚体逆动力学、一步 shooting 与 action-only replay |
+| `src/clothdojo/data/retarget.py` | Piper 到目标 robot profile 的几何参考、门禁与多 GPU／同卡常驻 worker 调度 |
+| `src/clothdojo/data/retarget_dynamics.py` | 共用 RobotDynamicsRetargeter：刚体逆动力学、一步 shooting、夹爪事件前馈与 action-only replay |
 | `src/clothdojo/data/rollout_review.py` | canonical trajectory 的增量无 solver 轻量审查视频 |
 | `src/clothdojo/collection/` | 采集控制面 |
 | `src/clothdojo/teleop/` | 遥操运行时 |

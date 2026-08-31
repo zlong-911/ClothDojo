@@ -30,6 +30,8 @@
 - [Warp 官方源码](https://github.com/NVIDIA/warp)
 - [CUDA Programming Guide：CUDA Graph](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#cuda-graphs)
 - [CUDA Runtime API：Graph Management](https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__GRAPH.html)
+- [NVIDIA MPS：适用场景与多进程执行](https://docs.nvidia.com/deploy/mps/when-to-use-mps.html)
+- [NVIDIA MPS：工具、CUDA_VISIBLE_DEVICES 与独立 pipe directory](https://docs.nvidia.com/deploy/mps/appendix-tools-and-interface-reference.html)
 - [Nsight Systems User Guide](https://docs.nvidia.com/nsight-systems/UserGuide/)
 - [NCCL：CUDA Graph](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/cudagraph.html)
 

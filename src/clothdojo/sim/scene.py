@@ -107,7 +107,9 @@ def _build_shirt_flatten(
     device: str = "cuda:0",
     visuals: bool = False,
     robot_cloth_collision: bool = True,
+    robot_rigid_collision: bool = True,
     robot_id: str = PIPER,
+    include_cloth: bool = True,
 ) -> ShirtFlattenScene:
     """Build one simulation model, optionally including render-only visuals.
 
@@ -127,7 +129,6 @@ def _build_shirt_flatten(
     robot_path = assets_root / profile.asset
     if not robot_path.is_file():
         raise FileNotFoundError(f"missing {profile.robot_id} asset: {robot_path}")
-    garment_path = GarmentLibrary(assets_root).converted(spec.garment_id)
 
     newton.use_coord_layout_targets = True
     template = newton.ModelBuilder(gravity=spec.gravity)
@@ -146,17 +147,21 @@ def _build_shirt_flatten(
         profile,
         load_visual_shapes=visuals,
         robot_cloth_collision=robot_cloth_collision,
+        robot_rigid_collision=robot_rigid_collision,
     )
     _add_table(newton, wp, template, spec)
-    garment_mesh = load_garment_mesh(garment_path)
-    particle_range = add_style3d_garment(template, garment_path, spec, mesh=garment_mesh)
+    particle_range = (0, 0)
+    if include_cloth:
+        garment_path = GarmentLibrary(assets_root).converted(spec.garment_id)
+        garment_mesh = load_garment_mesh(garment_path)
+        particle_range = add_style3d_garment(template, garment_path, spec, mesh=garment_mesh)
     builder = newton.ModelBuilder(gravity=spec.gravity)
     _register_solver_attributes(newton, builder)
     world_offsets = _centered_world_offsets(spec.world_count)
     world_xforms = tuple(
         wp.transform(offset, wp.quat_identity()) for offset in world_offsets
     )
-    if visuals:
+    if visuals and include_cloth:
         # The NOCS proxy deforms independently in each world. Build one public
         # ModelBuilder world per proxy so Newton owns distinct Mesh buffers;
         # the physics path below still takes 1.5's optimized replicate path.
@@ -225,6 +230,8 @@ def build_scene(
     device: str = "cuda:0",
     visuals: bool = False,
     robot_cloth_collision: bool = True,
+    robot_rigid_collision: bool = True,
+    include_cloth: bool = True,
 ) -> ShirtFlattenScene:
     """Build a scene from independent robot and task identities."""
 
@@ -242,6 +249,8 @@ def build_scene(
         device=device,
         visuals=visuals,
         robot_cloth_collision=robot_cloth_collision,
+        robot_rigid_collision=robot_rigid_collision,
+        include_cloth=include_cloth,
     )
 
 
@@ -299,6 +308,7 @@ def _add_robot(
     *,
     load_visual_shapes: bool,
     robot_cloth_collision: bool = True,
+    robot_rigid_collision: bool = True,
 ) -> tuple[int, list[int], list[int], list[int], list[int]]:
     body_start = int(builder.body_count)
     shape_start = int(builder.shape_count)
@@ -382,6 +392,7 @@ def _add_robot(
         for prim_path in path_shape_map
     }
     if shape_flags and embedded_shape_contract:
+        shape_bit = int(newton.ShapeFlags.COLLIDE_SHAPES)
         particle_bit = int(newton.ShapeFlags.COLLIDE_PARTICLES)
         collision_shapes = []
         for prim_path, shape in path_shape_map.items():
@@ -392,6 +403,9 @@ def _add_robot(
                 int(override.Get()) if override and override.HasAuthoredValue()
                 else int(builder.shape_flags[shape])
             )
+            authored_collision = flags & (shape_bit | particle_bit)
+            if not robot_rigid_collision:
+                flags &= ~shape_bit
             if not robot_cloth_collision:
                 flags &= ~particle_bit
             builder.shape_flags[shape] = flags
@@ -410,10 +424,7 @@ def _add_robot(
                 margin, gap = (float(value) for value in contact.Get())
                 builder.shape_margin[shape] = margin
                 builder.shape_gap[shape] = gap
-            if flags & (
-                int(newton.ShapeFlags.COLLIDE_SHAPES)
-                | int(newton.ShapeFlags.COLLIDE_PARTICLES)
-            ):
+            if authored_collision:
                 collision_shapes.append(shape)
     else:
         if legacy_contract is None:
@@ -444,6 +455,7 @@ def _add_robot(
                 contact_shapes=contact_shapes,
                 proxy_shapes=proxy_shapes,
                 robot_cloth_collision=robot_cloth_collision,
+                robot_rigid_collision=robot_rigid_collision,
                 end_effector_links=tuple(
                     frame.parent_body for frame in profile.attach_frames
                 ),
@@ -595,6 +607,7 @@ def _configure_robot_collision_geometry(
     contact_shapes: tuple[int, ...],
     proxy_shapes: tuple[int, ...],
     robot_cloth_collision: bool,
+    robot_rigid_collision: bool,
     end_effector_links: tuple[str, ...],
 ) -> tuple[int, ...]:
     """Apply authored collision roles and reproduce topology-derived proxy filters."""
@@ -616,7 +629,9 @@ def _configure_robot_collision_geometry(
             builder.shape_flags[shape] &= ~collision_bits
             builder.shape_collision_group[shape] = 0
     for shape in contact_shapes:
-        contact_bits = shape_bit | (particle_bit if robot_cloth_collision else 0)
+        contact_bits = (shape_bit if robot_rigid_collision else 0) | (
+            particle_bit if robot_cloth_collision else 0
+        )
         builder.shape_flags[shape] = (
             int(builder.shape_flags[shape]) & ~collision_bits
         ) | contact_bits
@@ -624,7 +639,7 @@ def _configure_robot_collision_geometry(
     for shape in proxy_shapes:
         builder.shape_flags[shape] = (
             int(builder.shape_flags[shape]) & ~collision_bits
-        ) | shape_bit
+        ) | (shape_bit if robot_rigid_collision else 0)
         builder.shape_collision_group[shape] = 2
 
     # Contact geometry collides with cloth and external rigid bodies, never

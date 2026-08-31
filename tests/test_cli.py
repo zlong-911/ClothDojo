@@ -55,6 +55,34 @@ def test_retarget_cli_forwards_the_compact_public_options(monkeypatch, capsys) -
     assert json.loads(capsys.readouterr().out) == {"ok": True}
 
 
+def test_retarget_cli_forwards_multiple_devices_and_rejects_conflict(monkeypatch, capsys):
+    call = {}
+    monkeypatch.setattr(
+        "clothdojo.data.retarget.retarget",
+        lambda *args, **kwargs: call.update(kwargs) or {"ok": True},
+    )
+    arguments = ["data", "retarget", "--source", "source", "--output", "output",
+                 "--target-robot", "fr3_duo", "--devices", "cuda:2", "cuda:5"]
+    cli.main(arguments)
+    assert call["devices"] == ("cuda:2", "cuda:5")
+    assert json.loads(capsys.readouterr().out) == {"ok": True}
+    with pytest.raises(SystemExit, match="2"):
+        cli.main([*arguments, "--device", "cuda:0"])
+
+
+def test_retarget_cli_forwards_same_gpu_worker_count(monkeypatch, capsys):
+    call = {}
+    monkeypatch.setattr(
+        "clothdojo.data.retarget.retarget",
+        lambda *args, **kwargs: call.update(kwargs) or {"ok": True},
+    )
+    cli.main(["data", "retarget", "--source", "source", "--output", "output",
+              "--target-robot", "fr3_duo", "--device", "cuda:2", "--workers-per-device", "8"])
+    assert call["device"] == "cuda:2"
+    assert call["workers_per_device"] == 8
+    assert json.loads(capsys.readouterr().out) == {"ok": True}
+
+
 def test_environment_check_prints_report(monkeypatch, capsys) -> None:
     monkeypatch.setattr(
         "clothdojo.diagnostics.inspect_environment",

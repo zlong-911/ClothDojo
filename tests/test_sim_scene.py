@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from clothdojo.robots import PIPER, robot_profile
+from clothdojo.robots import ALOHA2, PIPER, robot_profile
 from clothdojo.sim.check import _gripper_openness
 from clothdojo.sim.runtime import (
     ShirtFlattenRuntime,
@@ -90,6 +90,7 @@ def test_sim_runtime_enables_cuda_graph_by_default() -> None:
     assert ShirtFlattenRuntime.__init__.__kwdefaults__ == {
         "use_cuda_graph": True,
         "rigid_deterministic": False,
+        "rigid_cuda_graph": False,
     }
 
     runtime = ShirtFlattenRuntime.__new__(ShirtFlattenRuntime)
@@ -478,6 +479,36 @@ def test_robot_cloth_ghost_mode_preserves_table_particle_collision() -> None:
     assert sum(bool(int(flags) & particle_bit) for flags in builder.shape_flags) == 1
     assert all(not int(builder.shape_flags[index]) & particle_bit for index in robot_shapes)
     assert int(builder.shape_flags[table_shapes[0]]) & particle_bit
+
+
+def test_robot_rigid_ghost_mode_preserves_table_shape_collision() -> None:
+    import newton
+    import warp as wp
+
+    root = Path(__file__).parents[1] / "assets" / "robots" / "aloha2"
+    builder = newton.ModelBuilder()
+    _register_solver_attributes(newton, builder)
+    _add_robot(
+        newton,
+        wp,
+        builder,
+        root / "aloha2.usda",
+        robot_profile(ALOHA2),
+        load_visual_shapes=False,
+        robot_cloth_collision=False,
+        robot_rigid_collision=False,
+    )
+    robot_shape_count = int(builder.shape_count)
+    _add_table(newton, wp, builder, ShirtFlattenSpec())
+
+    shape_bit = int(newton.ShapeFlags.COLLIDE_SHAPES)
+    particle_bit = int(newton.ShapeFlags.COLLIDE_PARTICLES)
+    assert all(
+        not int(builder.shape_flags[index]) & (shape_bit | particle_bit)
+        for index in range(robot_shape_count)
+    )
+    assert int(builder.shape_flags[robot_shape_count]) & shape_bit
+    assert int(builder.shape_flags[robot_shape_count]) & particle_bit
 
 
 def test_joint_selection_resolves_named_one_dof_joints() -> None:

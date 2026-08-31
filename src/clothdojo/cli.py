@@ -225,6 +225,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             target_robot=args.target_robot,
             assets=args.assets,
             device=args.device,
+            **({"devices": tuple(args.devices)} if args.devices is not None else {}),
+            **({"workers_per_device": args.workers_per_device}
+               if args.workers_per_device != 1 else {}),
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return
@@ -942,10 +945,16 @@ def _parser() -> argparse.ArgumentParser:
         default="assets",
         help="project asset directory",
     )
+    retarget_devices = retarget.add_mutually_exclusive_group()
+    retarget_devices.add_argument(
+        "--device", default="cuda:0", help="Newton IK and rigid-dynamics device",
+    )
+    retarget_devices.add_argument(
+        "--devices", nargs="+", help="retarget GPUs, e.g. cuda:0 cuda:1",
+    )
     retarget.add_argument(
-        "--device",
-        default="cuda:0",
-        help="Newton IK and rigid-dynamics device",
+        "--workers-per-device", type=int, default=1,
+        help="persistent processes per GPU (default: 1); use NVIDIA MPS for same-GPU concurrency",
     )
     review = data_commands.add_parser(
         "render-review",
