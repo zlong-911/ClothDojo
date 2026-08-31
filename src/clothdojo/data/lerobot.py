@@ -403,6 +403,8 @@ class _Writer(Protocol):
 
     def save_episode(self) -> None: ...
 
+    def stop_image_writer(self) -> None: ...
+
 
 def load_episode_indices(
     dataset_root: str | Path, *, trajectory_extent: str = "all"

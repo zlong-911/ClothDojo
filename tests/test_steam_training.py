@@ -12,6 +12,49 @@ import pytest
 from clothdojo.training.steam import inspect_steam_dataset
 
 
+@pytest.mark.parametrize("batch_count,accumulation", [(11, 2), (3, 8)])
+def test_steam_epoch_changes_only_after_all_microbatches_are_consumed(batch_count, accumulation):
+    import torch
+    from omegaconf import OmegaConf
+    from rlinf.workers.sft.fsdp_steam_sft_worker import _PairDataLoaderImpl
+
+    from clothdojo.training.rlinf_steam import ClothDojoSteamSftWorker
+
+    samples = torch.arange(2 * batch_count)
+    sampler = torch.utils.data.DistributedSampler(
+        samples, num_replicas=1, rank=0, shuffle=True, seed=42
+    )
+    loader = torch.utils.data.DataLoader(samples, batch_size=2, sampler=sampler)
+    worker = object.__new__(ClothDojoSteamSftWorker)
+    worker._world_size = 1
+    worker.cfg = OmegaConf.create(
+        {
+            "actor": {
+                "micro_batch_size": 2,
+                "global_batch_size": 2 * accumulation,
+                "model": {"ensemble_size": 1},
+            }
+        }
+    )
+    worker.data_loader = _PairDataLoaderImpl(loader)
+    worker.data_iter = iter(worker.data_loader)
+    # Two-plus epochs ensure a rollover inside one optimizer step does not get
+    # rewound by the next runner.set_global_step call.
+    steps = 2 * batch_count // accumulation + 3
+    actual = []
+    for step in range(steps):
+        worker.set_global_step(step)
+        actual.extend(worker._fetch_next_batch() for _ in range(accumulation))
+    consumed = steps * accumulation
+    expected = []
+    for epoch in range((consumed + batch_count - 1) // batch_count):
+        sampler.set_epoch(epoch)
+        expected.extend(loader)
+    assert torch.equal(torch.cat(actual), torch.cat(expected[:consumed]))
+    assert worker._current_epoch == (consumed - 1) // batch_count
+    assert worker.global_step == steps - 1
+
+
 def test_steam_base_explicitly_disables_lora_for_rlinf_model_factory():
     from omegaconf import OmegaConf
 

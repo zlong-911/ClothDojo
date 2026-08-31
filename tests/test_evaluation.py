@@ -33,6 +33,7 @@ from clothdojo.evaluation.results import (
     write_evaluation_cases,
 )
 from clothdojo.evaluation.scoring import result_from_curve, score_evaluation_trajectory
+from clothdojo.rendering import policy_observation_settings
 from clothdojo.sim.scene import ShirtFlattenSpec
 from clothdojo.trajectory import TrajectoryAction, TrajectoryState, TrajectoryWriter
 
@@ -374,6 +375,13 @@ def test_protocol_rejects_non_integral_sampling_grid() -> None:
 def _offline_evaluation(tmp_path: Path, *, quarter_turn: bool = False):
     protocol = _protocol()
     template = _template()
+    collection_identity = {
+        "condition_id": "offline",
+        "policy": {"checkpoint_sha256": "f" * 64},
+        "execution": {"mode": "chunk", "exec_horizon": 2},
+        "cloth_visual": "nocs",
+        "observation": policy_observation_settings(),
+    }
     condition = tmp_path / "condition"
     output = condition / "trajectories" / "shirt_000003_r002"
     templates = tmp_path / "templates"
@@ -409,12 +417,13 @@ def _offline_evaluation(tmp_path: Path, *, quarter_turn: bool = False):
         sim_substeps=1,
         max_actions=protocol.horizon_steps,
         metadata={
+            **collection_identity,
             "producer": "clothdojo_evaluation",
             "training_eligible": False,
             "asset_id": "shirt",
             "replicate": 2,
             "policy_seed": 8,
-            "initial_state": {"index": 3, "seed": 7},
+            "initial_state": {"index": 3, "seed": 7, "pool_sha256": "e" * 64},
             "protocol_fingerprint": protocol.fingerprint,
             "template_sha256": file_sha256(template_path),
         },
@@ -458,21 +467,23 @@ target:
         encoding="utf-8",
     )
     condition_meta = {
+        **collection_identity,
         "schema": EVALUATION_RESULT_SCHEMA,
         "status": "failed",
-        "condition_id": "offline",
         "case_count": 1,
         "results": "results.jsonl",
         "training_eligible": False,
         "scenario": {"prompt": "flatten the shirt"},
-        "policy": {"checkpoint_sha256": "f" * 64},
         "protocol": {"fingerprint": protocol.fingerprint},
+        "initial_state_pools": {"shirt": "e" * 64},
         "templates": {"shirt": file_sha256(template_path)},
         "trajectories": [
             {
                 "asset_id": "shirt",
                 "initial_state_index": 3,
                 "replicate": 2,
+                "seed": 7,
+                "policy_seed": 8,
                 "path": "trajectories/shirt_000003_r002",
                 "action_count": protocol.horizon_steps,
             }
@@ -641,6 +652,33 @@ def test_rescore_still_validates_original_trajectory_provenance(tmp_path, field)
     with pytest.raises(ValueError, match="trajectory scoring provenance differs"):
         score_evaluation_condition(condition, updated_path, templates, rescore_from=original_path)
     assert (condition / "meta.json").read_bytes() == before
+
+
+@pytest.mark.parametrize("field, value", [
+    ("condition_id", "another-run"),
+    ("policy", {"checkpoint_sha256": "0" * 64}),
+    ("execution", {"mode": "chunk", "exec_horizon": 5}),
+    ("cloth_visual", "white"),
+    ("observation", {"renderer": "another-renderer"}),
+    ("policy_seed", 9),
+    ("initial_state", {"index": 3, "seed": 9, "pool_sha256": "e" * 64}),
+    ("initial_state", {"index": 3, "seed": 7, "pool_sha256": "0" * 64}),
+])
+def test_offline_score_rejects_trajectory_from_another_collection(tmp_path, field, value):
+    condition, protocol, templates, _ = _offline_evaluation(tmp_path)
+    score_evaluation_condition(condition, protocol, templates)
+    before_meta = (condition / "meta.json").read_bytes()
+    before_scores = (condition / "results.jsonl").read_bytes()
+    manifest_path = condition / "trajectories/shirt_000003_r002/manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["metadata"][field] = value
+    manifest_path.write_text(json.dumps(manifest))
+
+    with pytest.raises(ValueError, match=r"trajectory .* differs"):
+        score_evaluation_condition(condition, protocol, templates)
+
+    assert (condition / "meta.json").read_bytes() == before_meta
+    assert (condition / "results.jsonl").read_bytes() == before_scores
 
 
 def test_score_publication_failure_never_exposes_mismatched_results(tmp_path, monkeypatch) -> None:

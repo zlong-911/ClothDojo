@@ -202,7 +202,7 @@ def test_scoring_rejects_mixed_image_preprocessing(tmp_path):
     metadata = json.loads(meta_path.read_text())
     metadata["policy"]["image_preprocessing"] = "training_fixed_crop"
     meta_path.write_text(json.dumps(metadata))
-    with pytest.raises(ValueError, match="image preprocessing differs"):
+    with pytest.raises(ValueError, match="policy differs from condition"):
         score_evaluation_condition(condition, protocol, templates)
 
 

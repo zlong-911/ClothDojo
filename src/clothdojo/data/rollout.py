@@ -145,6 +145,7 @@ class RolloutLeRobotWriter:
             raise RuntimeError("cannot publish an empty rollout dataset")
         if self._episode_frames:
             self.save_episode()
+        self.writer.stop_image_writer()
         if not self._injected:
             _validate_output(
                 self.staging,
@@ -167,6 +168,9 @@ class RolloutLeRobotWriter:
         self._closed = True
 
     def abort(self) -> None:
+        if self._closed:
+            return
+        self.writer.stop_image_writer()
         self._closed = True
 
 
@@ -186,6 +190,21 @@ def inspect_rollout_collection_export(
         shard_index=shard_index,
         shard_count=shard_count,
     )
+    return _rollout_export_summary(
+        root, manifest, source_kind,
+        shard_index=shard_index, shard_count=shard_count, cloth_visual=cloth_visual,
+    )
+
+
+def _rollout_export_summary(
+    root: Path,
+    manifest: dict[str, Any],
+    source_kind: str,
+    *,
+    shard_index: int | None,
+    shard_count: int | None,
+    cloth_visual: ClothVisual,
+) -> dict[str, Any]:
     frames = sum(int(item["action_count"]) for item in manifest["trajectories"])
     result = {
         "source_kind": source_kind,
@@ -265,6 +284,22 @@ def inspect_trajectory_dataset_export(
         shard_count=shard_count,
     )
     fps, task_name, _assets = _trajectory_export_context(root, plan)
+    return _trajectory_export_summary(
+        root, plan, fps, task_name,
+        shard_index=shard_index, shard_count=shard_count, cloth_visual=cloth_visual,
+    )
+
+
+def _trajectory_export_summary(
+    root: Path,
+    plan: ExportPlan,
+    fps: float,
+    task_name: str,
+    *,
+    shard_index: int | None,
+    shard_count: int | None,
+    cloth_visual: ClothVisual,
+) -> dict[str, Any]:
     result = plan.to_json_dict()
     result.pop("episodes")
     result.pop("source_action_counts")
@@ -379,10 +414,8 @@ def export_trajectory_dataset(
         selection_plan=plan,
         fps=fps,
     )
-    result = inspect_trajectory_dataset_export(
-        root,
-        min_segment_frames=min_segment_frames,
-        whole_trajectory_good_only=whole_trajectory_good_only,
+    result = _trajectory_export_summary(
+        root, plan, fps, task_name,
         shard_index=shard_index,
         shard_count=shard_count,
         cloth_visual=cloth_visual,
@@ -540,8 +573,8 @@ def _export_canonical_collection(
         repo_id=repo_id,
         image_writer_threads=image_writer_threads,
     )
-    summary = inspect_rollout_collection_export(
-        root,
+    summary = _rollout_export_summary(
+        root, manifest, source_kind,
         shard_index=shard_index,
         shard_count=shard_count,
         cloth_visual=rendering.get("cloth_visual", "nocs"),

@@ -16,6 +16,7 @@ from clothdojo.data.rollout import (
     _select_trajectory_shard,
     _trajectory_shard_source_ids,
     _TrajectoryRenderState,
+    export_trajectory_dataset,
 )
 from clothdojo.robots import (
     ALOHA2,
@@ -34,6 +35,9 @@ class _Writer:
 
     def save_episode(self):
         self.saved += 1
+
+    def stop_image_writer(self):
+        pass
 
 
 class _Array:
@@ -75,6 +79,118 @@ def test_rollout_writer_never_reuses_unverified_staging(tmp_path, monkeypatch) -
         )
 
     assert artifact.read_bytes() == b"previous export"
+
+
+@pytest.mark.parametrize("mark_all_bad", [False, True])
+def test_export_summary_uses_published_selection_when_annotations_change(
+    tmp_path, monkeypatch, mark_all_bad
+) -> None:
+    from test_mirror import _collection
+
+    from clothdojo.data.rollout import _write_selected_sidecar
+
+    source, trajectory_id = _collection(tmp_path)
+    output = tmp_path / "exported"
+
+    def publish_and_edit_annotation(root, output, **kwargs):
+        _write_selected_sidecar(
+            output,
+            source_root=root,
+            plan=kwargs["selection_plan"],
+            scenario=kwargs["manifest"]["scenario"],
+            rendering=kwargs["rendering"],
+        )
+        annotation = root / "trajectories/annotations" / f"{trajectory_id}.segments.json"
+        payload = json.loads(annotation.read_text())
+        payload["segments"] = (
+            [{"start_frame": 0, "end_frame": 1, "label": "bad"}] if mark_all_bad else []
+        )
+        annotation.write_text(json.dumps(payload))
+
+    monkeypatch.setattr(
+        "clothdojo.data.rollout._export_collection_manifest", publish_and_edit_annotation
+    )
+    summary = export_trajectory_dataset(
+        source, output, min_segment_frames=1, whole_trajectory_good_only=False
+    )
+
+    published = json.loads((output / "meta/clothdojo.json").read_text())
+    assert summary["output_frames"] == published["counts"]["output_frames"] == 1
+    assert summary["output_episodes"] == published["counts"]["output_episodes"] == 1
+
+
+def test_canonical_export_summary_does_not_reload_source_after_publication(
+    tmp_path, monkeypatch
+) -> None:
+    manifest = {
+        "training_eligible": True,
+        "trajectories": [{"asset_id": "shirt_a", "action_count": 4}],
+    }
+
+    def publish_and_remove_source(*args, **kwargs):
+        def missing_source(_root):
+            raise FileNotFoundError("source moved after publication")
+
+        monkeypatch.setattr("clothdojo.data.rollout._load_canonical_collection", missing_source)
+
+    monkeypatch.setattr(
+        "clothdojo.data.rollout._load_canonical_collection",
+        lambda _root: (manifest, "rollout_collection"),
+    )
+    monkeypatch.setattr(
+        "clothdojo.data.rollout._export_collection_manifest", publish_and_remove_source
+    )
+    summary = _export_canonical_collection(
+        tmp_path / "source", tmp_path / "exported",
+        camera_factory=lambda *_args: None,
+        rendering={"backend": "newton"},
+        repo_id=None,
+        image_writer_threads=1,
+    )
+
+    assert summary["output_frames"] == 4
+    assert summary["output_episodes"] == 1
+
+
+@pytest.mark.parametrize("publish", [False, True])
+def test_rollout_writer_drains_and_stops_real_image_workers(tmp_path, publish) -> None:
+    output = tmp_path / "exported"
+    sink = RolloutLeRobotWriter(
+        output,
+        fps=50,
+        prompt="Flatten the shirt.",
+        scenario={},
+        trajectory="/source/trajectory",
+        policy={},
+        training_eligible=False,
+        image_height=4,
+        image_width=4,
+        image_writer_threads=1,
+    )
+    image_writer = sink.writer.image_writer
+    try:
+        observation = {
+            "observation.state": np.zeros((1, 14), dtype=np.float32),
+            **{
+                f"observation.images.{camera}": np.zeros((1, 4, 4, 3), dtype=np.uint8)
+                for camera in CAMERA_NAMES
+            },
+        }
+        sink.add_frame(observation, np.zeros(14, dtype=np.float32))
+        if publish:
+            sink.close()
+        else:
+            sink.abort()
+
+        assert sink.writer.image_writer is None
+        assert all(not thread.is_alive() for thread in image_writer.threads)
+        assert output.exists() is publish
+        if not publish:
+            assert len(list(sink.staging.rglob("frame_000000.png"))) == len(CAMERA_NAMES)
+        with pytest.raises(RuntimeError, match="closed rollout dataset"):
+            sink.add_frame(observation, np.zeros(14, dtype=np.float32))
+    finally:
+        image_writer.stop()
 
 
 def test_live_rollout_export_is_atomic_and_explicitly_ineligible(tmp_path) -> None:
@@ -395,11 +511,6 @@ def test_canonical_export_owns_backend_camera_lifecycle(monkeypatch, tmp_path) -
     )
     monkeypatch.setattr("clothdojo.trajectory.TrajectoryReader", Reader)
     monkeypatch.setattr("clothdojo.data.rollout.RolloutLeRobotWriter", lambda *_a, **_kw: sink)
-    monkeypatch.setattr(
-        "clothdojo.data.rollout.inspect_rollout_collection_export",
-        lambda _root, **_kwargs: {"renderer": "newton"},
-    )
-
     result = _export_canonical_collection(
         source,
         tmp_path / "output",

@@ -214,10 +214,18 @@ def _score_evaluation_condition_locked(
             raise ValueError("evaluation trajectory path is not flat")
         reader = TrajectoryReader(root / relative)
         metadata = reader.manifest.metadata
-        if metadata.get("policy", {}).get("image_preprocessing", "none") != meta.get(
-            "policy", {}
-        ).get("image_preprocessing", "none"):
-            raise ValueError("evaluation trajectory image preprocessing differs from condition")
+        for field in ("condition_id", "policy", "execution", "cloth_visual", "observation"):
+            if field not in meta or metadata.get(field) != meta[field]:
+                raise ValueError(f"evaluation trajectory {field} differs from condition")
+        initial_state = metadata.get("initial_state", {})
+        if (
+            initial_state.get("pool_sha256") != meta["initial_state_pools"][item["asset_id"]]
+            or initial_state.get("seed") != item["seed"]
+            or metadata.get("policy_seed") != item["policy_seed"]
+        ):
+            raise ValueError(
+                "evaluation trajectory initial state or policy seed differs from index"
+            )
         if (
             metadata.get("protocol_fingerprint") != collection_protocol.get("fingerprint")
             or metadata.get("template_sha256") != meta["templates"][item["asset_id"]]

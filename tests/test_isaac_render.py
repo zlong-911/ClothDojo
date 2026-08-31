@@ -13,7 +13,6 @@ from clothdojo.data.isaac_render import (
     _ROOMS,
     ROBODOJO_REVISION,
     _author_cameras,
-    _body_parent_world_poses,
     _matches_semantic_body,
     _physical_gpu,
     _require_robodojo_rooms,
@@ -279,22 +278,6 @@ def test_ur5e_root_validation_uses_the_asset_authored_root_rotation() -> None:
     body_q[roots, 3:7] = (0.0, 0.0, 0.0, 1.0)
     with pytest.raises(RuntimeError, match="installation frames"):
         _validate_robot_installations(body_q, profile)
-
-
-def test_isaac_fabric_parent_frames_use_asset_authored_root_frames() -> None:
-    environment = robot_profile(ALOHA2)
-    poses = _body_parent_world_poses(environment)
-    roots = np.flatnonzero(np.asarray(environment.body_parents) == -1)
-
-    np.testing.assert_allclose(
-        poses[roots, :3],
-        [frame.position for frame in environment.root_body_frames],
-    )
-    np.testing.assert_allclose(
-        poses[roots, 3:7],
-        [frame.rotation_xyzw for frame in environment.root_body_frames],
-    )
-    np.testing.assert_allclose(poses[1, :3], 0.0)
 
 
 def test_isaac_stage_references_the_complete_aloha_workstation() -> None:

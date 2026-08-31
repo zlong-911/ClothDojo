@@ -22,42 +22,16 @@ class NewtonFabricBridge:
     """
 
     def __init__(self, model, usd_context, *, device: str) -> None:
-        from pxr import Gf, UsdGeom
         from usdrt import Sdf, Usd
 
         if not str(device).startswith("cuda:"):
             raise ValueError("teleop Fabric requires a CUDA device")
         self._device = device
-        self._Gf = Gf
         usd_stage = usd_context.get_stage()
         if usd_stage is None:
             raise RuntimeError("Isaac USD context has no stage")
         self._stage = Usd.Stage.Attach(usd_context.get_stage_id())
-        body_paths = _find_render_body_paths(usd_stage, model.body_label)
-        self._rigid_xform_ops = []
-        for index, label in enumerate(model.body_label):
-            path = body_paths.get(index)
-            if path is None:
-                raise RuntimeError(f"Isaac did not map Newton rigid body {label!r}")
-            prim = usd_stage.GetPrimAtPath(path)
-            if not prim or not prim.IsValid():
-                raise RuntimeError(f"Isaac rigid-body prim is invalid: {path}")
-            self._rigid_xform_ops.append(UsdGeom.Xformable(prim).MakeMatrixXform())
-
-        body_parent = [-1] * int(model.body_count)
-        for child, parent in zip(
-            model.joint_child.numpy().tolist(),
-            model.joint_parent.numpy().tolist(),
-            strict=True,
-        ):
-            body_parent[int(child)] = int(parent)
-        self._body_parent = np.asarray(body_parent, dtype=np.int32)
-        parent_world = getattr(model, "body_parent_world_q", None)
-        if parent_world is None:
-            parent_world = [(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)] * int(
-                model.body_count
-            )
-        self._body_parent_world_q = np.asarray(parent_world, dtype=np.float64)
+        self._rigid_writer = _UsdRigidBodyWriter(usd_stage, model.body_label)
         # SelectPrims searches Fabric, not the source USD stage. Traversing the
         # attached USDRT stage is the documented population step.
         for _prim in self._stage.Traverse():
@@ -107,7 +81,7 @@ class NewtonFabricBridge:
         if int(model.particle_count) > 0 and self._cloth_points is None:
             raise RuntimeError("Isaac Fabric did not map the combined cloth mesh")
         print(
-            f"Isaac replay bridge ready: rigid={len(self._rigid_xform_ops)}, "
+            f"Isaac replay bridge ready: rigid={int(model.body_count)}, "
             f"cloth={self._cloth_points is not None}, sync=rigid-usd+cloth-gpu",
             flush=True,
         )
@@ -122,86 +96,79 @@ class NewtonFabricBridge:
             )
             self._cloth_attr.InvalidateCpuData()
 
-        local_poses = _world_to_local_transforms(
-            state.body_q.numpy(),
-            self._body_parent,
-            self._body_parent_world_q,
-        )
-        for op, pose in zip(self._rigid_xform_ops, local_poses, strict=True):
-            matrix = self._Gf.Matrix4d(1.0)
-            matrix.SetRotateOnly(
-                self._Gf.Quatd(
-                    float(pose[6]),
-                    self._Gf.Vec3d(*(float(value) for value in pose[3:6])),
-                )
-            )
-            matrix.SetTranslateOnly(
-                self._Gf.Vec3d(*(float(value) for value in pose[:3]))
-            )
-            op.Set(matrix)
+        self._rigid_writer.update(state.body_q.numpy())
 
 
-def _world_to_local_transforms(
-    body_q: np.ndarray,
-    body_parent: np.ndarray,
-    body_parent_world_q: np.ndarray,
-) -> np.ndarray:
-    """Convert Newton xyzw world poses to the robot's USD hierarchy."""
+class _UsdRigidBodyWriter:
+    """Write Newton world poses through the actual USD transform hierarchy.
 
-    world = np.asarray(body_q, dtype=np.float64)
-    parents = np.asarray(body_parent, dtype=np.int32)
-    parent_world = np.asarray(body_parent_world_q, dtype=np.float64)
-    if world.ndim != 2 or world.shape[1] != 7:
-        raise ValueError("body_q must have shape [body, 7]")
-    if parents.shape != (len(world),) or parent_world.shape != world.shape:
-        raise ValueError("body hierarchy must match body_q")
-    local = np.empty_like(world)
-    for index, parent in enumerate(parents):
-        reference = world[parent] if parent >= 0 else parent_world[index]
-        inverse = _quat_inverse(reference[3:7])
-        local[index, :3] = _quat_rotate(inverse, world[index, :3] - reference[:3])
-        local[index, 3:7] = _quat_multiply(inverse, world[index, 3:7])
-        norm = np.linalg.norm(local[index, 3:7])
-        if not np.isfinite(local[index]).all() or norm <= 1.0e-12:
+    USD parents may be installation groups or siblings of the physical joint
+    parent. Keep authored body stretch and descendant transforms, including
+    visual meshes and cameras, while changing only the body's rigid world pose.
+    """
+
+    def __init__(self, stage, labels) -> None:
+        from pxr import Gf, UsdGeom
+
+        self._Gf = Gf
+        self._cache = UsdGeom.XformCache()
+        paths = _find_render_body_paths(stage, labels)
+        missing = [str(label) for index, label in enumerate(labels) if index not in paths]
+        if missing:
+            raise RuntimeError(f"Isaac did not map Newton rigid bodies: {missing}")
+        if len(set(paths.values())) != len(paths):
+            raise RuntimeError("Isaac mapped multiple Newton bodies to the same USD prim")
+        self._bodies = []
+        # Parents must be updated first even when the Newton body order differs.
+        for index, path in sorted(paths.items(), key=lambda item: item[1].count("/")):
+            prim = stage.GetPrimAtPath(path)
+            xform = UsdGeom.Xformable(prim)
+            world = self._cache.GetLocalToWorldTransform(prim)
+            rigid = Gf.Matrix4d(1.0)
+            rigid.SetRotateOnly(Gf.Transform(world).GetRotation())
+            rigid.SetTranslateOnly(world.ExtractTranslation())
+            stretch = world * rigid.GetInverse()
+            local = xform.GetLocalTransformation()
+            reset = xform.GetResetXformStack()
+            op = xform.MakeMatrixXform()
+            op.Set(local)
+            xform.SetResetXformStack(reset)
+            self._bodies.append((index, prim, op, stretch, reset))
+
+    def update(self, body_q: np.ndarray) -> None:
+        world = np.asarray(body_q, dtype=np.float64)
+        if world.shape != (len(self._bodies), 7):
+            raise ValueError("body_q must have shape [body, 7]")
+        norms = np.linalg.norm(world[:, 3:7], axis=1)
+        if not np.isfinite(world).all() or np.any(norms <= 1.0e-12):
             raise ValueError("body_q contains an invalid rigid transform")
-        local[index, 3:7] /= norm
-    return local
-
-
-def _quat_inverse(quaternion: np.ndarray) -> np.ndarray:
-    value = np.asarray(quaternion, dtype=np.float64)
-    norm_squared = float(np.dot(value, value))
-    if not np.isfinite(norm_squared) or norm_squared <= 1.0e-12:
-        raise ValueError("body_q contains an invalid quaternion")
-    return np.asarray((-value[0], -value[1], -value[2], value[3])) / norm_squared
-
-
-def _quat_multiply(left: np.ndarray, right: np.ndarray) -> np.ndarray:
-    lx, ly, lz, lw = left
-    rx, ry, rz, rw = right
-    return np.asarray(
-        (
-            lw * rx + lx * rw + ly * rz - lz * ry,
-            lw * ry - lx * rz + ly * rw + lz * rx,
-            lw * rz + lx * ry - ly * rx + lz * rw,
-            lw * rw - lx * rx - ly * ry - lz * rz,
-        )
-    )
-
-
-def _quat_rotate(quaternion: np.ndarray, vector: np.ndarray) -> np.ndarray:
-    xyz = np.asarray(quaternion[:3])
-    value = np.asarray(vector, dtype=np.float64)
-    doubled_cross = 2.0 * np.cross(xyz, value)
-    return value + quaternion[3] * doubled_cross + np.cross(xyz, doubled_cross)
+        self._cache.Clear()
+        for index, prim, op, stretch, reset in self._bodies:
+            pose = world[index]
+            quaternion = pose[3:7] / norms[index]
+            rigid = self._Gf.Matrix4d(1.0)
+            rigid.SetRotateOnly(
+                self._Gf.Quatd(float(quaternion[3]), self._Gf.Vec3d(*quaternion[:3]))
+            )
+            rigid.SetTranslateOnly(self._Gf.Vec3d(*pose[:3]))
+            desired = stretch * rigid
+            parent = (
+                self._Gf.Matrix4d(1.0)
+                if reset else self._cache.GetParentToWorldTransform(prim)
+            )
+            op.Set(desired * parent.GetInverse())
+            # XformCache does not observe authored changes. Descendants must see
+            # their parent's just-written world transform, not the previous frame.
+            self._cache.Clear()
 
 
 def _find_render_body_paths(stage, labels) -> dict[int, str]:
-    """Match URDF body labels to the shallowest corresponding USD Xform."""
+    """Use workstation body labels, retaining name lookup for untagged Piper."""
     from pxr import UsdGeom
 
     candidates: dict[tuple[str | None, str], list[str]] = {}
     rigid_objects: dict[str, str] = {}
+    authored_labels: dict[str, str] = {}
     for prim in stage.Traverse():
         if not prim.IsA(UsdGeom.Xformable):
             continue
@@ -211,12 +178,22 @@ def _find_render_body_paths(stage, labels) -> dict[int, str]:
             continue
         if not path.startswith("/World/Robot/"):
             continue
+        label = prim.GetAttribute("clothdojo:bodyLabel")
+        if label and label.HasAuthoredValue():
+            name = str(label.Get()).strip("/")
+            if name in authored_labels:
+                raise RuntimeError(f"duplicate Isaac rigid-body label {name!r}")
+            authored_labels[name] = path
         parts = path.strip("/").split("/")
         side = "left" if "left" in parts else "right" if "right" in parts else None
         candidates.setdefault((side, prim.GetName()), []).append(path)
 
     result = {}
     for index, label in enumerate(labels):
+        authored_path = authored_labels.get(str(label).strip("/"))
+        if authored_path is not None:
+            result[index] = authored_path
+            continue
         parts = str(label).strip("/").split("/")
         rigid_path = rigid_objects.get(parts[-1])
         if rigid_path is not None:

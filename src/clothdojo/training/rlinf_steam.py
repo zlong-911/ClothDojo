@@ -89,6 +89,12 @@ class ClothDojoSteamSftWorker(FSDPSteamSftWorker):
         seed_everything(_run_seed() + int(self._rank))
         return result
 
+    def set_global_step(self, step: int) -> None:
+        # The upstream step-based epoch estimate drops tail micro-batches when
+        # loader length is not divisible by gradient accumulation. Its existing
+        # _fetch_next_batch already advances the epoch on actual exhaustion.
+        self.global_step = step
+
     def model_provider_func(self):
         module = super().model_provider_func()
         from rlinf.models.embodiment.value_model.steam import (

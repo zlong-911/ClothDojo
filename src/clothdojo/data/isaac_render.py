@@ -451,9 +451,6 @@ class IsaacRandomizedCamera:
             body_label=robot_profile.body_names,
             body_count=len(robot_profile.body_names),
             particle_count=int(particle_q.shape[0]),
-            joint_child=_ArrayMetadata(np.arange(len(robot_profile.body_names))),
-            joint_parent=_ArrayMetadata(np.asarray(robot_profile.body_parents)),
-            body_parent_world_q=_body_parent_world_poses(robot_profile),
         )
         self._state = SimpleNamespace(
             body_q=wp.array(body_q, dtype=wp.transformf, device=device),
@@ -562,14 +559,6 @@ class _RenderPlan:
     asset_path: Path
 
 
-class _ArrayMetadata:
-    def __init__(self, values) -> None:
-        self._values = np.asarray(values, dtype=np.int32)
-
-    def numpy(self) -> np.ndarray:
-        return self._values
-
-
 def _validate_robot_installations(
     body_q: np.ndarray, profile: RobotProfile
 ) -> None:
@@ -607,16 +596,6 @@ def _validate_robot_installations(
             f"Newton {profile.robot_id} root body poses disagree with its "
             "installation frames"
         )
-
-
-def _body_parent_world_poses(profile: RobotProfile) -> np.ndarray:
-    poses = np.zeros((len(profile.body_names), 7), dtype=np.float32)
-    poses[:, 6] = 1.0
-    roots = np.flatnonzero(np.asarray(profile.body_parents) == -1)
-    for root, frame in zip(roots, profile.root_body_frames, strict=True):
-        poses[root, :3] = frame.position
-        poses[root, 3:7] = frame.rotation_xyzw
-    return poses
 
 
 def _author_cameras(stage, body_labels, cameras) -> tuple[str, ...]:

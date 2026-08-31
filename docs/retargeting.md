@@ -247,7 +247,7 @@ manifest 中的门禁含义如下：
   home pose；
 - 左右语义 attach frame；
 - `cam_high`、`cam_low` 和左右腕部相机的 parent、外参和内参；
-- Fabric replay 使用的刚体语义拓扑。
+- Newton 刚体语义名称、状态顺序与运动学父节点；Isaac 使用语义名称映射可视节点。
 
 Piper 已采用完整工作站 USD：`assets/robots/piper/piper.usda` 组合双臂与安装结构，并直接
 定义关节限位、position drive、armature、夹爪初态和 mimic、MuJoCo 重力补偿、碰撞接触
@@ -260,8 +260,11 @@ position mode 都产生零目标速度阻尼。非零夹指速度的一步 MuJoC
 
 外部 MJCF 目标机器人的安装位姿只有 robot profile 一个事实来源；Piper 双臂的
 相对安装已经固化在工作站 USD 中，profile 只使用整体 identity frame。Newton 按该定义建立
-运动学模型，Isaac 按同一定义建立可视资产的父节点；replay bridge 把 Newton 的刚体世界变换转换为层级局部
-变换，通过 USD xform 发布给 RTX，布料顶点则继续通过 Fabric 在 GPU 上更新。RTX 导出前
+运动学模型，Isaac 引用同一份工作站 USD。replay bridge 优先使用资产的 `clothdojo:bodyLabel`
+映射刚体，未标注的 Piper 保留按节点名称映射；局部变换按 USD 实际父节点计算，不使用物理
+关节父节点代替可视层级。写入保留已有尺度、visual/相机子节点的局部变换和资产原有的
+`resetXformStack` 标记，不新增 reset 来绕过父节点。刚体通过 USD xform 发布给 RTX，
+布料顶点则继续通过 Fabric 在 GPU 上更新。RTX 导出前
 还会校验轨迹根刚体与 profile 一致，不一致时直接失败，避免同一份数值分别散落在 Newton
 scene、USD stage 和 renderer 中。
 
