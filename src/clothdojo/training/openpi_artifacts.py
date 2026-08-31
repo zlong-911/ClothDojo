@@ -55,9 +55,11 @@ def inspect_openpi_dataset(
         )
 
     tasks = _read_jsonl(tasks_path, "LeRobot tasks")
+    task = tasks[0].get("task") if len(tasks) == 1 else None
     if (
-        len(tasks) != 1
-        or {row.get("task") for row in tasks} != {expected_task}
+        not isinstance(task, str)
+        or task.strip().casefold().rstrip(".")
+        != expected_task.strip().casefold().rstrip(".")
         or tasks[0].get("task_index") != 0
     ):
         raise ValueError(
@@ -110,6 +112,7 @@ def inspect_openpi_dataset(
         "min_segment_frames": minimum,
         "minimum_episode_frames": min(lengths),
         "task": expected_task,
+        "prompt": task,
         "training_cameras": list(TRAINING_CAMERAS),
         "state_dim": 14,
         "action_dim": 14,
@@ -145,7 +148,13 @@ def inspect_openpi_norm_stats(
         "episodes": dataset["episodes"],
     }
     for key, expected_value in expected.items():
-        if provenance.get(key) != expected_value:
+        actual_value = provenance.get(key)
+        if key == "data_kwargs" and isinstance(actual_value, dict):
+            # Text never enters state/action normalization. Keep every other
+            # transform setting exact, and retain the original provenance below.
+            actual_value = {k: v for k, v in actual_value.items() if k != "default_prompt"}
+            expected_value = {k: v for k, v in expected_value.items() if k != "default_prompt"}
+        if actual_value != expected_value:
             raise ValueError(
                 f"norm-stat provenance mismatch for {key}: "
                 f"{provenance.get(key)!r} != {expected_value!r}"
@@ -168,6 +177,7 @@ def inspect_openpi_norm_stats(
         "provenance_path": str(provenance_path),
         "provenance_sha256": _sha256(provenance_path),
         **expected,
+        "data_kwargs": provenance["data_kwargs"],
     }
 
 

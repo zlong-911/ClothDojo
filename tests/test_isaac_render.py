@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import sys
 from dataclasses import asdict
 from pathlib import Path
+from types import ModuleType
 
 import numpy as np
 import pytest
@@ -17,6 +19,7 @@ from clothdojo.data.isaac_render import (
     _require_robodojo_rooms,
     _require_visual_assets,
     _split_tiled_rgb,
+    _start_isaac_app,
     _validate_robot_installations,
     export_isaac_rollout_collection,
     parse_visual_randomization,
@@ -215,6 +218,29 @@ def test_isaac_device_is_an_explicit_physical_gpu(value, expected) -> None:
 def test_isaac_device_rejects_cpu_and_ambiguous_values() -> None:
     with pytest.raises(ValueError, match="physical CUDA index"):
         _physical_gpu("cpu")
+
+
+def test_isaac_app_uses_the_installed_extension_cache(monkeypatch, tmp_path) -> None:
+    package = tmp_path / "site-packages/isaacsim"
+    (package / "extscache").mkdir(parents=True)
+    init = package / "__init__.py"
+    init.touch()
+    calls = {}
+
+    def simulation_app(config, *, experience):
+        calls.update(config=config, experience=experience)
+        return object()
+
+    module = ModuleType("isaacsim")
+    module.__file__ = str(init)
+    module.SimulationApp = simulation_app
+    monkeypatch.setitem(sys.modules, "isaacsim", module)
+
+    _start_isaac_app(3, tmp_path / "portable")
+
+    extra_args = calls["config"]["extra_args"]
+    assert extra_args[:2] == ["--ext-folder", str(package / "extscache")]
+    assert calls["config"]["active_gpu"] == 3
 
 
 def test_isaac_replay_requires_newton_root_poses_to_match_installations() -> None:

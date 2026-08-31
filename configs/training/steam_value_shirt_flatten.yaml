@@ -56,6 +56,7 @@ actor:
   seed: 0
   model:
     model_type: steam_value_model
+    is_lora: false
     # FP32 master weights with BF16 forward compute passed the fixed-batch gate.
     precision: fp32
     vision_repo_id: ${oc.env:CLOTHDOJO_STEAM_SIGLIP_CHECKPOINT}

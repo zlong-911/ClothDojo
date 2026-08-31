@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 import sys
 import time
@@ -22,9 +23,10 @@ from clothdojo.training.episode_selection import (
 )
 
 PAIR_STRIDE = 64
+STATE_KEY = "observation.state"
 CAMERA_KEYS = (
     "observation.images.cam_high",
-    "observation.images.cam_third_person",
+    "observation.images.cam_low",
 )
 
 
@@ -32,6 +34,7 @@ CAMERA_KEYS = (
 class SteamAdvantageDataset:
     role: str
     dataset_path: Path
+    advantage_tag: str
     positive_fraction: float
     episodes: tuple[int, ...]
     total_episodes: int
@@ -52,6 +55,7 @@ class SteamAdvantageSpec:
     checkpoint: Path
     prompt: str
     stride: int
+    state_key: str
     camera_keys: tuple[str, ...]
     batch_size: int
     num_workers: int
@@ -96,13 +100,15 @@ def compose_steam_advantage_spec(config_path: str | Path) -> SteamAdvantageSpec:
         raise ValueError("STEAM work_dir must be explicit")
 
     entries = raw.get("datasets")
-    if not isinstance(entries, list) or len(entries) != 2:
-        raise ValueError("STEAM labeling requires exactly one sft and one rollout dataset")
+    if not isinstance(entries, list) or not entries:
+        raise ValueError("STEAM labeling requires at least one dataset")
     datasets = tuple(_compose_dataset(entry) for entry in entries)
-    if sorted(dataset.role for dataset in datasets) != ["rollout", "sft"]:
-        raise ValueError("STEAM labeling requires dataset roles sft and rollout")
     if len({dataset.dataset_path for dataset in datasets}) != len(datasets):
         raise ValueError("STEAM labeling datasets must be distinct")
+    for role in {dataset.role for dataset in datasets}:
+        fractions = {dataset.positive_fraction for dataset in datasets if dataset.role == role}
+        if len(fractions) != 1:
+            raise ValueError(f"STEAM datasets with role {role!r} must share positive_fraction")
     prompts = {load_single_task_prompt(dataset.dataset_path) for dataset in datasets}
     if len(prompts) != 1:
         raise ValueError("STEAM labeling datasets must contain the same single task prompt")
@@ -111,6 +117,7 @@ def compose_steam_advantage_spec(config_path: str | Path) -> SteamAdvantageSpec:
         checkpoint=checkpoint,
         prompt=prompts.pop(),
         stride=PAIR_STRIDE,
+        state_key=STATE_KEY,
         camera_keys=CAMERA_KEYS,
         batch_size=batch_size,
         num_workers=num_workers,
@@ -135,6 +142,7 @@ def inspect_steam_advantages(spec: SteamAdvantageSpec) -> dict[str, Any]:
         "checkpoint_weights_sha256": _sha256(weights),
         "prompt": spec.prompt,
         "stride": spec.stride,
+        "state_key": spec.state_key,
         "camera_keys": list(spec.camera_keys),
         "batch_size": spec.batch_size,
         "num_processes": spec.num_processes,
@@ -145,6 +153,12 @@ def inspect_steam_advantages(spec: SteamAdvantageSpec) -> dict[str, Any]:
 def run_steam_advantages(spec: SteamAdvantageSpec) -> None:
     """Run one rank of distributed inference and publish labels on rank zero."""
 
+    from clothdojo.training.rlinf_steam_state import (
+        enable_state_aware_steam,
+        require_state_aware_evaluator,
+    )
+
+    enable_state_aware_steam()
     import pyarrow as pa
     import pyarrow.parquet as pq
     import torch
@@ -188,6 +202,7 @@ def run_steam_advantages(spec: SteamAdvantageSpec) -> None:
     model = coerce_to_ensemble(
         SteamCriticModel.from_checkpoint(spec.checkpoint, device=device)
     )
+    require_state_aware_evaluator(model)
     model.eval()
     _configure_processor_cameras(model, spec.camera_keys)
     weights_path = _checkpoint_weights(spec.checkpoint)
@@ -201,12 +216,16 @@ def run_steam_advantages(spec: SteamAdvantageSpec) -> None:
 
     try:
         for dataset_index, entry in enumerate(spec.datasets):
+            state_keys = _evaluator_state_keys(model, entry.dataset_path)
             dataset = BinaryPairInferenceDataset(
                 dataset_path=str(entry.dataset_path),
                 camera_keys=list(spec.camera_keys),
                 k=spec.stride,
                 prompt=spec.prompt,
                 dataset_type=entry.role,
+                include_state=True,
+                state_key=spec.state_key,
+                state_keys=state_keys,
             )
             _replace_pair_dataset_base(dataset)
             selected_indices = _selected_anchor_indices(dataset, entry.episodes)
@@ -252,17 +271,20 @@ def run_steam_advantages(spec: SteamAdvantageSpec) -> None:
             pq.write_table(shard, shard_dir / f"rank_{rank:03d}.parquet")
             if world_size > 1:
                 dist.barrier()
-            if rank == 0:
+        if rank == 0:
+            thresholds = _shared_role_thresholds(spec, run_dir)
+            for dataset_index, entry in enumerate(spec.datasets):
                 _publish_dataset_labels(
                     spec=spec,
                     entry=entry,
-                    shard_dir=shard_dir,
+                    shard_dir=run_dir / f"dataset_{dataset_index}",
                     weights_path=weights_path,
                     weights_sha256=weights_sha256,
                     config_sha256=config_sha256,
+                    threshold=thresholds[entry.role],
                 )
-            if world_size > 1:
-                dist.barrier()
+        if world_size > 1:
+            dist.barrier()
     finally:
         if world_size > 1 and dist.is_initialized():
             dist.destroy_process_group()
@@ -273,6 +295,12 @@ def run_steam_advantages(spec: SteamAdvantageSpec) -> None:
 def smoke_steam_advantages(spec: SteamAdvantageSpec) -> dict[str, Any]:
     """Load the exact evaluator and score one real pair without publishing labels."""
 
+    from clothdojo.training.rlinf_steam_state import (
+        enable_state_aware_steam,
+        require_state_aware_evaluator,
+    )
+
+    enable_state_aware_steam()
     import torch
     from rlinf.data.datasets.steam.pair_dataset import (
         BinaryPairDataCollator,
@@ -291,16 +319,21 @@ def smoke_steam_advantages(spec: SteamAdvantageSpec) -> dict[str, Any]:
     model = coerce_to_ensemble(
         SteamCriticModel.from_checkpoint(spec.checkpoint, device=device)
     )
+    require_state_aware_evaluator(model)
     model.eval()
     _configure_processor_cameras(model, spec.camera_keys)
     loaded_seconds = time.monotonic() - started
     entry = spec.datasets[0]
+    state_keys = _evaluator_state_keys(model, entry.dataset_path)
     dataset = BinaryPairInferenceDataset(
         dataset_path=str(entry.dataset_path),
         camera_keys=list(spec.camera_keys),
         k=spec.stride,
         prompt=spec.prompt,
         dataset_type=entry.role,
+        include_state=True,
+        state_key=spec.state_key,
+        state_keys=state_keys,
     )
     _replace_pair_dataset_base(dataset)
     index = _selected_anchor_indices(dataset, (entry.episodes[0],))[0]
@@ -330,6 +363,8 @@ def smoke_steam_advantages(spec: SteamAdvantageSpec) -> dict[str, Any]:
         "first_forward_seconds": time.monotonic() - forward_started,
         "episode": int(batch["episode"][0]),
         "frame_index": int(batch["frame_idx_t"][0]),
+        "ensemble_size": len(model.members),
+        "state_shape": list(observation["state"].shape),
         "predicted_values": values,
     }
 
@@ -345,6 +380,9 @@ def _compose_dataset(
     dataset = Path(str(value.get("dataset_path", ""))).expanduser().resolve()
     info = _dataset_info(dataset)
     features = info.get("features", {})
+    state_feature = features.get(STATE_KEY, {})
+    if state_feature.get("dtype") != "float32" or state_feature.get("shape") != [14]:
+        raise ValueError(f"STEAM dataset requires float32 state[14]: {dataset}")
     missing = [key for key in CAMERA_KEYS if key not in features]
     if missing:
         raise ValueError(f"STEAM dataset is missing camera features {missing}: {dataset}")
@@ -364,15 +402,27 @@ def _compose_dataset(
         episodes = validate_episode_selection(value["episodes"], total_episodes)
     else:
         episodes = tuple(range(total_episodes))
+    advantage_tag = _advantage_tag(value.get("advantage_tag"))
     return SteamAdvantageDataset(
         role=role,
         dataset_path=dataset,
+        advantage_tag=advantage_tag,
         positive_fraction=positive_fraction,
         episodes=episodes,
         total_episodes=total_episodes,
         total_frames=_positive_int(info.get("total_frames"), "total_frames"),
-        output_path=dataset / "meta" / "advantages.parquet",
+        output_path=dataset / "meta" / f"advantages_{advantage_tag}.parquet",
     )
+
+
+def _advantage_tag(value: Any) -> str:
+    """Validate the explicit label-set identity used by RLINF's CFG loader."""
+
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", value):
+        raise ValueError(
+            "STEAM advantage_tag must be an explicit 1-128 character file-safe tag"
+        )
+    return value
 
 
 def _selected_anchor_indices(dataset: Any, episodes: tuple[int, ...]) -> list[int]:
@@ -417,42 +467,18 @@ def _publish_dataset_labels(
     weights_path: Path,
     weights_sha256: str | None = None,
     config_sha256: str | None = None,
+    threshold: float | None = None,
 ) -> None:
     import pyarrow as pa
     import pyarrow.parquet as pq
 
-    tables = [pq.read_table(path) for path in sorted(shard_dir.glob("rank_*.parquet"))]
-    if len(tables) != spec.num_processes:
-        raise RuntimeError(f"missing STEAM rank shards in {shard_dir}")
-    table = pa.concat_tables(tables)
-    episode = np.asarray(
-        table["episode_index"].combine_chunks().to_numpy(zero_copy_only=False),
-        dtype=np.int64,
+    episode, frame, score = _read_dataset_scores(
+        spec=spec,
+        entry=entry,
+        shard_dir=shard_dir,
     )
-    frame = np.asarray(
-        table["frame_index"].combine_chunks().to_numpy(zero_copy_only=False),
-        dtype=np.int64,
-    )
-    score = np.asarray(
-        table["advantage_continuous"].combine_chunks().to_numpy(zero_copy_only=False),
-        dtype=np.float32,
-    )
-    order = np.lexsort((frame, episode))
-    episode, frame, score = episode[order], frame[order], score[order]
-
-    lengths = _episode_lengths(entry.dataset_path)
-    terminal_episode = np.asarray(entry.episodes, dtype=np.int64)
-    terminal_frame = lengths[terminal_episode] - 1
-    episode = np.concatenate((episode, terminal_episode))
-    frame = np.concatenate((frame, terminal_frame))
-    score = np.concatenate((score, np.full(len(terminal_episode), -1.0, np.float32)))
-    order = np.lexsort((frame, episode))
-    episode, frame, score = episode[order], frame[order], score[order]
-    _require_exact_coverage(episode, frame, lengths, entry.episodes)
-    if not np.isfinite(score).all() or np.any(score < -1.0001) or np.any(score > 1.0001):
-        raise ValueError(f"STEAM scores are not finite values in [-1, 1]: {entry.role}")
-
-    threshold = float(np.quantile(score, 1.0 - entry.positive_fraction))
+    if threshold is None:
+        threshold = float(np.quantile(score, 1.0 - entry.positive_fraction))
     labels = score >= threshold
     output = pa.table(
         {
@@ -481,6 +507,7 @@ def _publish_dataset_labels(
         "dataset_info_sha256": _sha256(entry.dataset_path / "meta" / "info.json"),
         "episodes": list(entry.episodes),
         "stride": spec.stride,
+        "state_key": spec.state_key,
         "camera_keys": list(spec.camera_keys),
         "positive_fraction_requested": entry.positive_fraction,
         "threshold": threshold,
@@ -498,6 +525,69 @@ def _publish_dataset_labels(
         manifest["negative"],
         threshold,
     )
+
+
+def _shared_role_thresholds(
+    spec: SteamAdvantageSpec,
+    run_dir: Path,
+) -> dict[str, float]:
+    """Compute one boolean-label threshold over all datasets of each role."""
+
+    scores: dict[str, list[np.ndarray]] = {}
+    fractions: dict[str, float] = {}
+    for dataset_index, entry in enumerate(spec.datasets):
+        _episode, _frame, score = _read_dataset_scores(
+            spec=spec,
+            entry=entry,
+            shard_dir=run_dir / f"dataset_{dataset_index}",
+        )
+        scores.setdefault(entry.role, []).append(score)
+        fractions[entry.role] = entry.positive_fraction
+    return {
+        role: float(np.quantile(np.concatenate(values), 1.0 - fractions[role]))
+        for role, values in scores.items()
+    }
+
+
+def _read_dataset_scores(
+    *,
+    spec: SteamAdvantageSpec,
+    entry: SteamAdvantageDataset,
+    shard_dir: Path,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Read distributed score shards and add the explicit terminal-frame score."""
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    tables = [pq.read_table(path) for path in sorted(shard_dir.glob("rank_*.parquet"))]
+    if len(tables) != spec.num_processes:
+        raise RuntimeError(f"missing STEAM rank shards in {shard_dir}")
+    table = pa.concat_tables(tables)
+    episode = np.asarray(
+        table["episode_index"].combine_chunks().to_numpy(zero_copy_only=False),
+        dtype=np.int64,
+    )
+    frame = np.asarray(
+        table["frame_index"].combine_chunks().to_numpy(zero_copy_only=False),
+        dtype=np.int64,
+    )
+    score = np.asarray(
+        table["advantage_continuous"].combine_chunks().to_numpy(zero_copy_only=False),
+        dtype=np.float32,
+    )
+    lengths = _episode_lengths(entry.dataset_path)
+    terminal_episode = np.asarray(entry.episodes, dtype=np.int64)
+    terminal_frame = lengths[terminal_episode] - 1
+    episode = np.concatenate((episode, terminal_episode))
+    frame = np.concatenate((frame, terminal_frame))
+    score = np.concatenate((score, np.full(len(terminal_episode), -1.0, np.float32)))
+    order = np.lexsort((frame, episode))
+    episode, frame, score = episode[order], frame[order], score[order]
+    _require_exact_coverage(episode, frame, lengths, entry.episodes)
+    if not np.isfinite(score).all() or np.any(score < -1.0001) or np.any(score > 1.0001):
+        raise ValueError(f"STEAM scores are not finite values in [-1, 1]: {entry.role}")
+    return episode, frame, score
 
 
 def _require_exact_coverage(
@@ -613,6 +703,17 @@ def _nonnegative_int(value: Any, name: str) -> int:
     if result < 0:
         raise ValueError(f"{name} must be non-negative")
     return result
+
+
+def _evaluator_state_keys(model, dataset_path: Path) -> list[str]:
+    keys = list(getattr(model.config, "state_keys", [STATE_KEY]))
+    if keys == [STATE_KEY]:
+        return keys
+    provenance = json.loads((Path(dataset_path) / "meta/clothdojo.json").read_text())
+    encoded = getattr(model.config, "geometry_contract", None)
+    if not encoded or provenance.get("geometry", {}).get("contract") != json.loads(encoded):
+        raise ValueError("dataset geometry features must match the STEAM checkpoint contract")
+    return keys
 
 
 def _sha256(path: Path) -> str:

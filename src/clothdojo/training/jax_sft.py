@@ -21,6 +21,27 @@ from pathlib import Path
 from typing import Any, Literal
 
 Gate = Literal["initialize", "overfit", "pilot", "parity", "full"]
+ActionOffsetProfile = Literal["uniform", "fixed_delay_rtc"]
+DataSamplingMode = Literal["frame", "asset_tempered"]
+
+
+@dataclass(frozen=True, slots=True)
+class DataSamplingSpec:
+    """How LeRobot frame indices are selected for one training epoch."""
+
+    mode: DataSamplingMode
+    alpha: float | None
+    index: Path | None
+
+
+@dataclass(frozen=True, slots=True)
+class ActionOffsetLossSpec:
+    """Deployment profile used to reduce Pi0.5's per-action-offset loss."""
+
+    profile: ActionOffsetProfile
+    focus: float
+    exec_horizon: int
+    delay_steps: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +53,7 @@ class JaxSftSpec:
     task: str
     default_prompt: str
     dataset: Path
+    data_sampling: DataSamplingSpec
     norm_stats: Path
     base_params: Path
     pytorch_base: Path
@@ -50,6 +72,7 @@ class JaxSftSpec:
     log_interval: int
     save_interval: int
     keep_period: int
+    action_offset_loss: ActionOffsetLossSpec
     warmup_steps: int
     peak_lr: float
     decay_steps: int
@@ -84,6 +107,16 @@ _CONTRACT: dict[str, Any] = {
     "optimizer.clip_gradient_norm": 1.0,
     "optimizer.ema_decay": 0.99,
 }
+
+_ACTION_HORIZON = 50
+_ASSET_TEMPERED_ALPHA = 0.5
+_DEFAULT_DATA_SAMPLING = DataSamplingSpec(mode="frame", alpha=None, index=None)
+_DEFAULT_ACTION_OFFSET_LOSS = ActionOffsetLossSpec(
+    profile="uniform",
+    focus=0.0,
+    exec_horizon=_ACTION_HORIZON,
+    delay_steps=0,
+)
 
 _TUNING_PROFILES: dict[str, dict[str, float | int]] = {
     "openpi_reference": {
@@ -141,8 +174,41 @@ _TUNING_PROFILES: dict[str, dict[str, float | int]] = {
         "optimizer.decay_steps": 60_000,
         "optimizer.decay_lr": 5.0e-6,
     },
+    "decay_60k_lr_2x_seed42": {
+        "training.seed": 42,
+        "training.batch_size": 64,
+        "training.num_train_steps": 60_000,
+        "training.log_interval": 100,
+        "training.save_interval": 10_000,
+        "optimizer.warmup_steps": 1_000,
+        "optimizer.peak_lr": 5.0e-5,
+        "optimizer.decay_steps": 60_000,
+        "optimizer.decay_lr": 5.0e-6,
+    },
+    "decay_50k_lr_2x_seed42": {
+        "training.seed": 42,
+        "training.batch_size": 64,
+        "training.num_train_steps": 50_000,
+        "training.log_interval": 100,
+        "training.save_interval": 5_000,
+        "optimizer.warmup_steps": 1_000,
+        "optimizer.peak_lr": 5.0e-5,
+        "optimizer.decay_steps": 50_000,
+        "optimizer.decay_lr": 5.0e-6,
+    },
     "decay_60k_lr_3x": {
         "training.seed": 42,
+        "training.batch_size": 64,
+        "training.num_train_steps": 60_000,
+        "training.log_interval": 100,
+        "training.save_interval": 10_000,
+        "optimizer.warmup_steps": 1_000,
+        "optimizer.peak_lr": 7.5e-5,
+        "optimizer.decay_steps": 60_000,
+        "optimizer.decay_lr": 7.5e-6,
+    },
+    "decay_60k_lr_3x_seed43": {
+        "training.seed": 43,
         "training.batch_size": 64,
         "training.num_train_steps": 60_000,
         "training.log_interval": 100,
@@ -217,6 +283,8 @@ def compose_jax_sft_spec(
         )
     paths = _mapping(raw, "paths")
     training = _mapping(raw, "training")
+    data_sampling = _compose_data_sampling(raw)
+    action_offset_loss = _compose_action_offset_loss(raw)
     optimizer = _mapping(raw, "optimizer")
     gates = _mapping(raw, "gates")
     logging = _mapping(raw, "logging")
@@ -229,6 +297,7 @@ def compose_jax_sft_spec(
         task=task,
         default_prompt=default_prompt,
         dataset=_path(paths["dataset"]),
+        data_sampling=data_sampling,
         norm_stats=_path(paths["norm_stats"]),
         base_params=_path(paths["base_params"]),
         pytorch_base=_path(paths["pytorch_base"]),
@@ -247,6 +316,7 @@ def compose_jax_sft_spec(
         log_interval=int(training["log_interval"]),
         save_interval=int(training["save_interval"]),
         keep_period=int(training["keep_period"]),
+        action_offset_loss=action_offset_loss,
         warmup_steps=int(optimizer["warmup_steps"]),
         peak_lr=float(optimizer["peak_lr"]),
         decay_steps=int(optimizer["decay_steps"]),
@@ -272,6 +342,7 @@ def inspect_jax_sft(spec: JaxSftSpec) -> dict[str, Any]:
     )
 
     dataset = inspect_openpi_dataset(spec.dataset, expected_task=spec.task)
+    data_sampling = _data_sampling_manifest(spec)
     data_kwargs = {
         "adapt_to_pi": False,
         "extra_delta_transform": True,
@@ -292,6 +363,10 @@ def inspect_jax_sft(spec: JaxSftSpec) -> dict[str, Any]:
     os.environ["OPENPI_DATA_HOME"] = str(spec.openpi_data_home)
     train_config = build_openpi_train_config(spec)
     _validate_built_config(train_config, spec)
+    action_offset_loss = _action_offset_loss_manifest(
+        spec.action_offset_loss,
+        action_horizon=train_config.model.action_horizon,
+    )
 
     manifest = {
         "schema": "clothdojo_pi05_jax_preflight",
@@ -315,6 +390,8 @@ def inspect_jax_sft(spec: JaxSftSpec) -> dict[str, Any]:
             "batch_size": spec.batch_size,
             "fsdp_devices": spec.fsdp_devices,
             "steps": spec.num_train_steps,
+            "data_sampling": data_sampling,
+            "action_offset_loss": action_offset_loss,
             "lr_schedule": {
                 "warmup_steps": spec.warmup_steps,
                 "peak_lr": spec.peak_lr,
@@ -467,7 +544,7 @@ def write_checkpoint_contract(step_dir: str | Path, *, step: int) -> Path:
         "online": {
             "path": "train_state",
             "field": "params",
-            "purpose": "exact resume and optimizer-update analysis",
+            "purpose": "online weights and optimizer-update analysis",
         },
         "optimizer": {"path": "train_state", "field": "opt_state"},
     }
@@ -511,11 +588,22 @@ def _train(spec: JaxSftSpec, gate: Gate, preflight: dict[str, Any]) -> dict[str,
     replicated = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec())
     rng = jax.random.key(config.seed)
     train_rng, init_rng = jax.random.split(rng)
+    action_offset_weights = _action_offset_weights(
+        spec.action_offset_loss,
+        action_horizon=config.model.action_horizon,
+    )
+    weighted_offsets = (
+        None
+        if spec.action_offset_loss.profile == "uniform"
+        else jnp.asarray(action_offset_weights, dtype=jnp.float32)
+    )
+    sampler = _make_data_sampler(spec, preflight)
 
     loader = _create_openpi_data_loader(
         config,
         sharding=data_sharding,
-        shuffle=True,
+        shuffle=sampler is None,
+        sampler=sampler,
         video_backend=spec.video_backend,
         data_loader_module=data_loader,
     )
@@ -609,7 +697,17 @@ def _train(spec: JaxSftSpec, gate: Gate, preflight: dict[str, Any]) -> dict[str,
         model.train()
 
         def loss_fn(model: Any, loss_rng: Any, observation: Any, actions: Any) -> Any:
-            return jnp.mean(model.compute_loss(loss_rng, observation, actions, train=True))
+            per_offset_loss = model.compute_loss(
+                loss_rng,
+                observation,
+                actions,
+                train=True,
+            )
+            return _reduce_action_offset_loss(
+                per_offset_loss,
+                weighted_offsets,
+                action_horizon=config.model.action_horizon,
+            )
 
         step_rng = jax.random.fold_in(key, current.step)
         diff_state = nnx.DiffState(0, config.trainable_filter)
@@ -846,6 +944,7 @@ def _create_openpi_data_loader(
     *,
     sharding: Any,
     shuffle: bool,
+    sampler: Any | None = None,
     video_backend: str,
     data_loader_module: Any,
 ) -> Any:
@@ -870,14 +969,24 @@ def _create_openpi_data_loader(
             [transforms.PromptFromLeRobotTask(metadata.tasks)],
         )
     dataset = data_loader_module.transform_dataset(dataset, data_config)
+    if sampler is not None and len(sampler.weights) != len(dataset):
+        raise ValueError(
+            "asset sampling index frame count differs from transformed LeRobot dataset: "
+            f"{len(sampler.weights)} != {len(dataset)}"
+        )
+    loader_kwargs = {
+        "sharding": sharding,
+        "shuffle": shuffle,
+        "num_workers": config.num_workers,
+        "seed": config.seed,
+        "framework": "jax",
+    }
+    if sampler is not None:
+        loader_kwargs["sampler"] = sampler
     loader = data_loader_module.TorchDataLoader(
         dataset,
         local_batch_size=config.batch_size,
-        sharding=sharding,
-        shuffle=shuffle,
-        num_workers=config.num_workers,
-        seed=config.seed,
-        framework="jax",
+        **loader_kwargs,
     )
     return data_loader_module.DataLoaderImpl(data_config, loader)
 
@@ -1062,6 +1171,257 @@ def _validate_built_config(config: Any, spec: JaxSftSpec) -> None:
     }
     if values != expected:
         raise ValueError(f"built OpenPI config differs from the JAX SFT contract: {values}")
+
+
+def _compose_data_sampling(raw: Mapping[str, Any]) -> DataSamplingSpec:
+    data = raw.get("data")
+    if data is None:
+        return _DEFAULT_DATA_SAMPLING
+    if not isinstance(data, Mapping) or set(data) != {"sampling"}:
+        raise ValueError("JAX SFT config data must contain exactly sampling")
+    sampling = data["sampling"]
+    if not isinstance(sampling, Mapping):
+        raise TypeError("JAX SFT config data.sampling must be a mapping")
+    mode = sampling.get("mode")
+    if mode == "frame":
+        if set(sampling) != {"mode"}:
+            raise ValueError("frame data.sampling must contain exactly mode")
+        return _DEFAULT_DATA_SAMPLING
+    if mode != "asset_tempered":
+        raise ValueError("data.sampling.mode must be 'frame' or 'asset_tempered'")
+    if set(sampling) != {"mode", "alpha", "index"}:
+        raise ValueError("asset_tempered data.sampling must contain exactly mode, alpha and index")
+    alpha = sampling["alpha"]
+    if isinstance(alpha, bool) or not isinstance(alpha, (int, float)):
+        raise TypeError("data.sampling.alpha must be a finite number")
+    alpha = float(alpha)
+    if not math.isfinite(alpha) or alpha != _ASSET_TEMPERED_ALPHA:
+        raise ValueError(
+            f"reviewed asset_tempered data.sampling.alpha must be {_ASSET_TEMPERED_ALPHA}"
+        )
+    index = _path(sampling["index"])
+    return DataSamplingSpec(mode="asset_tempered", alpha=alpha, index=index)
+
+
+def _load_asset_sampling_index(spec: JaxSftSpec) -> tuple[Any, str]:
+    if spec.data_sampling.mode != "asset_tempered" or spec.data_sampling.index is None:
+        raise ValueError("asset sampling index requested for frame sampling")
+    from clothdojo.data.asset_sampling import (
+        load_asset_sampling_index,
+        validate_asset_sampling_index,
+    )
+
+    index_path = spec.data_sampling.index
+    file_sha256 = _sha256(index_path)
+    index = load_asset_sampling_index(index_path)
+    if _sha256(index_path) != file_sha256:
+        raise RuntimeError(f"asset sampling index changed while being read: {index_path}")
+    validate_asset_sampling_index(index, spec.dataset)
+    return index, file_sha256
+
+
+def _asset_sampling_manifest(
+    spec: JaxSftSpec,
+    index: Any,
+    *,
+    file_sha256: str,
+) -> dict[str, Any]:
+    episode_counts: dict[str, int] = {}
+    for entry in index.episodes:
+        episode_counts[entry.asset_id] = episode_counts.get(entry.asset_id, 0) + 1
+    frame_counts = index.asset_frame_counts
+    return {
+        "mode": "asset_tempered",
+        "alpha": spec.data_sampling.alpha,
+        "seed": spec.seed,
+        "replacement": True,
+        "num_samples": index.total_frames,
+        "index": {
+            "path": str(spec.data_sampling.index),
+            "logical_sha256": index.sha256,
+            "file_sha256": file_sha256,
+        },
+        "asset_count": len(frame_counts),
+        "asset_episode_counts": dict(sorted(episode_counts.items())),
+        "asset_frame_counts": frame_counts,
+    }
+
+
+def _data_sampling_manifest(spec: JaxSftSpec) -> dict[str, Any]:
+    if spec.data_sampling.mode == "frame":
+        if spec.data_sampling != _DEFAULT_DATA_SAMPLING:
+            raise ValueError("frame data sampling must not carry alpha or an index")
+        return {
+            "mode": "frame",
+            "alpha": None,
+            "seed": spec.seed,
+            "replacement": False,
+            "num_samples": None,
+            "index": None,
+            "asset_count": None,
+            "asset_episode_counts": None,
+            "asset_frame_counts": None,
+        }
+    index, file_sha256 = _load_asset_sampling_index(spec)
+    return _asset_sampling_manifest(spec, index, file_sha256=file_sha256)
+
+
+def _make_data_sampler(spec: JaxSftSpec, preflight: Mapping[str, Any]) -> Any | None:
+    if spec.data_sampling.mode == "frame":
+        return None
+    from clothdojo.data.asset_sampling import make_asset_tempered_sampler
+
+    index, file_sha256 = _load_asset_sampling_index(spec)
+    actual = _asset_sampling_manifest(spec, index, file_sha256=file_sha256)
+    expected = preflight.get("training", {}).get("data_sampling")
+    if actual != expected:
+        raise RuntimeError("asset sampling index changed after preflight")
+    return make_asset_tempered_sampler(
+        index,
+        alpha=_ASSET_TEMPERED_ALPHA,
+        seed=spec.seed,
+    )
+
+
+def _compose_action_offset_loss(raw: Mapping[str, Any]) -> ActionOffsetLossSpec:
+    loss = raw.get("loss")
+    if loss is None:
+        return _DEFAULT_ACTION_OFFSET_LOSS
+    if not isinstance(loss, Mapping):
+        raise TypeError("JAX SFT config loss must be a mapping")
+    value = loss.get("action_offset")
+    if not isinstance(value, Mapping):
+        raise TypeError("JAX SFT config loss.action_offset must be a mapping")
+    expected = {"profile", "focus", "exec_horizon", "delay_steps"}
+    if set(value) != expected:
+        raise ValueError(
+            "loss.action_offset must contain exactly profile, focus, "
+            "exec_horizon and delay_steps"
+        )
+
+    profile = value["profile"]
+    if profile not in {"uniform", "fixed_delay_rtc"}:
+        raise ValueError(
+            "loss.action_offset.profile must be 'uniform' or 'fixed_delay_rtc'"
+        )
+    focus = value["focus"]
+    if isinstance(focus, bool) or not isinstance(focus, (int, float)):
+        raise TypeError("loss.action_offset.focus must be a finite number")
+    focus = float(focus)
+    if not math.isfinite(focus) or not 0.0 <= focus <= 1.0:
+        raise ValueError("loss.action_offset.focus must be finite and in [0, 1]")
+    exec_horizon = _action_offset_integer(value["exec_horizon"], "exec_horizon")
+    delay_steps = _action_offset_integer(
+        value["delay_steps"],
+        "delay_steps",
+        allow_zero=True,
+    )
+    spec = ActionOffsetLossSpec(
+        profile=profile,
+        focus=focus,
+        exec_horizon=exec_horizon,
+        delay_steps=delay_steps,
+    )
+    _action_offset_weights(spec, action_horizon=_ACTION_HORIZON)
+    return spec
+
+
+def _action_offset_integer(value: Any, name: str, *, allow_zero: bool = False) -> int:
+    minimum = 0 if allow_zero else 1
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        qualifier = "non-negative" if allow_zero else "positive"
+        raise ValueError(f"loss.action_offset.{name} must be a {qualifier} integer")
+    return value
+
+
+def _action_offset_weights(
+    spec: ActionOffsetLossSpec,
+    *,
+    action_horizon: int,
+) -> tuple[float, ...]:
+    """Build a normalized-at-reduction exposure profile without importing JAX."""
+
+    if (
+        isinstance(action_horizon, bool)
+        or not isinstance(action_horizon, int)
+        or action_horizon < 1
+    ):
+        raise ValueError("action_horizon must be a positive integer")
+    if spec.profile == "uniform":
+        if spec != ActionOffsetLossSpec(
+            profile="uniform",
+            focus=0.0,
+            exec_horizon=action_horizon,
+            delay_steps=0,
+        ):
+            raise ValueError(
+                "uniform action-offset loss requires focus=0, "
+                "exec_horizon=action_horizon and delay_steps=0"
+            )
+        return (1.0,) * action_horizon
+    if spec.profile != "fixed_delay_rtc":
+        raise ValueError(f"unsupported action-offset loss profile: {spec.profile!r}")
+    if not math.isfinite(spec.focus) or not 0.0 <= spec.focus <= 1.0:
+        raise ValueError("action-offset focus must be finite and in [0, 1]")
+    if not 1 <= spec.exec_horizon <= action_horizon:
+        raise ValueError("action-offset exec_horizon must be in [1, action_horizon]")
+    if not 0 <= spec.delay_steps < spec.exec_horizon:
+        raise ValueError("RTC action-offset delay_steps must be in [0, exec_horizon)")
+    stop = spec.delay_steps + spec.exec_horizon
+    if stop > action_horizon:
+        raise ValueError("RTC action-offset execution window exceeds action_horizon")
+
+    context_weight = 1.0 - spec.focus
+    return tuple(
+        1.0 if spec.delay_steps <= index < stop else context_weight
+        for index in range(action_horizon)
+    )
+
+
+def _action_offset_loss_manifest(
+    spec: ActionOffsetLossSpec,
+    *,
+    action_horizon: int,
+) -> dict[str, Any]:
+    weights = _action_offset_weights(spec, action_horizon=action_horizon)
+    return {
+        "profile": spec.profile,
+        "focus": spec.focus,
+        "exec_horizon": spec.exec_horizon,
+        "delay_steps": spec.delay_steps,
+        "weights": list(weights),
+        "reduction": "batch_mean_of_weight_normalized_action_offset_mean",
+    }
+
+
+def _reduce_action_offset_loss(
+    per_offset_loss: Any,
+    action_offset_weights: Any | None,
+    *,
+    action_horizon: int,
+) -> Any:
+    """Reduce Pi0.5's `[batch, action_horizon]` loss to one scalar."""
+
+    if getattr(per_offset_loss, "ndim", None) != 2 or per_offset_loss.shape[-1] != action_horizon:
+        raise ValueError(
+            "Pi0.5 compute_loss must return [batch, action_horizon], got "
+            f"{getattr(per_offset_loss, 'shape', None)}"
+        )
+    if action_offset_weights is None:
+        # Preserve the exact reference reduction for every existing config.
+        return per_offset_loss.mean()
+    if (
+        getattr(action_offset_weights, "ndim", None) != 1
+        or action_offset_weights.shape[0] != action_horizon
+    ):
+        raise ValueError(
+            f"action-offset weights must have shape ({action_horizon},), got "
+            f"{getattr(action_offset_weights, 'shape', None)}"
+        )
+    return (
+        (per_offset_loss * action_offset_weights).sum(axis=-1)
+        / action_offset_weights.sum()
+    ).mean()
 
 
 def _validate_contract(raw: Mapping[str, Any]) -> None:

@@ -25,6 +25,7 @@ from clothdojo.sim.scene import (
     _add_table,
     _body_indices,
     _centered_world_offsets,
+    _garment_visual_mesh,
     _joint_dofs,
     _joint_indices,
     _nocs_visual_mesh,
@@ -34,6 +35,25 @@ from clothdojo.sim.scene import (
     build_scene,
     rest_vertices_to_nocs,
 )
+
+
+def test_white_garment_visual_changes_only_texture_rgb() -> None:
+    vertices = np.asarray(
+        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.2]],
+        dtype=np.float32,
+    )
+    triangles = np.asarray([[0, 1, 2]], dtype=np.int32)
+    nocs = _garment_visual_mesh(
+        vertices, triangles, vertices, cloth_visual="nocs"
+    )
+    white = _garment_visual_mesh(
+        vertices, triangles, vertices, cloth_visual="white"
+    )
+
+    for nocs_value, white_value in zip(nocs[:4], white[:4], strict=True):
+        np.testing.assert_array_equal(nocs_value, white_value)
+    assert np.any(nocs[4][..., :3] != 255)
+    np.testing.assert_array_equal(white[4], np.full_like(white[4], 255))
 
 
 def test_scene_sets_safe_openusd_concurrency_before_newton_import() -> None:

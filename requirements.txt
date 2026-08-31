@@ -1,4 +1,7 @@
-# One readable environment specification for development, training and rollout.
+# The one shared Python dependency specification for development, training,
+# rollout and rendering. Use scripts/setup-environment.sh to build the complete
+# .venv: Isaac binary distributions are added afterwards with --no-deps because
+# their metadata pins incompatible versions of packages owned below.
 # Formal runs record the fully resolved `pip freeze` in artifact provenance.
 # Physics baseline: Newton 1.5.0 plus the audited Style3D NumPy and implicit
 # self-friction commits. Upgrade the fork revision and numerical stack as one
@@ -14,6 +17,8 @@ numpy==1.26.4
 # Piper's USD collision meshes use Newton's convex-hull importer. Depend on its
 # one required numerical library without pulling the full importer toolchain.
 scipy==1.17.1
+# Newton's MJCF visual importer uses trimesh for the official ALOHA 2 STL files.
+trimesh==4.5.1
 pyyaml==6.0.3
 
 # Data-agent backend. Pin the current upstream revision audited on 2026-08-21;
@@ -67,6 +72,13 @@ av==15.0.0
 fastapi==0.117.1
 uvicorn==0.29.0
 qrcode==8.2
+
+# Python modules imported eagerly by Isaac's local Replicator/Kit extensions.
+# Keep them in the shared dependency set because installing Isaac distributions
+# with --no-deps intentionally does not bring their conflicting full stack.
+botocore==1.36.1
+jmespath==1.0.1
+coverage==7.4.4
 
 # Project verification tools.
 pytest==9.1.1

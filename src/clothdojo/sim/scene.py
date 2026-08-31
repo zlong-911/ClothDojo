@@ -7,6 +7,7 @@ import sys
 from dataclasses import dataclass
 from math import ceil, sqrt
 from pathlib import Path
+from typing import Literal
 
 # Physics-only processes default OpenUSD to one worker before any robot USD is loaded.
 # Host applications such as Isaac own an already initialized task runtime and
@@ -31,6 +32,7 @@ GRIPPER_JOINTS = tuple(f"{side}/joint{joint}" for side in ("left", "right") for 
 END_EFFECTOR_LINKS = ("left/link6", "right/link6")
 WORLD_LAYOUT = "centered_grid"
 WORLD_SPACING_M = 3.0
+ClothVisual = Literal["nocs", "white"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +108,7 @@ def _build_shirt_flatten(
     spec: ShirtFlattenSpec | None = None,
     device: str = "cuda:0",
     visuals: bool = False,
+    cloth_visual: ClothVisual = "nocs",
     robot_cloth_collision: bool = True,
     robot_rigid_collision: bool = True,
     robot_id: str = PIPER,
@@ -124,6 +127,8 @@ def _build_shirt_flatten(
     import warp as wp
 
     spec = spec or ShirtFlattenSpec()
+    if cloth_visual not in ("nocs", "white"):
+        raise ValueError("cloth_visual must be 'nocs' or 'white'")
     assets_root = Path(assets_root).expanduser().absolute()
     profile = robot_profile(robot_id, assets_root=assets_root)
     robot_path = assets_root / profile.asset
@@ -181,6 +186,7 @@ def _build_shirt_flatten(
                 world,
                 particle_range,
                 garment_mesh[0],
+                cloth_visual=cloth_visual,
                 mesh_identity=world_index,
             )
             builder.add_world(world, xform=world_xforms[world_index])
@@ -235,6 +241,7 @@ def build_scene(
     spec: ShirtFlattenSpec | None = None,
     device: str = "cuda:0",
     visuals: bool = False,
+    cloth_visual: ClothVisual = "nocs",
     robot_cloth_collision: bool = True,
     robot_rigid_collision: bool = True,
     include_cloth: bool = True,
@@ -254,6 +261,7 @@ def build_scene(
         spec=spec,
         device=device,
         visuals=visuals,
+        cloth_visual=cloth_visual,
         robot_cloth_collision=robot_cloth_collision,
         robot_rigid_collision=robot_rigid_collision,
         include_cloth=include_cloth,
@@ -761,9 +769,10 @@ def _add_smooth_garment_visual(
     particle_range: tuple[int, int],
     rest_vertices: np.ndarray,
     *,
+    cloth_visual: ClothVisual = "nocs",
     mesh_identity: int = 0,
 ) -> None:
-    """Add a smooth render-only mesh with the expert-data NOCS appearance."""
+    """Add the smooth render-only garment with the selected paired appearance."""
 
     start, end = particle_range
     vertices = np.asarray(builder.particle_q[start:end], dtype=np.float32)
@@ -773,10 +782,11 @@ def _add_smooth_garment_visual(
     local_indices = np.ascontiguousarray(indices - start)
     if np.asarray(rest_vertices).shape != vertices.shape:
         raise RuntimeError("garment rest and simulated vertex counts differ")
-    visual_vertices, visual_indices, normals, uvs, texture = _nocs_visual_mesh(
+    visual_vertices, visual_indices, normals, uvs, texture = _garment_visual_mesh(
         vertices,
         local_indices,
         rest_vertices,
+        cloth_visual=cloth_visual,
     )
     if mesh_identity:
         # Model finalization deduplicates byte-identical meshes. Each NOCS
@@ -806,6 +816,26 @@ def _add_smooth_garment_visual(
         color=(1.0, 1.0, 1.0),
         label="garment_visual",
     )
+
+
+def _garment_visual_mesh(
+    vertices: np.ndarray,
+    triangles: np.ndarray,
+    rest_vertices: np.ndarray,
+    *,
+    cloth_visual: ClothVisual,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Keep NOCS and white controls geometry-identical and vary only RGB texels."""
+
+    if cloth_visual not in ("nocs", "white"):
+        raise ValueError("cloth_visual must be 'nocs' or 'white'")
+    result = _nocs_visual_mesh(vertices, triangles, rest_vertices)
+    if cloth_visual == "nocs":
+        return result
+    visual_vertices, visual_indices, normals, uvs, texture = result
+    texture = texture.copy()
+    texture[..., :3] = 255
+    return visual_vertices, visual_indices, normals, uvs, texture
 
 
 def rest_vertices_to_nocs(rest_vertices: np.ndarray) -> np.ndarray:

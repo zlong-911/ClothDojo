@@ -4,12 +4,27 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 OPENPI_CONFIG = "pi05_aloha_robotwin"
+
+
+@dataclass(frozen=True)
+class TrainingPrompt:
+    """Apply the configured single-task text before OpenPI tokenization."""
+
+    prompt: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.prompt, str) or not self.prompt.strip():
+            raise ValueError("OpenPI training default_prompt must be a non-empty string")
+
+    def __call__(self, data: dict[str, Any]) -> dict[str, Any]:
+        return {**data, "prompt": np.asarray(self.prompt)}
 
 
 def compute_norm_stats(

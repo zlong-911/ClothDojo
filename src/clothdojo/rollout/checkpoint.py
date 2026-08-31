@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass
@@ -67,10 +68,10 @@ def resolve_rlinf_openpi_weights(checkpoint: str | Path) -> ResolvedInferenceWei
     if not root.is_dir():
         raise FileNotFoundError(f"RLINF OpenPI checkpoint does not exist: {root}")
 
-    # Keep this order identical to rlinf.models.embodiment.openpi.get_model.
+    # Match openpi_rlinf.utils.rlt_utils.resolve_full_weights, used by serving.
     for relative in (
-        "model_state_dict/full_weights.pt",
         "actor/model_state_dict/full_weights.pt",
+        "model_state_dict/full_weights.pt",
         "full_weights.pt",
     ):
         candidate = root / relative
@@ -102,6 +103,9 @@ def inspect_rlinf_openpi_checkpoint(
 
     resolved = resolve_rlinf_openpi_weights(checkpoint)
     expected = expected_layout or _expected_openpi_rlinf_layout(int(action_horizon))
+    state_dict_layout = _state_dict_layout(resolved)
+    if expected_layout is None and state_dict_layout in {"sft_wrapper", "cfg_wrapper"}:
+        expected = _wrapper_layout(expected)
     actual = _read_stored_tensors(resolved)
     aliases = _validate_layout(actual, expected, resolved=resolved)
     digest = _weights_sha256(resolved)
@@ -113,6 +117,7 @@ def inspect_rlinf_openpi_checkpoint(
         "loader": "rlinf.models.embodiment.openpi_rlinf",
         "checkpoint_root": str(resolved.root),
         "weights_format": resolved.format,
+        "state_dict_layout": state_dict_layout,
         "weights_paths": [str(path) for path in resolved.paths],
         "weights_sha256": digest,
         "weights_size_bytes": sum(path.stat().st_size for path in resolved.paths),
@@ -126,7 +131,11 @@ def inspect_rlinf_openpi_checkpoint(
                 else "source_float32_runtime_bfloat16"
             )
             if resolved.format == "safetensors"
-            else "post_conversion_model_state_dict_exact"
+            else (
+                "native_openpi_rlinf_wrapper_float32"
+                if state_dict_layout in {"sft_wrapper", "cfg_wrapper"}
+                else "post_conversion_model_state_dict_exact"
+            )
         ),
         "expected_state_dict_keys": len(expected.tensors),
         "tied_aliases": aliases,
@@ -244,6 +253,49 @@ def _layout_from_model(model: Any) -> ExpectedCheckpointLayout:
     return ExpectedCheckpointLayout(tensors=tensors, tied_groups=tied_groups)
 
 
+def _wrapper_layout(layout: ExpectedCheckpointLayout) -> ExpectedCheckpointLayout:
+    return ExpectedCheckpointLayout(
+        tensors={f"model.{key}": value for key, value in layout.tensors.items()},
+        tied_groups=tuple(
+            tuple(f"model.{key}" for key in group) for group in layout.tied_groups
+        ),
+    )
+
+
+def _state_dict_layout(resolved: ResolvedInferenceWeights) -> str:
+    contract_candidates = (
+        resolved.root / "clothdojo_weights.json",
+        resolved.paths[0].parent.parent / "clothdojo_weights.json",
+    )
+    contract = next((path for path in contract_candidates if path.is_file()), None)
+    if contract is None:
+        return "pi0_core"
+    try:
+        value = json.loads(contract.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read RLINF checkpoint contract {contract}: {exc}") from exc
+    if not isinstance(value, dict) or value.get("format_version") != 1:
+        raise ValueError(f"unsupported RLINF checkpoint contract: {contract}")
+    schema = value.get("schema")
+    if schema == "clothdojo_openpi_rlinf_checkpoint":
+        valid = value.get("ema") == {
+            "decay": 0.99,
+            "path": "model_state_dict/full_weights.pt",
+            "purpose": "inference and rollout",
+        }
+    elif schema == "clothdojo_openpi_rlinf_cfg_checkpoint":
+        valid = value.get("weights") == {
+            "path": "model_state_dict/full_weights.pt",
+            "purpose": "inference and rollout",
+            "source": "online",
+        }
+    else:
+        valid = False
+    if not valid:
+        raise ValueError(f"unsupported RLINF checkpoint contract: {contract}")
+    return "sft_wrapper" if schema == "clothdojo_openpi_rlinf_checkpoint" else "cfg_wrapper"
+
+
 def _canonicalized_alias_manifest(
     expected: ExpectedCheckpointLayout,
     stored_keys: set[str],
@@ -311,8 +363,22 @@ def _read_pytorch_metadata(path: Path) -> dict[str, _StoredTensor]:
                 mmap=True,
                 weights_only=True,
             )
-    except Exception as exc:
-        raise ValueError(f"cannot inspect RLINF full_weights.pt safely: {path}: {exc}") from exc
+    except Exception as fake_error:
+        # FSDP full-state checkpoints can retain Tensor rebuild metadata that
+        # FakeTensorMode cannot wrap. A meta-device load still reads only the
+        # restricted weights-only metadata and never materializes the payload.
+        try:
+            state_dict = torch.load(
+                path,
+                map_location="meta",
+                mmap=True,
+                weights_only=True,
+            )
+        except Exception as meta_error:
+            raise ValueError(
+                f"cannot inspect RLINF full_weights.pt safely: {path}: "
+                f"fake={fake_error}; meta={meta_error}"
+            ) from meta_error
     if not isinstance(state_dict, dict) or not state_dict:
         raise TypeError(f"RLINF full_weights.pt must contain a non-empty state dict: {path}")
 
@@ -321,7 +387,9 @@ def _read_pytorch_metadata(path: Path) -> dict[str, _StoredTensor]:
         if not isinstance(key, str) or not torch.is_tensor(tensor):
             raise TypeError(f"RLINF full_weights.pt contains a non-tensor state entry: {key!r}")
         storage = tensor.untyped_storage()
-        checkpoint_offset = getattr(storage, "_checkpoint_offset", None)
+        checkpoint_offset = (
+            None if tensor.device.type == "meta" else getattr(storage, "_checkpoint_offset", None)
+        )
         storage_identity = None
         if checkpoint_offset is not None:
             storage_identity = (
@@ -425,12 +493,12 @@ def _validate_layout(
         if len(present) != len(group):
             continue
         identities = [actual[key].storage_identity for key in present]
-        if resolved.format != "pytorch" or any(identity is None for identity in identities):
+        if resolved.format != "pytorch":
             raise ValueError(
                 "RLINF checkpoint stores every tied parameter key but cannot prove shared "
                 f"storage: {present}"
             )
-        if len(set(identities)) == 1:
+        if all(identity is not None for identity in identities) and len(set(identities)) == 1:
             accepted_aliases.append(
                 {
                     "stored_keys": present,

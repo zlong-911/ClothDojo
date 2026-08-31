@@ -259,120 +259,91 @@ def sample_guided_openpi_rlinf_actions(
         time += dt
     return x_t
 
-
-def sample_guided_cfg_actions(
+def sample_guided_cfg_openpi_rlinf_actions(
     model: Any,
-    observation: Any,
+    unconditional_observation: Any,
+    conditional_observation: Any | None,
     previous_actions: Any,
     *,
     inference_delay: int,
+    num_steps: int,
+    guidance_scale: float,
     config: GuidedRTCConfig,
 ):
-    """Compose RLINF CFG velocity first, then apply paper-faithful RTC."""
+    """Compose current-core CFG velocity, then apply guided RTC."""
 
     import torch
-    from openpi.models_pytorch.pi0_pytorch import make_att_2d_masks
+    from rlinf.models.embodiment.openpi_rlinf.pi0_model import model as model_module
 
-    guidance_type = model.config.guidance_type
-    if guidance_type not in {"positive", "negative", "no_guide"}:
-        raise ValueError(f"unsupported CFG guidance type: {guidance_type!r}")
-    if model.config.positive_only_conditional and guidance_type == "negative":
-        raise ValueError("negative CFG guidance requires negative-conditioned training")
-
-    with torch.no_grad():
-        (
-            images,
-            image_masks,
-            language,
-            language_masks,
-            positive_language,
-            positive_language_masks,
-            negative_language,
-            negative_language_masks,
-            state,
-        ) = model._preprocess_observation(observation, train=False)
-
-        def build_cache(tokens, masks):
-            prefix_embs, prefix_pad_masks, prefix_att_masks = model.embed_prefix(
-                images,
-                image_masks,
-                tokens,
-                masks,
-            )
-            attention = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
-            positions = torch.cumsum(prefix_pad_masks, dim=1) - 1
-            attention = model._prepare_attention_masks_4d(attention)
-            _, cache = model.paligemma_with_expert.forward(
-                attention_mask=attention,
-                position_ids=positions,
-                past_key_values=None,
-                inputs_embeds=[prefix_embs, None],
-                use_cache=True,
-            )
-            return prefix_pad_masks, cache
-
-        model.paligemma_with_expert.paligemma.language_model.config._attn_implementation = (
-            "eager"
-        )
-        uncond_masks, uncond_cache = build_cache(language, language_masks)
-        if guidance_type == "positive":
-            cond_masks, cond_cache = build_cache(
-                positive_language,
-                positive_language_masks,
-            )
-        elif guidance_type == "negative":
-            cond_masks, cond_cache = build_cache(
-                negative_language,
-                negative_language_masks,
-            )
-        else:
-            cond_masks = cond_cache = None
-
-        x_t = model.sample_noise(
-            (state.shape[0], model.config.action_horizon, model.config.action_dim),
-            state.device,
-        )
-
-    step_size = torch.tensor(
-        1.0 / model.config.num_steps,
-        dtype=torch.float32,
-        device=state.device,
+    if num_steps < 1:
+        raise ValueError("RTC num_steps must be positive")
+    unconditional = model_module.preprocess_observation(
+        unconditional_observation,
+        train=False,
     )
-    for index in range(model.config.num_steps):
-        time = torch.full(
-            (state.shape[0],),
-            1.0 - index / model.config.num_steps,
+    conditional = (
+        None
+        if conditional_observation is None
+        else model_module.preprocess_observation(conditional_observation, train=False)
+    )
+    with torch.no_grad():
+        _, unconditional_mask, unconditional_cache = model.build_prefix_cache(
+            unconditional
+        )
+        if conditional is None:
+            conditional_mask = conditional_cache = None
+        else:
+            _, conditional_mask, conditional_cache = model.build_prefix_cache(conditional)
+        x_t = torch.randn(
+            previous_actions.shape[0],
+            model.action_horizon,
+            model.action_dim,
+            device=previous_actions.device,
             dtype=torch.float32,
-            device=state.device,
         )
 
-        def denoise(latent, current_time=time):
-            unconditional = model.denoise_step(
-                state,
-                uncond_masks,
-                uncond_cache,
+    dt = -1.0 / num_steps
+    time = 1.0
+    while time >= -dt / 2:
+        time_tensor = torch.full(
+            (x_t.shape[0],),
+            time,
+            device=x_t.device,
+            dtype=torch.float32,
+        )
+
+        def denoise(latent, current_time=time_tensor):
+            unconditional_suffix = model.run_suffix(
+                unconditional,
                 latent,
                 current_time,
+                unconditional_cache,
+                unconditional_mask,
             )
-            if guidance_type == "no_guide":
-                return unconditional
-            conditional = model.denoise_step(
-                state,
-                cond_masks,
-                cond_cache,
-                latent,
-                current_time,
-            )
-            scale = model.config.cfgrl_guidance_scale
-            return (1.0 - scale) * unconditional + scale * conditional
+            velocity = model.velocity_from_suffix(unconditional_suffix)
+            if conditional is not None:
+                conditional_suffix = model.run_suffix(
+                    conditional,
+                    latent,
+                    current_time,
+                    conditional_cache,
+                    conditional_mask,
+                )
+                conditional_velocity = model.velocity_from_suffix(conditional_suffix)
+                velocity = (
+                    (1.0 - guidance_scale) * velocity
+                    + guidance_scale * conditional_velocity
+                )
+            return velocity
 
         velocity = guided_velocity(
             x_t,
             previous_actions,
             inference_delay=inference_delay,
-            time=time,
+            time=time_tensor,
             denoise=denoise,
             config=config,
         )
-        x_t = (x_t - step_size * velocity).detach()
+        x_t = (x_t + dt * velocity).detach()
+        time += dt
     return x_t

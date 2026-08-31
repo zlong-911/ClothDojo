@@ -1,15 +1,14 @@
-# Current OpenPI/RLinf Pi0.5 replication recipe.
+# Current OpenPI/RLinf Pi0.5 SFT recipe.
 hydra:
   run:
     dir: .
   output_subdir: null
 
-# This recipe is a framework comparison, so its numerical contract is derived
-# from the named JAX trial instead of being duplicated in project Python code.
+# Retain the LR/batch recipe; new text/image defaults differ from the historical
+# JAX comparison. Explicit framework comparisons can still bind a named trial.
 clothdojo:
-  jax_reference:
-    matrix: pi05_aloha_jax_lr2x_60k_seed43.yaml
-    trial: decay60k_lr2x_seed43
+  jax_reference: null
+  image_augmentation: false
 
 cluster:
   num_nodes: 1
@@ -74,7 +73,7 @@ actor:
     openpi_data:
       adapt_to_pi: false
       extra_delta_transform: true
-      default_prompt: Flatten the shirt.
+      default_prompt: flatten the shirt
       norm_stats_path: ${oc.env:CLOTHDOJO_PI05_NORM_STATS}
   optim:
     # The 2x family was the strongest prior JAX result. Preserve global batch
@@ -91,8 +90,8 @@ actor:
     num_cycles: 0.5
     min_lr: 5.0e-6
     # OpenPI/JAX publishes EMA weights for inference while retaining online
-    # weights and optimizer state for resume. The project worker preserves the
-    # same checkpoint contract for RLINF.
+    # weights and optimizer state for analysis. SFT always starts a new run;
+    # checkpoint resume is disabled.
     ema_decay: 0.99
   fsdp_config:
     strategy: fsdp
@@ -108,7 +107,7 @@ actor:
     limit_all_gathers: false
     backward_prefetch: null
     # The worker writes EMA inference weights at the standard full-weights
-    # path; RLINF's DCP checkpoint remains the online resumable training state.
+    # path; RLINF's DCP checkpoint retains online training state for analysis.
     save_full_model_weights: false
     use_liger_kernel: false
     mixed_precision:

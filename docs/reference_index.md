@@ -26,6 +26,7 @@
 
 - [Warp 1.16 文档](https://nvidia.github.io/warp/v1.16/)
 - [Warp 1.16 runtime、stream 与 CUDA Graph](https://nvidia.github.io/warp/v1.16/user_guide/runtime.html)
+- [Warp 1.16 确定性执行：模式、原子操作与限制](https://github.com/NVIDIA/warp/blob/v1.16.0/docs/user_guide/execution_and_performance/deterministic_execution.rst)
 - [Warp API reference](https://nvidia.github.io/warp/stable/api_reference/warp.html)
 - [Warp 官方源码](https://github.com/NVIDIA/warp)
 - [CUDA Programming Guide：CUDA Graph](https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#cuda-graphs)
@@ -80,6 +81,8 @@
 
 - [RLINF 官方源码与使用文档](https://github.com/RLinf/RLinf)
 - [项目固定 RLINF commit](https://github.com/RLinf/RLinf/tree/7d07a4212ee6858cc333e1d4fab7a37256d1f839)
+- [STEAM 论文](https://arxiv.org/abs/2606.29834)
+- [STEAM 官方项目页](https://rlinf.github.io/steam/)
 - [OpenPI 官方源码](https://github.com/Physical-Intelligence/openpi)
 - [OpenPI JAX→PyTorch converter 源码](https://github.com/Physical-Intelligence/openpi/blob/main/examples/convert_jax_model_to_pytorch.py)
 - [OpenPI FP32 conversion-intermediate 修复讨论](https://github.com/Physical-Intelligence/openpi/pull/978)
@@ -91,6 +94,8 @@
 - [项目固定 LeRobot commit](https://github.com/huggingface/lerobot/tree/0cf864870cf29f4738d3ade893e6fd13fbd7cdb5)
 - [Real-Time Execution of Action Chunking Flow Policies](https://arxiv.org/abs/2506.07339)
 - [Physical Intelligence RTC JAX reference](https://github.com/Physical-Intelligence/real-time-chunking-kinetix)
+- [Physical Intelligence RTC 论文全文（含实机参数表）](https://www.pi.website/download/real_time_chunking.pdf)
+- [LeRobot RTC 使用与推荐参数](https://huggingface.co/docs/lerobot/rtc)
 - [LeRobot v0.4.2 RTCProcessor source](https://github.com/huggingface/lerobot/blob/v0.4.2/src/lerobot/policies/rtc/modeling_rtc.py)
 
 项目固定的 LeRobot commit 本身没有 RTC；数据 schema、writer 和视频行为看固定 commit，RTC 只以上述论文、作者代码和后续 LeRobot 实现为算法参考。
@@ -111,6 +116,8 @@
 - [Isaac Sim 5.0 Python 环境安装](https://docs.isaacsim.omniverse.nvidia.com/5.0.0/installation/install_python.html)
 - [Isaac Sim 5.0 系统与 GPU 要求](https://docs.isaacsim.omniverse.nvidia.com/5.0.0/installation/requirements.html)
 - [Isaac Sim 5.0 Replicator snippets](https://docs.isaacsim.omniverse.nvidia.com/5.0.0/replicator_tutorials/tutorial_replicator_isaac_snippets.html)
+- [USDRT：USD、Fabric 与 GPU 数据](https://docs.omniverse.nvidia.com/kit/docs/usdrt.scenegraph/7.6.1/usd_fabric_usdrt.html)
+- [USDRT Fabric mesh deformation 示例](https://docs.omniverse.nvidia.com/kit/docs/usdrt.scenegraph/7.6.1/whatsinfabric.html)
 - [Omniverse UsdPreviewSurface 材质](https://docs.omniverse.nvidia.com/materials-and-rendering/latest/templates/UsdPreviewSurface.html)
 - [OpenUSD Exchange SDK 材质 API](https://docs.omniverse.nvidia.com/usd/code-docs/usd-exchange-sdk/latest/api/group__materials.html)
 - [Isaac Teleop 官方文档](https://nvidia.github.io/IsaacTeleop/)

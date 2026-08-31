@@ -74,6 +74,7 @@ def test_review_incrementally_renders_id_addressed_trajectory_videos(
                 control_fps=50.0,
                 action_count=value["action_count"],
                 scene=SimpleNamespace(robot_id="piper"),
+                metadata=value.get("metadata", {}),
             )
 
         @staticmethod
@@ -85,7 +86,10 @@ def test_review_incrementally_renders_id_addressed_trajectory_videos(
         height = 48
 
         def __init__(self, *_args, **_kwargs) -> None:
-            pass
+            self.surface_winding_reversed = False
+
+        def set_cloth_surface_winding_reversed(self, reversed_: bool) -> None:
+            self.surface_winding_reversed = reversed_
 
         @staticmethod
         def __call__(_runtime):
@@ -98,9 +102,13 @@ def test_review_incrementally_renders_id_addressed_trajectory_videos(
         def close(self) -> None:
             pass
 
+    built = []
     add_trajectory("teleop_a")
     monkeypatch.setattr("clothdojo.trajectory.TrajectoryReader", Reader)
-    monkeypatch.setattr("clothdojo.sim.scene.build_scene", lambda *_a, **_kw: object())
+    monkeypatch.setattr(
+        "clothdojo.sim.scene.build_scene",
+        lambda *_a, **kwargs: built.append(kwargs) or object(),
+    )
     monkeypatch.setattr("clothdojo.rollout.render.ShirtFlattenCameraObservation", Camera)
     monkeypatch.setattr("clothdojo.data.rollout._TrajectoryRenderState", lambda _scene: object())
     monkeypatch.setattr("clothdojo.data.rollout._restore_render_state", lambda *_a: None)
@@ -110,10 +118,17 @@ def test_review_incrementally_renders_id_addressed_trajectory_videos(
     first = render_review(tmp_path)
     second = render_review(tmp_path)
     add_trajectory("teleop_b")
-    third = render_review(tmp_path)
+    third = render_review(tmp_path, trajectory_ids=("teleop_b",))
+    fourth = render_review(tmp_path)
 
     assert (tmp_path / "review/videos/cam_high/teleop_a.mp4").is_file()
     assert (tmp_path / "review/videos/cam_high/teleop_b.mp4").is_file()
     assert (first["rendered"], first["reused"]) == (1, 0)
     assert (second["rendered"], second["reused"]) == (0, 1)
-    assert (third["rendered"], third["reused"]) == (1, 1)
+    assert (third["rendered"], third["reused"]) == (1, 0)
+    assert third["episodes"] == 2
+    assert (fourth["rendered"], fourth["reused"]) == (0, 2)
+    assert {item["robot_id"] for item in built} == {"piper"}
+
+    with pytest.raises(ValueError, match="unknown review trajectory ids"):
+        render_review(tmp_path, trajectory_ids=("missing",))

@@ -14,6 +14,8 @@ import torch.multiprocessing as multiprocessing
 from rlinf.utils.utils import seed_everything
 from rlinf.workers.sft.fsdp_steam_sft_worker import FSDPSteamSftWorker
 
+from clothdojo.training.worker_environment import apply_worker_environment
+
 
 def prepare_steam_driver_runtime() -> None:
     """Publish the runtime selected by the validated TorchCodec gate."""
@@ -48,7 +50,11 @@ class ClothDojoSteamSftWorker(FSDPSteamSftWorker):
     """Add deterministic decoding, state, full-model, and FP32-master gates."""
 
     def __init__(self, cfg: Any):
+        apply_worker_environment(cfg)
         prepare_steam_driver_runtime()
+        from clothdojo.training.rlinf_steam_state import enable_state_aware_steam
+
+        enable_state_aware_steam()
         multiprocessing.set_forkserver_preload(
             ["torch", "numpy", "clothdojo.training.steam_dataloader"]
         )
@@ -65,6 +71,7 @@ class ClothDojoSteamSftWorker(FSDPSteamSftWorker):
             raise RuntimeError("STEAM requires one direct PairDataset with a seedable RNG")
         rank_seed = _run_seed() + int(self._rank) * 1_000
         dataset._rng = np.random.default_rng(rank_seed)
+        dataset.state_keys = list(self.cfg.actor.model.get("state_keys", ["observation.state"]))
         sampler = data_loader._data_loader.sampler
         if isinstance(sampler, torch.utils.data.DistributedSampler):
             sampler.seed = _run_seed()
@@ -100,9 +107,7 @@ class ClothDojoSteamSftWorker(FSDPSteamSftWorker):
         if frozen:
             raise RuntimeError(f"STEAM state branch is frozen on rank {self._rank}: {frozen}")
         self._prewrap_state_parameters = state_parameters
-        self._prewrap_state_elements = sum(
-            parameter.numel() for _, parameter in state_parameters
-        )
+        self._prewrap_state_elements = sum(parameter.numel() for _, parameter in state_parameters)
         if self._prewrap_state_elements == 0:
             raise RuntimeError(f"STEAM state branch is empty on rank {self._rank}")
         return module
@@ -149,8 +154,7 @@ class ClothDojoSteamSftWorker(FSDPSteamSftWorker):
         for key in ("trainable_master_fp32_fraction", "optimizer_state_fp32_fraction"):
             if float(audit[key]) < 0.999999:
                 raise RuntimeError(
-                    f"STEAM FP32-master gate failed on rank {self._rank}: "
-                    f"{key}={audit[key]}"
+                    f"STEAM FP32-master gate failed on rank {self._rank}: {key}={audit[key]}"
                 )
             metrics[f"diagnostic/{key}"] = float(audit[key])
         self._write_runtime_audit(audit)
@@ -166,9 +170,7 @@ class ClothDojoSteamSftWorker(FSDPSteamSftWorker):
         root.mkdir(parents=True, exist_ok=True)
         path = root / f"rank{int(self._rank):03d}.json"
         temporary = path.with_suffix(".json.tmp")
-        temporary.write_text(
-            json.dumps(audit, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+        temporary.write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         temporary.replace(path)
 
     def _dtype_audit(self) -> dict[str, Any]:
@@ -184,9 +186,7 @@ class ClothDojoSteamSftWorker(FSDPSteamSftWorker):
             raise RuntimeError(f"STEAM full-model gate found frozen weights: {frozen}")
 
         optimizer_parameter_ids = {
-            id(parameter)
-            for group in self.optimizer.param_groups
-            for parameter in group["params"]
+            id(parameter) for group in self.optimizer.param_groups for parameter in group["params"]
         }
         state_names = [name for name, _ in self._prewrap_state_parameters]
         optimizer_state_names = [
@@ -214,6 +214,15 @@ class ClothDojoSteamSftWorker(FSDPSteamSftWorker):
             "rank": int(self._rank),
             "world_size": int(self._world_size),
             "hostname": os.uname().nodename,
+            "communication": {
+                name: os.environ.get(name)
+                for name in (
+                    "NCCL_SOCKET_IFNAME",
+                    "GLOO_SOCKET_IFNAME",
+                    "NCCL_IB_HCA",
+                    "NCCL_IB_GID_INDEX",
+                )
+            },
             "configured_master_precision": str(self.cfg.actor.model.precision),
             "configured_compute_param_dtype": str(
                 self.cfg.actor.fsdp_config.mixed_precision.param_dtype
@@ -224,10 +233,8 @@ class ClothDojoSteamSftWorker(FSDPSteamSftWorker):
             "state_branch_optimizer_parameter_names": optimizer_state_names,
             "state_branch_prewrap_elements": self._prewrap_state_elements,
             "optimizer_state_elements": optimizer,
-            "trainable_master_fp32_fraction": trainable.get("torch.float32", 0)
-            / trainable_total,
-            "optimizer_state_fp32_fraction": optimizer.get("torch.float32", 0)
-            / optimizer_total,
+            "trainable_master_fp32_fraction": trainable.get("torch.float32", 0) / trainable_total,
+            "optimizer_state_fp32_fraction": optimizer.get("torch.float32", 0) / optimizer_total,
         }
 
 

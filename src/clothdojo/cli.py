@@ -148,6 +148,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             args.checkpoint,
             args.norm_stats,
             num_steps=args.num_steps,
+            image_preprocessing=args.image_preprocessing,
             rtc_guidance_horizon=args.rtc_guidance_horizon,
             rtc_max_guidance_weight=args.rtc_max_guidance_weight,
             rtc_prefix_schedule=args.rtc_prefix_schedule,
@@ -166,6 +167,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             args.norm_stats,
             args.training_config,
             num_steps=args.num_steps,
+            image_preprocessing=args.image_preprocessing,
             host=args.host,
             port=args.port,
         )
@@ -194,6 +196,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             args.checkpoint,
             args.norm_stats,
             num_steps=args.num_steps,
+            image_preprocessing=args.image_preprocessing,
             guidance_scale=args.guidance_scale,
             guidance_type=args.guidance_type,
             positive_only_conditional=args.positive_only_conditional,
@@ -212,6 +215,22 @@ def main(argv: Sequence[str] | None = None) -> None:
         from clothdojo.data.isaac_render import prepare_isaac_assets
 
         result = prepare_isaac_assets(args.output, include_room=args.include_room)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return
+    if args.command == "data" and args.data_command == "augment-mirror":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.data.mirror import augment_mirror
+
+        result = augment_mirror(args.source, args.output)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return
+    if args.command == "data" and args.data_command == "merge-lerobot-shards":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.data.lerobot import merge_lerobot_shards
+
+        result = merge_lerobot_shards(args.shard, args.output)
         print(json.dumps(result, indent=2, sort_keys=True))
         return
     if args.command == "data" and args.data_command == "retarget":
@@ -238,6 +257,12 @@ def main(argv: Sequence[str] | None = None) -> None:
             parser.error("--include-room requires --isaac-seed")
         if args.randomize is not None and args.isaac_seed is None:
             parser.error("--randomize requires --isaac-seed")
+        if args.isaac_seed is not None and args.cloth_visual != "nocs":
+            parser.error("--cloth-visual is only supported by Newton export")
+        if (args.shard_index is None) != (args.shard_count is None):
+            parser.error("--shard-index and --shard-count must be provided together")
+        if args.shard_count is not None and args.isaac_seed is not None:
+            parser.error("trajectory sharding is only supported by the Newton exporter")
         source_root = Path(args.source).expanduser()
         source_manifest = source_root / "meta.json"
         if not source_manifest.is_file():
@@ -277,7 +302,12 @@ def main(argv: Sequence[str] | None = None) -> None:
                 else:
                     from clothdojo.data.rollout import inspect_rollout_collection_export
 
-                    result = inspect_rollout_collection_export(args.source)
+                    result = inspect_rollout_collection_export(
+                        args.source,
+                        shard_index=args.shard_index,
+                        shard_count=args.shard_count,
+                        cloth_visual=args.cloth_visual,
+                    )
                 print(json.dumps(result, indent=2, sort_keys=True))
                 return
             output = args.output or str(source_root / "lerobot")
@@ -313,6 +343,9 @@ def main(argv: Sequence[str] | None = None) -> None:
                     device=args.device,
                     repo_id=args.repo_id,
                     image_writer_threads=args.image_writer_threads,
+                    shard_index=args.shard_index,
+                    shard_count=args.shard_count,
+                    cloth_visual=args.cloth_visual,
                 )
             print(json.dumps(result, indent=2, sort_keys=True))
             return
@@ -328,6 +361,9 @@ def main(argv: Sequence[str] | None = None) -> None:
                 args.source,
                 min_segment_frames=args.min_segment_frames,
                 whole_trajectory_good_only=args.whole_trajectory_good_only,
+                shard_index=args.shard_index,
+                shard_count=args.shard_count,
+                cloth_visual=args.cloth_visual,
             )
             print(json.dumps(result, indent=2, sort_keys=True))
             return
@@ -341,6 +377,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             image_writer_threads=args.image_writer_threads,
             min_segment_frames=args.min_segment_frames,
             whole_trajectory_good_only=args.whole_trajectory_good_only,
+            shard_index=args.shard_index,
+            shard_count=args.shard_count,
+            cloth_visual=args.cloth_visual,
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return
@@ -349,12 +388,14 @@ def main(argv: Sequence[str] | None = None) -> None:
             parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
         from clothdojo.data.rollout_review import render_review
 
-        result = render_review(
-            args.source,
-            assets_root=args.assets,
-            device=args.device,
-            fps=args.fps,
-        )
+        review_options = {
+            "assets_root": args.assets,
+            "device": args.device,
+            "fps": args.fps,
+        }
+        if args.trajectory is not None:
+            review_options["trajectory_ids"] = args.trajectory
+        result = render_review(args.source, **review_options)
         print(json.dumps(result, indent=2, sort_keys=True))
         return
     if args.command == "data" and args.data_command == "compute-norm-stats":
@@ -405,17 +446,15 @@ def main(argv: Sequence[str] | None = None) -> None:
             _comma_separated(args.policy, "policy"),
             args.output,
             condition_id=args.condition_id,
+            cloth_visual=args.cloth_visual,
+            image_preprocessing=args.image_preprocessing,
             expected_checkpoint_sha256=args.expected_checkpoint_sha256,
             assets_root=args.assets,
             gpus=_comma_separated(args.gpus, "gpus"),
-            limit_per_asset=args.limit_per_asset,
-            seen_assets=args.seen_assets,
-            unseen_assets=args.unseen_assets,
             execution=args.execution,
             exec_horizon=args.exec_horizon,
             rtc_delay_steps=args.rtc_delay_steps,
             batch_size=args.batch_size,
-            replicates=args.replicates,
             defer_scoring=args.defer_scoring,
             score_workers=args.score_workers,
         )
@@ -438,9 +477,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.command == "benchmark" and args.benchmark_command == "summarize":
         if passthrough:
             parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
-        from clothdojo.evaluation.results import summarize_paired_conditions
+        from clothdojo.evaluation.results import (
+            summarize_paired_conditions,
+            validate_formal_evaluation_summary,
+        )
 
-        result = summarize_paired_conditions(args.condition)
+        result = summarize_paired_conditions(args.condition, require_formal=True)
+        validate_formal_evaluation_summary(result)
         print(json.dumps(result, indent=2, sort_keys=True))
         return
     if args.command == "benchmark" and args.benchmark_command == "score":
@@ -453,6 +496,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             args.protocol,
             args.templates,
             workers=args.workers,
+            require_formal=True,
+            rescore_from=args.rescore_from,
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return
@@ -686,6 +731,9 @@ def _parser() -> argparse.ArgumentParser:
     serve_sft.add_argument("--checkpoint", required=True)
     serve_sft.add_argument("--norm-stats", required=True)
     serve_sft.add_argument("--num-steps", type=int, default=10)
+    serve_sft.add_argument(
+        "--image-preprocessing", choices=("none", "training_fixed_crop"), default="none"
+    )
     serve_sft.add_argument("--rtc-guidance-horizon", type=int, default=10)
     serve_sft.add_argument("--rtc-max-guidance-weight", type=float, default=10.0)
     serve_sft.add_argument(
@@ -704,6 +752,7 @@ def _parser() -> argparse.ArgumentParser:
     serve_jax.add_argument("--norm-stats", required=True)
     serve_jax.add_argument("--training-config", required=True)
     serve_jax.add_argument("--num-steps", type=int, default=10)
+    serve_jax.add_argument("--image-preprocessing", choices=("none",), default="none")
     serve_jax.add_argument("--host", default="127.0.0.1")
     serve_jax.add_argument("--port", type=int, default=8080)
     serve_cfg = policy_commands.add_parser(
@@ -713,6 +762,9 @@ def _parser() -> argparse.ArgumentParser:
     serve_cfg.add_argument("--checkpoint", required=True)
     serve_cfg.add_argument("--norm-stats", required=True)
     serve_cfg.add_argument("--num-steps", type=int, default=5)
+    serve_cfg.add_argument(
+        "--image-preprocessing", choices=("none", "training_fixed_crop"), default="none"
+    )
     serve_cfg.add_argument("--guidance-scale", type=float, default=1.0)
     serve_cfg.add_argument(
         "--guidance-type",
@@ -763,11 +815,15 @@ def _parser() -> argparse.ArgumentParser:
         help="one endpoint or a comma-separated endpoint pool",
     )
     benchmark_run.add_argument("--expected-checkpoint-sha256")
+    benchmark_run.add_argument("--cloth-visual", choices=("nocs", "white"), default="nocs")
+    benchmark_run.add_argument(
+        "--image-preprocessing", choices=("none", "training_fixed_crop"), default="none",
+        help="required policy-server image preprocessing (recorded in condition identity)",
+    )
     benchmark_run.add_argument("--output", required=True)
     benchmark_run.add_argument("--assets", default="assets")
     benchmark_run.add_argument("--gpus", default="0")
     benchmark_run.add_argument("--batch-size", type=int, default=4)
-    benchmark_run.add_argument("--replicates", type=int, default=1)
     benchmark_run.add_argument(
         "--defer-scoring",
         action="store_true",
@@ -779,12 +835,7 @@ def _parser() -> argparse.ArgumentParser:
         default=1,
         help="offline scoring processes when scoring is not deferred (default: 1)",
     )
-    benchmark_run.add_argument("--limit-per-asset", type=int)
-    benchmark_run.add_argument("--seen-assets", type=int)
-    benchmark_run.add_argument("--unseen-assets", type=int)
-    benchmark_run.add_argument(
-        "--execution", choices=("chunk", "rtc"), default="chunk"
-    )
+    benchmark_run.add_argument("--execution", choices=("chunk", "rtc"), default="chunk")
     benchmark_run.add_argument("--exec-horizon", type=int, default=10)
     benchmark_run.add_argument("--rtc-delay-steps", type=int, default=0)
     benchmark_summary = benchmark_commands.add_parser(
@@ -803,13 +854,15 @@ def _parser() -> argparse.ArgumentParser:
     benchmark_score.add_argument("--protocol", required=True)
     benchmark_score.add_argument("--templates", required=True)
     benchmark_score.add_argument(
+        "--rescore-from",
+        help="original collection protocol YAML; explicitly allow metric/success changes only",
+    )
+    benchmark_score.add_argument(
         "--workers", type=int, default=1, help="offline scoring processes (default: 1)"
     )
 
     train = commands.add_parser("train", help="run a guarded ClothDojo training workflow")
-    train.add_argument(
-        "training_kind", choices=("openpi-jax", "openpi-rlinf", "steam", "cfg")
-    )
+    train.add_argument("training_kind", choices=("openpi-jax", "openpi-rlinf", "steam", "cfg"))
     train.add_argument("--config", required=True, help="path to the root Hydra YAML config")
     train.add_argument(
         "--check",
@@ -856,10 +909,32 @@ def _parser() -> argparse.ArgumentParser:
         "export-lerobot",
         help="replay selected trajectories as standard LeRobot v2.1",
     )
+    merge_shards = data_commands.add_parser(
+        "merge-lerobot-shards",
+        help="merge disjoint trajectory exports without re-encoding video",
+    )
+    merge_shards.add_argument("--shard", action="append", required=True)
+    merge_shards.add_argument("--output", required=True)
     export.add_argument("--source", required=True, help="source dataset root")
     export.add_argument("--output", help="new LeRobot dataset directory")
     export.add_argument("--assets", default="assets", help="assets used to replay states")
     export.add_argument("--device", default="cuda:0", help="render device for state replay")
+    export.add_argument(
+        "--cloth-visual",
+        choices=("nocs", "white"),
+        default="nocs",
+        help="garment appearance for paired Newton replay (default: nocs)",
+    )
+    export.add_argument(
+        "--shard-index",
+        type=int,
+        help="zero-based canonical trajectory shard assigned to this process",
+    )
+    export.add_argument(
+        "--shard-count",
+        type=int,
+        help="number of disjoint canonical trajectory shards",
+    )
     export.add_argument(
         "--isaac-seed",
         type=int,
@@ -923,6 +998,12 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="also download the optional room assets",
     )
+    mirror = data_commands.add_parser(
+        "augment-mirror",
+        help="copy a canonical Piper collection and add bilateral mirror trajectories",
+    )
+    mirror.add_argument("--source", required=True, help="canonical Piper collection root")
+    mirror.add_argument("--output", required=True, help="new independent collection root")
     retarget = data_commands.add_parser(
         "retarget",
         help="retarget Piper trajectories to another robot",
@@ -963,6 +1044,11 @@ def _parser() -> argparse.ArgumentParser:
     review.add_argument("--source", required=True, help="collection or rollout root")
     review.add_argument("--assets", default="assets", help="assets used for replay")
     review.add_argument("--device", default="cuda:0", help="Newton render device")
+    review.add_argument(
+        "--trajectory",
+        action="append",
+        help="render only this trajectory ID; repeat to select multiple trajectories",
+    )
     review.add_argument(
         "--fps",
         type=int,

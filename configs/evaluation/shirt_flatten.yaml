@@ -17,14 +17,16 @@ metric:
   # flips, layering and incorrect 3-D shape. There is intentionally no separate
   # tabletop/workspace containment gate.
   deformable_weight: 0.65
-  symmetry: planar_180
+  # Accept 0/90/180/270 degrees around table z, not arbitrary yaw or flipping.
+  symmetry: planar_90
 
 success:
-  # Asset-equal one-sided 3-MAD fences over 690 compatible expert terminals
-  # from 135 assets. Both distances use the canonical planar scale; the rigid
+  # Asset-equal one-sided 3-MAD fences over 890 unique expert terminals
+  # from 182 assets (non-mirrored originals, not 919 training segments).
+  # Both distances use the canonical planar scale; the rigid
   # term is translation-invariant and therefore measures orientation only.
-  deformable_distance_max: 0.093
-  rigid_distance_max: 0.056
+  deformable_distance_max: 0.08880040530115366
+  rigid_distance_max: 0.04309516889741644
 
 target:
   method: default_free_settle

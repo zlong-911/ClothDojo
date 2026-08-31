@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import os
@@ -9,7 +10,9 @@ import threading
 import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from functools import wraps
 from pathlib import Path
+from types import MethodType
 from typing import Any
 
 import numpy as np
@@ -28,17 +31,70 @@ from clothdojo.rollout.checkpoint import (
 from clothdojo.rollout.engine import ExecutionMode
 from clothdojo.rollout.guided_rtc import (
     GuidedRTCConfig,
-    sample_guided_cfg_actions,
+    sample_guided_cfg_openpi_rlinf_actions,
     sample_guided_openpi_rlinf_actions,
 )
 from clothdojo.rollout.newton import POLICY_ACTION_DIM
 
 POLICY_PROTOCOL_VERSION = 2
+IMAGE_PREPROCESSING_POLICIES = ("none", "training_fixed_crop")
 RTC_GUIDANCE = GuidedRTCConfig()
 DELTA_ACTION_MASK = np.asarray(
     [True] * 6 + [False] + [True] * 6 + [False],
     dtype=bool,
 )
+
+
+def _validate_image_preprocessing(value: Any) -> None:
+    if value not in IMAGE_PREPROCESSING_POLICIES:
+        raise ValueError(
+            f"image_preprocessing must be one of {IMAGE_PREPROCESSING_POLICIES}, got {value!r}"
+        )
+
+
+def _preprocess_inference_images(observation: Any, image_preprocessing: str) -> Any:
+    """Replay historical FSDP BF16 image preprocessing without changing model mode."""
+
+    _validate_image_preprocessing(image_preprocessing)
+    if image_preprocessing == "none":
+        return observation
+
+    import torch
+    from rlinf.models.embodiment.openpi_rlinf.pi0_model import model as model_module
+
+    if any(image.device.type != "cuda" for image in observation.images.values()):
+        raise ValueError("training_fixed_crop requires CUDA to reproduce BF16 image operations")
+    # FSDP cast_root_forward_inputs rounds images before augmentation. Reuse
+    # the pinned pure preprocessing function, including rotate(0) and the wrist
+    # range round-trip: both matter at BF16 precision. rng=None is deterministic;
+    # this does not enable model training, dropout, or random augmentation.
+    prepared = dataclasses.replace(
+        observation,
+        images={key: image.to(torch.bfloat16) for key, image in observation.images.items()},
+    )
+    return model_module.preprocess_observation(prepared, train=True, rng=None)
+
+
+def _install_inference_image_preprocessing(model: Any, image_preprocessing: str) -> None:
+    """Wrap the single observation boundary shared by SFT, CFG and guided RTC."""
+
+    _validate_image_preprocessing(image_preprocessing)
+    method = model._observation_dict_to_device
+    installed = getattr(method, "_clothdojo_image_preprocessing", None)
+    if installed is not None:
+        if installed != image_preprocessing:
+            raise ValueError("inference image preprocessing is already installed differently")
+        return
+    if image_preprocessing == "none":
+        return
+    original = method.__func__
+
+    @wraps(original)
+    def prepare(instance: Any, processed: dict[str, Any]) -> Any:
+        return _preprocess_inference_images(original(instance, processed), image_preprocessing)
+
+    prepare._clothdojo_image_preprocessing = image_preprocessing
+    model._observation_dict_to_device = MethodType(prepare, model)
 
 
 class RemotePolicy:
@@ -49,6 +105,7 @@ class RemotePolicy:
         endpoint: str,
         *,
         expected_checkpoint_sha256: str | None = None,
+        expected_image_preprocessing: str = "none",
         action_horizon: int,
         client_factory: Callable[..., Any] | None = None,
     ) -> None:
@@ -58,17 +115,18 @@ class RemotePolicy:
             _require_sha256(expected_checkpoint_sha256, "expected checkpoint")
         if action_horizon < 1:
             raise ValueError("action_horizon must be positive")
+        _validate_image_preprocessing(expected_image_preprocessing)
         _bypass_proxy_for_loopback(endpoint)
         if client_factory is None:
-            from openpi_client.websocket_client_policy import WebsocketClientPolicy
-
-            client_factory = WebsocketClientPolicy
-        self._client = client_factory(host=endpoint)
+            self._client = _connect_remote_policy(endpoint)
+        else:
+            self._client = client_factory(host=endpoint)
         metadata = self._client.get_server_metadata()
         self.identity = _validate_server_metadata(
             metadata,
             expected_checkpoint_sha256=expected_checkpoint_sha256,
             action_horizon=action_horizon,
+            expected_image_preprocessing=expected_image_preprocessing,
         )
         self._pending_seed: int | None = None
         self._session_id = uuid.uuid4().hex
@@ -76,7 +134,6 @@ class RemotePolicy:
         self._exec_horizon: int | None = None
         self._previous_model_actions: np.ndarray | None = None
         self._previous_model_state: np.ndarray | None = None
-
     def reset(
         self,
         seed: int,
@@ -177,6 +234,33 @@ class RemotePolicy:
         return actions
 
 
+def _connect_remote_policy(endpoint: str) -> Any:
+    """Connect without treating a long synchronous inference as a dead peer."""
+
+    import websockets.sync.client
+    from openpi_client import msgpack_numpy
+    from openpi_client.websocket_client_policy import WebsocketClientPolicy
+
+    class _LongInferenceClient(WebsocketClientPolicy):
+        def _wait_for_server(self) -> tuple[Any, dict[str, Any]]:
+            headers = (
+                {"Authorization": f"Api-Key {self._api_key}"}
+                if self._api_key
+                else None
+            )
+            connection = websockets.sync.client.connect(
+                self._uri,
+                compression=None,
+                max_size=None,
+                additional_headers=headers,
+                ping_timeout=None,
+            )
+            metadata = msgpack_numpy.unpackb(connection.recv())
+            return connection, metadata
+
+    return _LongInferenceClient(host=endpoint)
+
+
 class _RLinfSFTPolicy:
     """RLinf's current ``openpi_rlinf`` model behind the NumPy boundary."""
 
@@ -192,6 +276,7 @@ class _RLinfSFTPolicy:
         device: str,
         rtc_guidance: GuidedRTCConfig,
         expected_checkpoint_sha256: str,
+        image_preprocessing: str = "none",
     ) -> None:
         import torch
         from omegaconf import OmegaConf
@@ -224,6 +309,7 @@ class _RLinfSFTPolicy:
                 "openpi_data": {
                     "adapt_to_pi": False,
                     "extra_delta_transform": True,
+                    "default_prompt": "flatten the shirt",
                     "norm_stats_path": str(norm_stats),
                 },
             }
@@ -237,6 +323,7 @@ class _RLinfSFTPolicy:
         if autocast:
             raise ValueError("openpi_rlinf uses native BF16; autocast is not a mode")
         self.model = model.to(self.device).eval().requires_grad_(False)
+        _install_inference_image_preprocessing(self.model, image_preprocessing)
         self.autocast = False
         self.rtc_guidance = rtc_guidance
         self.num_steps = int(num_steps)
@@ -389,6 +476,7 @@ class _RLinfCFGPolicy(_RLinfSFTPolicy):
         guidance_type: str,
         positive_only_conditional: bool,
         expected_checkpoint_sha256: str,
+        image_preprocessing: str = "none",
     ) -> None:
         import torch
         from omegaconf import OmegaConf
@@ -405,27 +493,38 @@ class _RLinfCFGPolicy(_RLinfSFTPolicy):
                 "model_path": str(checkpoint),
                 "model_type": MODEL_TYPE,
                 "expected_weights_sha256": expected_checkpoint_sha256,
+                "pi05": True,
+                "use_proprio": True,
+                "num_steps": num_steps,
                 "is_lora": False,
+                "lora_rank": 32,
                 "load_to_device": False,
                 "num_action_chunks": action_horizon,
                 "action_dim": POLICY_ACTION_DIM,
                 "add_value_head": False,
                 "openpi": {
+                    "task": "cfg",
                     "config_name": openpi_config,
                     "num_images_in_input": len(CAMERA_NAMES),
                     "action_chunk": action_horizon,
                     "action_env_dim": POLICY_ACTION_DIM,
                     "num_steps": num_steps,
+                    "model_action_dim": 32,
+                    "paligemma_variant": "gemma_2b",
+                    "action_expert_variant": "gemma_300m",
+                    "discrete_state_input": True,
+                    "max_token_len": 200,
+                    "use_rlt": False,
                     "cfgrl_guidance_scale": guidance_scale,
                     "unconditional_prob": 0.1,
-                    "train_expert_only": True,
+                    "train_expert_only": False,
                     "guidance_type": guidance_type,
                     "positive_only_conditional": positive_only_conditional,
                 },
                 "openpi_data": {
                     "adapt_to_pi": False,
                     "extra_delta_transform": True,
-                    "default_prompt": "Flatten the shirt.",
+                    "default_prompt": "flatten the shirt",
                     "norm_stats_path": str(norm_stats),
                 },
             }
@@ -443,8 +542,10 @@ class _RLinfCFGPolicy(_RLinfSFTPolicy):
             raise RuntimeError("CFG checkpoint changed while the model was loading")
         self.device = torch.device(device)
         self.model = model.to(self.device).eval().requires_grad_(False)
+        _install_inference_image_preprocessing(self.model, image_preprocessing)
         self.autocast = bool(autocast)
         self.rtc_guidance = rtc_guidance
+        self.num_steps = int(num_steps)
         self._delta_action_scale = _load_action_quantile_scale(norm_stats)
         self.checkpoint_validation = strict_reload
 
@@ -455,26 +556,21 @@ class _RLinfCFGPolicy(_RLinfSFTPolicy):
         *,
         inference_delay_steps: int,
     ) -> tuple[Any, Any]:
-        from rlinf.models.embodiment.openpi_cfg.openpi_cfg_action_model import (
-            Observation,
+        unconditional, conditional = self.model.prepare_cfg_observations(
+            env_observation
         )
-
-        processed = self.model.precision_processor(
-            self.model.input_transform(
-                self.model.obs_processor(env_observation),
-                transpose=False,
-            )
-        )
-        observation = Observation.from_dict(processed)
-        model_actions = sample_guided_cfg_actions(
-            self.model,
-            observation,
+        model_actions = sample_guided_cfg_openpi_rlinf_actions(
+            self.model.model,
+            unconditional,
+            conditional,
             previous_actions,
             inference_delay=inference_delay_steps,
+            num_steps=self.num_steps,
+            guidance_scale=self.model.routing.guidance_scale,
             config=self.rtc_guidance,
         )
         actions = self.model.output_transform(
-            {"actions": model_actions, "state": observation.state}
+            {"actions": model_actions, "state": unconditional.state}
         )["actions"]
         return actions, model_actions
 
@@ -654,6 +750,7 @@ def serve_sft_policy(
     openpi_config: str = "pi05_aloha_robotwin",
     action_horizon: int = 50,
     num_steps: int = 10,
+    image_preprocessing: str = "none",
     rtc_guidance_horizon: int = 10,
     rtc_max_guidance_weight: float = 10.0,
     rtc_prefix_schedule: str = "linear",
@@ -665,6 +762,7 @@ def serve_sft_policy(
 
     from openpi.serving.websocket_policy_server import WebsocketPolicyServer
 
+    _validate_image_preprocessing(image_preprocessing)
     checkpoint_path = Path(checkpoint).expanduser().resolve()
     norm_path = Path(norm_stats).expanduser().resolve()
     rtc_guidance = GuidedRTCConfig(
@@ -698,7 +796,7 @@ def serve_sft_policy(
         "backend": "rlinf-sft",
         "checkpoint_sha256": checkpoint_manifest["weights_sha256"],
         "checkpoint_validation": {
-            "strict_reload": True,
+            "exact_layout": True,
             **{
                 key: checkpoint_manifest[key]
                 for key in (
@@ -706,6 +804,7 @@ def serve_sft_policy(
                     "format_version",
                     "loader",
                     "weights_format",
+                    "state_dict_layout",
                     "tensor_count",
                     "dtype_counts",
                     "stored_dtype_contract",
@@ -723,6 +822,7 @@ def serve_sft_policy(
         "batched_inference": True,
         "num_steps": num_steps,
         "inference_precision": "native_bfloat16",
+        "image_preprocessing": image_preprocessing,
         "rtc_guidance": rtc_guidance.to_json_dict(),
     }
     policy = _RLinfSFTPolicy(
@@ -735,6 +835,7 @@ def serve_sft_policy(
         device=device,
         rtc_guidance=rtc_guidance,
         expected_checkpoint_sha256=checkpoint_manifest["weights_sha256"],
+        image_preprocessing=image_preprocessing,
     )
     print(json.dumps({"clothdojo": identity}, sort_keys=True), flush=True)
     WebsocketPolicyServer(
@@ -753,10 +854,15 @@ def serve_jax_policy(
     *,
     action_horizon: int = 50,
     num_steps: int = 10,
+    image_preprocessing: str = "none",
     host: str = "127.0.0.1",
     port: int = 8080,
 ) -> dict[str, Any]:
     """Serve the original OpenPI/JAX EMA as a chunk-only reference."""
+
+    _validate_image_preprocessing(image_preprocessing)
+    if image_preprocessing != "none":
+        raise ValueError("OpenPI/JAX only supports image_preprocessing='none'")
 
     from openpi.serving.websocket_policy_server import WebsocketPolicyServer
 
@@ -793,6 +899,7 @@ def serve_jax_policy(
         "batched_inference": True,
         "num_steps": num_steps,
         "inference_precision": "bfloat16",
+        "image_preprocessing": image_preprocessing,
         "rtc_guidance": None,
     }
     policy = _OpenPIJAXPolicy(
@@ -821,6 +928,7 @@ def serve_cfg_policy(
     openpi_config: str = "pi05_aloha_robotwin",
     action_horizon: int = 50,
     num_steps: int = 5,
+    image_preprocessing: str = "none",
     guidance_scale: float = 1.0,
     guidance_type: str = "positive",
     positive_only_conditional: bool = False,
@@ -836,6 +944,7 @@ def serve_cfg_policy(
 
     from openpi.serving.websocket_policy_server import WebsocketPolicyServer
 
+    _validate_image_preprocessing(image_preprocessing)
     checkpoint_path = Path(checkpoint).expanduser().resolve()
     norm_path = Path(norm_stats).expanduser().resolve()
     _validate_serve_arguments(
@@ -881,6 +990,7 @@ def serve_cfg_policy(
         device=device,
         rtc_guidance=rtc_guidance,
         expected_checkpoint_sha256=weights_sha256,
+        image_preprocessing=image_preprocessing,
     )
     identity = {
         "protocol_version": POLICY_PROTOCOL_VERSION,
@@ -900,6 +1010,7 @@ def serve_cfg_policy(
         "batched_inference": True,
         "num_steps": num_steps,
         "autocast": bool(autocast),
+        "image_preprocessing": image_preprocessing,
         "cfg_guidance": {
             "type": guidance_type,
             "scale": float(guidance_scale),
@@ -949,19 +1060,26 @@ def _validate_server_metadata(
     *,
     expected_checkpoint_sha256: str | None,
     action_horizon: int,
+    expected_image_preprocessing: str = "none",
 ) -> dict[str, Any]:
     if not isinstance(metadata, dict) or not isinstance(metadata.get("clothdojo"), dict):
         raise ValueError("policy server is missing ClothDojo metadata")
     identity = dict(metadata["clothdojo"])
+    # Servers predating this option had the deterministic no-crop eval path.
+    identity.setdefault("image_preprocessing", "none")
     backend = identity.get("backend")
     if backend not in {"rlinf-sft", "rlinf-cfg", "openpi"}:
         raise ValueError(f"unsupported policy server backend: {backend!r}")
+    _validate_image_preprocessing(identity.get("image_preprocessing"))
+    if backend == "openpi" and identity["image_preprocessing"] != "none":
+        raise ValueError("OpenPI/JAX only supports image_preprocessing='none'")
     expected = {
         "protocol_version": POLICY_PROTOCOL_VERSION,
         "action_dim": POLICY_ACTION_DIM,
         "action_horizon": action_horizon,
         "camera_names": list(CAMERA_NAMES),
         "transport_image_size": list(POLICY_TRANSPORT_SIZE),
+        "image_preprocessing": expected_image_preprocessing,
     }
     if expected_checkpoint_sha256 is not None:
         expected["checkpoint_sha256"] = expected_checkpoint_sha256

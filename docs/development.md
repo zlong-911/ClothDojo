@@ -4,17 +4,17 @@
 
 ## Python 环境
 
-项目使用 Python 3.11，Newton 仿真、训练和默认导出的依赖由根目录 `requirements.txt` 定义：
+项目使用 Python 3.11，只维护根目录 `requirements.txt` 和 `.venv`。完整环境通过统一入口创建：
 
 ```bash
-python3.11 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/pip install --no-deps -e .
+./scripts/setup-environment.sh
 ```
 
-不在仓库中增加第二套 venv、Conda 环境、安装期 patch 或生成式 lock 文件，除非用户针对具体问题另有决定。
+脚本先按 `requirements.txt` 安装 Newton、训练、数据和服务依赖，再向同一个环境添加固定版本的 Isaac Sim 5 RTX、Replicator 与离线 extension cache，最后安装 ClothDojo。Isaac 的包元数据精确固定了 `torch==2.7.0`、`fsspec==2024.6.1`、`scipy==1.15.3` 和 `numpy==1.26.0` 等版本，与项目主栈存在不可同时解析的约束；因此 Isaac binary distributions 必须在第二步以 `--no-deps` 安装，主栈版本仍由唯一的 `requirements.txt` 管理。pip 的 requirements 格式不能只对部分条目设置 `--no-deps`，所以不要用裸 `pip install -r requirements.txt` 代替统一脚本来构建完整环境。
 
-Isaac RTX 离线导出是明确的可选运行时。它仍使用 Python 3.11，在同一进程中直接读取 Newton trajectory state，通过 Fabric bridge 交给 Isaac Replicator；导出时不重建或推进物理场景。独立 venv 先安装 `requirements.txt`，再用 `pip install --no-deps -r requirements-isaac-render.txt` 添加最小 Kit 运行时。`--no-deps` 是必要边界：Isaac 的完整 Python 依赖集与训练栈存在精确版本冲突，而导出路径不使用那些上层工具包。这样不需要 Python 3.11/3.12 IPC，也不把 Isaac 包安装到普通训练节点。Isaac 6 的 Python 3.12 应用环境仍只服务现有 OpenXR 遥操作。
+不在仓库中增加第二套 venv、Conda 环境、requirements 文件、安装期 patch 或生成式 lock 文件，除非用户针对具体问题另有决定。
+
+Isaac RTX 离线导出在这个主环境内运行。它在同一进程中直接读取 Newton trajectory state，通过 Fabric bridge 交给 Isaac Replicator；导出时不重建或推进物理场景。安装的 extension cache 使 RTX 与 Replicator 扩展不依赖首次运行时再从 registry 下载。Isaac 6 的 Python 3.12 应用环境仍是现有 OpenXR 遥操作的外部应用运行时，不属于项目 `.venv`。
 
 离线 RTX 导出还要求具备 RT Core 且 Vulkan 可用的 RTX GPU。H100/A100 没有 RT Core，不满足 Isaac Sim 官方要求；这些节点继续用于 Newton、训练和策略推理，不作为 Isaac 离线渲染节点。
 
@@ -82,11 +82,52 @@ Ubuntu 的可执行文件名通常是 `fdfind`；如需 `fd`，可在用户自�
 | 仿真 | Newton、Warp、MuJoCo、MuJoCo Warp | 布料、机器人与 GPU 仿真 |
 | 场景 | OpenUSD、Newton USD Schemas | USD 资产读取 |
 | 训练 | PyTorch、JAX/OpenPI、RLINF | 模型训练与推理 |
-| 数据 | NumPy、PyArrow、LeRobot、PyAV | 数值、表格、轨迹和视频 |
+| 数据与网格 | NumPy、PyArrow、LeRobot、PyAV、Trimesh | 数值、表格、轨迹、视频和 MJCF visual mesh |
 | 服务 | FastAPI、Uvicorn | 本地控制与服务入口 |
 | 配置 | PyYAML、Hydra、OmegaConf | 项目与上游配置 |
 
-默认环境的精确版本和安装来源看 `requirements.txt`；可选 Isaac 渲染额外看 `requirements-isaac-render.txt`。第三方行为以固定版本的官方文档与源码为准，入口集中在 [`reference_index.md`](reference_index.md)。
+共享 Python 依赖的精确版本和安装来源看 `requirements.txt`；Isaac binary distributions 的固定版本和特殊安装边界看 `scripts/setup-environment.sh`。第三方行为以固定版本的官方文档与源码为准，入口集中在 [`reference_index.md`](reference_index.md)。
+
+## Rollout 部署
+
+`benchmark run --cloth-visual white` 使用与 white 训练数据相同的纯白布料外观；默认仍为 `nocs`。外观同时写入 condition 与 trajectory 身份，续跑拒绝混用，不改变固定初态、物理或评分。
+
+chunk 在每个 worker 内依次执行观测、推理和仿真，不重叠计算。显存足够时，优先将该 worker 的专属策略服务与仿真绑定到同一张 GPU；`CUDA_VISIBLE_DEVICES` 控制策略服务，`benchmark run --gpus` 控制仿真。仍需每个 worker 一个独立 endpoint，不能为省卡共享策略随机数状态。RTC 的异步执行应另行测量，不能直接沿用 chunk 的部署结论。
+
+同一 `benchmark run --output` 自动校验配置并补跑缺失轨迹；迁移时先确认旧 collector 及其 worker 全部退出，再启动新 collector。保持 batch size、初态、policy seed 和模型身份不变，GPU 数量与主机位置可以调整。隐藏的 `.tmp` 轨迹尚未发布，不计入完成数。
+
+## OpenPI_RLinf 训练边界
+
+SFT（OpenPI/JAX 与 OpenPI_RLinf）不续训。中断后使用新的输出目录，从配置的初始权重和
+第 0 步重新训练，不覆盖旧产物。OpenPI_RLinf 的 `runner.resume_dir` 必须缺省或为 `null`，
+`CLOTHDOJO_TRAIN_OUTPUT` 必须指向尚不存在的目录；JAX 重训使用新的 `logging.run_name`。
+checkpoint 继续保留 EMA 推理权重及 online/optimizer 状态用于分析，不提供 SFT 恢复入口。
+此约定不改变下述 CFG 的恢复能力。
+
+新 OpenPI_RLinf SFT/CFG 默认文本为 `flatten the shirt`，数据入口在 tokenize 前应用 `actor.model.openpi_data.default_prompt`，覆盖旧数据中的大小写/句号，不修改数据集文件。launch manifest 的 `training_prompt` 记录实际训练文本，dataset 的 `prompt` 保留数据原文。state/action norm stats 与文本无关，可复用；其余归一化契约仍严格校验。JAX 配方和历史实验记录不变，新默认不再自动绑定旧 JAX 输入对齐实验。
+
+SFT/CFG 默认不做图像随机增强，也绕过上游 `train=True, rng=None` 的错误固定左上裁剪；flow noise/time、数据 shuffle 和模型训练模式不变。SFT 的 `clothdojo.image_augmentation` 缺省为 `false`，显式设为 `true` 才复用固定版 RLinf 的随机裁剪、旋转和颜色扰动，使用已播种、可保存的 CPU RNG。修正只作用于模型实例，不修改安装包或 checkpoint 布局。新模型部署使用相同文本与 `--image-preprocessing none`；模型数值精度及 resize 逻辑不变。
+
+对确认使用上游 `train=True, rng=None` 训练的历史原生 RLinf 权重，`policy serve-sft` / `serve-cfg`
+与 `benchmark run` 两端均显式传 `--image-preprocessing training_fixed_crop`，在 CUDA 上先将图像
+转为训练 FSDP 使用的 BF16，再复用固定版上游 `preprocess_observation(train=True, rng=None)`。
+它包含主相机左上 212×212 裁剪、resize、零角度旋转及所有相机的数值范围往返；wrist 不做几何裁剪，
+但保留 BF16 舍入。chunk/RTC/CFG 共用一次预处理，模型保持 eval，不启用随机增强。
+此前 `legacy_fixed_crop` 的 FP32 诊断实现仅保留在旧实验冻结目录，不与此选项混用。
+默认 `none` 保持普通确定性推理，JAX 及 JAX 转换权重不套用这项历史修正；新 noaug 训练也使用 `none`。
+策略身份及轨迹记录预处理选项，服务连接、采集和离线评分拒绝混用。
+
+CFG 的 `actor.seed + rank` 控制训练随机数，`data.seed` 控制 mixture 采样。每个采样索引携带 epoch，常驻 worker 不依赖父进程里的 epoch 状态；gradient accumulation 跨 epoch 时以实际消费的 batch 为准。
+
+CFG 精确续训要求 checkpoint 同时包含模型、优化器、scheduler，以及各 rank 的数据位置和 RNG 状态，且数据/训练配置与 rank 拓扑匹配。恢复时直接跳过已消费的索引，不解码旧 batch。缺少运行时状态的旧 checkpoint 仍可用于推理或初始化新训练，但不能作为精确 resume。
+
+对应 CPU 回归测试：
+
+```bash
+CUDA_VISIBLE_DEVICES='' .venv/bin/pytest -q \
+  tests/test_cfg_worker_runtime.py tests/test_training_augmentation.py \
+  tests/test_cfg_training.py tests/test_rlinf_training.py
+```
 
 ## 目录
 
@@ -100,6 +141,6 @@ Ubuntu 的可执行文件名通常是 `fdfind`；如需 `fd`，可在用户自�
 
 ## 外部应用
 
-Isaac Sim 6/CloudXR 遥操作作为独立应用运行。Isaac Sim 5 离线渲染使用上文的可选 Python 3.11 环境，并通过统一 `clothdojo data export-lerobot` 入口调用。
+Isaac Sim 6/CloudXR 遥操作作为独立应用运行。Isaac Sim 5 离线渲染使用项目主 `.venv`，并通过统一 `clothdojo data export-lerobot` 入口调用。
 
 远端训练节点、共享路径和 Codex bootstrap 见 [`compute_hosts.md`](compute_hosts.md)。凭据不得写入仓库。

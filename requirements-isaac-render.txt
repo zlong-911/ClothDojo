@@ -1,8 +1,0 @@
-# Install after requirements.txt with --no-deps. Isaac's full Python dependency
-# set conflicts with the project stack; this renderer only needs Kit and the app
-# launcher, while the .kit file resolves its RTX/Replicator extensions on demand.
---extra-index-url https://pypi.nvidia.com
-isaacsim==5.0.0
-isaacsim-core==5.0.0
-isaacsim-kernel==5.0.0
-omniverse-kit==107.3.1.206797

@@ -12,6 +12,7 @@ from clothdojo.training.episode_selection import validate_episode_selection
 from clothdojo.training.steam_advantages import (
     _checkpoint_weights,
     _publish_dataset_labels,
+    _shared_role_thresholds,
     compose_steam_advantage_spec,
     inspect_steam_advantages,
 )
@@ -21,11 +22,15 @@ def _dataset(root: Path, *, prompt: str = "Flatten the shirt.") -> None:
     (root / "meta").mkdir(parents=True)
     (root / "data").mkdir()
     features = {
+        "observation.state": {
+            "dtype": "float32",
+            "shape": [14],
+        },
         "observation.images.cam_high": {
             "dtype": "video",
             "shape": [8, 8, 3],
         },
-        "observation.images.cam_third_person": {
+        "observation.images.cam_low": {
             "dtype": "video",
             "shape": [8, 8, 3],
         },
@@ -102,9 +107,11 @@ def _spec(tmp_path: Path):
                 "datasets:",
                 "  - role: sft",
                 f"    dataset_path: {expert}",
+                "    advantage_tag: test_step30000",
                 "    positive_fraction: 0.5",
                 "  - role: rollout",
                 f"    dataset_path: {rollout}",
+                "    advantage_tag: test_step30000",
                 f"    episodes_path: {selection}",
                 "    positive_fraction: 0.25",
             ]
@@ -124,10 +131,88 @@ def test_steam_advantage_spec_is_owned_and_explicit(tmp_path: Path) -> None:
     assert report["prompt"] == "Flatten the shirt."
     assert report["camera_keys"] == [
         "observation.images.cam_high",
-        "observation.images.cam_third_person",
+        "observation.images.cam_low",
     ]
+    assert report["state_key"] == "observation.state"
     assert report["datasets"][0]["episodes"] == [0, 1]
+    assert report["datasets"][0]["advantage_tag"] == "test_step30000"
+    assert report["datasets"][0]["output_path"].endswith(
+        "meta/advantages_test_step30000.parquet"
+    )
     assert report["datasets"][1]["positive_fraction"] == 0.25
+
+
+def test_advantage_spec_supports_multiple_shards_of_one_role(tmp_path: Path) -> None:
+    checkpoint = tmp_path / "checkpoint"
+    (checkpoint / "model_state_dict").mkdir(parents=True)
+    (checkpoint / "config.json").write_text("{}", encoding="utf-8")
+    (checkpoint / "model_state_dict" / "full_weights.pt").write_bytes(b"weights")
+    shards = [tmp_path / f"rollout_{index}" for index in range(2)]
+    for shard in shards:
+        _dataset(shard)
+    config = tmp_path / "steam_shards.yaml"
+    config.write_text(
+        "\n".join(
+            [
+                "schema: clothdojo_steam_advantages",
+                "format_version: 1",
+                f"checkpoint: {checkpoint}",
+                "batch_size: 16",
+                "num_workers: 1",
+                "num_processes: 1",
+                "master_port: 29531",
+                f"work_dir: {tmp_path / 'work'}",
+                "datasets:",
+                *[
+                    line
+                    for shard in shards
+                    for line in (
+                        "  - role: rollout",
+                        f"    dataset_path: {shard}",
+                        "    advantage_tag: test_step30000",
+                        "    positive_fraction: 0.5",
+                    )
+                ],
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    spec = compose_steam_advantage_spec(config)
+
+    assert [dataset.role for dataset in spec.datasets] == ["rollout", "rollout"]
+    run_dir = tmp_path / "run"
+    for index, score in enumerate((0.9, 0.1)):
+        shard_dir = run_dir / f"dataset_{index}"
+        shard_dir.mkdir(parents=True)
+        pq.write_table(
+            pa.table(
+                {
+                    "episode_index": pa.array([0, 1], type=pa.int64()),
+                    "frame_index": pa.array([0, 0], type=pa.int64()),
+                    "advantage_continuous": pa.array([score, score], type=pa.float32()),
+                }
+            ),
+            shard_dir / "rank_000.parquet",
+        )
+    threshold = _shared_role_thresholds(spec, run_dir)["rollout"]
+    for index, entry in enumerate(spec.datasets):
+        _publish_dataset_labels(
+            spec=spec,
+            entry=entry,
+            shard_dir=run_dir / f"dataset_{index}",
+            weights_path=_checkpoint_weights(spec.checkpoint),
+            threshold=threshold,
+        )
+
+    manifests = [
+        json.loads(dataset.output_path.with_suffix(".json").read_text())
+        for dataset in spec.datasets
+    ]
+    assert manifests[0]["threshold"] == manifests[1]["threshold"] == threshold
+    assert sum(manifest["positive"] for manifest in manifests) == 4
+    assert sum(manifest["negative"] for manifest in manifests) == 4
 
 
 def test_publish_steam_labels_is_atomic_and_exact(tmp_path: Path) -> None:
@@ -200,6 +285,7 @@ def test_existing_labels_are_bound_to_current_advantage_config(tmp_path: Path) -
         "checkpoint_config_sha256": report["checkpoint_config_sha256"],
         "checkpoint_weights_sha256": report["checkpoint_weights_sha256"],
         "stride": spec.stride,
+        "state_key": spec.state_key,
         "camera_keys": list(spec.camera_keys),
     }
     for dataset in spec.datasets:

@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -32,25 +33,38 @@ def render_review(
     assets_root: str | Path = "assets",
     device: str = "cuda:0",
     fps: int = 10,
+    trajectory_ids: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """Incrementally render the high camera used by trajectory review."""
 
-    from clothdojo.data.rollout import _restore_render_state, _TrajectoryRenderState
+    from clothdojo.data.rollout import (
+        _restore_render_state,
+        _set_camera_cloth_surface_winding_reversed,
+        _trajectory_surface_winding_reversed,
+        _TrajectoryRenderState,
+    )
     from clothdojo.rollout.render import ShirtFlattenCameraObservation
     from clothdojo.sim.scene import ShirtFlattenSpec, build_scene
     from clothdojo.trajectory import TrajectoryReader
 
     root = Path(source).expanduser().resolve()
-    trajectories = _review_trajectories(root)
+    all_trajectories = _review_trajectories(root)
+    trajectories = _select_review_trajectories(all_trajectories, trajectory_ids)
     destination = root / "review"
     videos = destination / "videos" / REVIEW_CAMERA
     videos.mkdir(parents=True, exist_ok=True)
     previous = _review_records(destination / "meta.json")
 
-    active_asset = None
+    active_scene = None
     camera = None
     runtime = None
-    records: list[dict[str, Any]] = []
+    selected_ids = {trajectory.id for trajectory in trajectories}
+    current_ids = {trajectory.id for trajectory in all_trajectories}
+    records_by_id = {
+        trajectory_id: record
+        for trajectory_id, record in previous.items()
+        if trajectory_id in current_ids and trajectory_id not in selected_ids
+    }
     rendered = 0
     reused = 0
     try:
@@ -59,6 +73,7 @@ def render_review(
             source_fps = float(reader.manifest.control_fps)
             stride = _review_stride(source_fps, fps)
             action_count = int(reader.manifest.action_count)
+            surface_winding_reversed = _trajectory_surface_winding_reversed(reader)
             video = videos / f"{trajectory.id}.mp4"
             identity = {
                 "trajectory_id": trajectory.id,
@@ -67,6 +82,7 @@ def render_review(
                 "source_fps": source_fps,
                 "video_fps": fps,
                 "sample_stride": stride,
+                "surface_winding_reversed": surface_winding_reversed,
             }
             old = previous.get(trajectory.id)
             if (
@@ -76,7 +92,7 @@ def render_review(
                 and not video.is_symlink()
                 and isinstance(old.get("video_frames"), int)
             ):
-                records.append(old)
+                records_by_id[trajectory.id] = old
                 reused += 1
                 continue
 
@@ -85,7 +101,8 @@ def render_review(
                 "robot_id",
                 PIPER,
             ) or PIPER
-            if trajectory.asset_id != active_asset:
+            scene_identity = (trajectory.asset_id, robot_id)
+            if scene_identity != active_scene:
                 _close_camera(camera)
                 scene = build_scene(
                     assets_root,
@@ -96,7 +113,12 @@ def render_review(
                 )
                 runtime = _TrajectoryRenderState(scene)
                 camera = ShirtFlattenCameraObservation(scene, camera_names=(REVIEW_CAMERA,))
-                active_asset = trajectory.asset_id
+                active_scene = scene_identity
+
+            _set_camera_cloth_surface_winding_reversed(
+                camera,
+                surface_winding_reversed,
+            )
 
             encoder = _RawVideoEncoder(
                 video,
@@ -115,10 +137,16 @@ def render_review(
             except BaseException:
                 encoder.abort()
                 raise
-            records.append({**identity, "video_frames": video_frames})
+            records_by_id[trajectory.id] = {**identity, "video_frames": video_frames}
             rendered += 1
     finally:
         _close_camera(camera)
+
+    records = [
+        records_by_id[trajectory.id]
+        for trajectory in all_trajectories
+        if trajectory.id in records_by_id
+    ]
 
     _atomic_json(
         destination / "meta.json",
@@ -185,6 +213,24 @@ def _review_trajectories(root: Path) -> list[_ReviewTrajectory]:
     if not result:
         raise RuntimeError(f"no complete trajectories found in {trajectories_root}")
     return result
+
+
+def _select_review_trajectories(
+    trajectories: list[_ReviewTrajectory],
+    trajectory_ids: Sequence[str] | None,
+) -> list[_ReviewTrajectory]:
+    if trajectory_ids is None:
+        return trajectories
+    requested = tuple(trajectory_ids)
+    if not requested or any(not isinstance(value, str) or not value for value in requested):
+        raise ValueError("review trajectory ids must be non-empty strings")
+    if len(set(requested)) != len(requested):
+        raise ValueError("review trajectory ids must be unique")
+    by_id = {trajectory.id: trajectory for trajectory in trajectories}
+    missing = [trajectory_id for trajectory_id in requested if trajectory_id not in by_id]
+    if missing:
+        raise ValueError(f"unknown review trajectory ids: {missing}")
+    return [by_id[trajectory_id] for trajectory_id in requested]
 
 
 def _review_trajectory(path: Path, *, asset_id: str) -> _ReviewTrajectory:

@@ -1,14 +1,23 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from clothdojo.training.jax_sft import (
+    ActionOffsetLossSpec,
+    DataSamplingSpec,
+    _action_offset_weights,
+    _create_openpi_data_loader,
+    _data_sampling_manifest,
     _inspect_orbax_params,
     _inspect_pytorch_base,
+    _make_data_sampler,
+    _reduce_action_offset_loss,
     compose_jax_sft_spec,
     gate_manifest_path,
     inspect_jax_sft,
@@ -79,12 +88,383 @@ def test_compose_jax_sft_spec_keeps_reference_contract(tmp_path: Path) -> None:
 
     assert spec.batch_size == 64
     assert spec.tuning_profile == "openpi_reference"
+    assert spec.action_offset_loss == ActionOffsetLossSpec(
+        profile="uniform",
+        focus=0.0,
+        exec_horizon=50,
+        delay_steps=0,
+    )
+    assert spec.data_sampling == DataSamplingSpec(mode="frame", alpha=None, index=None)
     assert spec.num_workers == 8
     assert spec.task == "flatten the shirt"
     assert spec.default_prompt == "Flatten the shirt."
     assert spec.base_params == tmp_path / "base/params"
     assert spec.checkpoint_dir == tmp_path / "checkpoints/pi05_aloha_robotwin/reference"
     assert gate_manifest_path(spec, "pilot") == tmp_path / "gates/reference/pilot.json"
+
+
+def test_compose_jax_sft_spec_accepts_only_reviewed_asset_tempering(tmp_path: Path) -> None:
+    index = tmp_path / "dataset/meta/asset_sampling_index.json"
+    spec = compose_jax_sft_spec(
+        _config(tmp_path),
+        [
+            "data.sampling.mode=asset_tempered",
+            "data.sampling.alpha=0.5",
+            f"data.sampling.index={index}",
+        ],
+    )
+
+    assert spec.data_sampling == DataSamplingSpec(
+        mode="asset_tempered",
+        alpha=0.5,
+        index=index,
+    )
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        (["data.sampling.mode=unknown"], "mode"),
+        (
+            ["data.sampling.mode=frame", "data.sampling.alpha=0.5"],
+            "exactly mode",
+        ),
+        (
+            [
+                "data.sampling.mode=asset_tempered",
+                "data.sampling.alpha=0.4",
+                "data.sampling.index=/tmp/index.json",
+            ],
+            "alpha",
+        ),
+        (
+            ["data.sampling.mode=asset_tempered", "data.sampling.alpha=0.5"],
+            "alpha and index",
+        ),
+    ],
+)
+def test_compose_jax_sft_spec_rejects_ambiguous_data_sampling(
+    tmp_path: Path,
+    overrides: list[str],
+    message: str,
+) -> None:
+    with pytest.raises((TypeError, ValueError), match=message):
+        compose_jax_sft_spec(_config(tmp_path), overrides)
+
+
+def test_compose_jax_sft_spec_accepts_soft_rtc_action_offset_focus(
+    tmp_path: Path,
+) -> None:
+    spec = compose_jax_sft_spec(
+        _config(tmp_path),
+        [
+            "loss.action_offset.profile=fixed_delay_rtc",
+            "loss.action_offset.focus=0.5",
+            "loss.action_offset.exec_horizon=10",
+            "loss.action_offset.delay_steps=0",
+        ],
+    )
+
+    assert spec.action_offset_loss == ActionOffsetLossSpec(
+        profile="fixed_delay_rtc",
+        focus=0.5,
+        exec_horizon=10,
+        delay_steps=0,
+    )
+
+
+@pytest.mark.parametrize(
+    ("override", "message"),
+    [
+        ("loss.action_offset.profile=other", "profile"),
+        ("loss.action_offset.focus=-0.1", "focus"),
+        ("loss.action_offset.focus=1.1", "focus"),
+        ("loss.action_offset.exec_horizon=0", "exec_horizon"),
+        ("loss.action_offset.delay_steps=-1", "delay_steps"),
+        ("loss.action_offset.delay_steps=10", "delay_steps"),
+    ],
+)
+def test_compose_jax_sft_spec_rejects_invalid_action_offset_loss(
+    tmp_path: Path,
+    override: str,
+    message: str,
+) -> None:
+    overrides = [
+        "loss.action_offset.profile=fixed_delay_rtc",
+        "loss.action_offset.focus=0.5",
+        "loss.action_offset.exec_horizon=10",
+        "loss.action_offset.delay_steps=0",
+        override,
+    ]
+
+    with pytest.raises((TypeError, ValueError), match=message):
+        compose_jax_sft_spec(_config(tmp_path), overrides)
+
+
+def test_action_offset_weights_describe_rtc_execution_window() -> None:
+    weights = _action_offset_weights(
+        ActionOffsetLossSpec(
+            profile="fixed_delay_rtc",
+            focus=0.5,
+            exec_horizon=4,
+            delay_steps=2,
+        ),
+        action_horizon=10,
+    )
+
+    assert weights == (0.5, 0.5, 1.0, 1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 0.5)
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        ActionOffsetLossSpec(
+            profile="uniform",
+            focus=0.5,
+            exec_horizon=10,
+            delay_steps=0,
+        ),
+        ActionOffsetLossSpec(
+            profile="fixed_delay_rtc",
+            focus=float("nan"),
+            exec_horizon=4,
+            delay_steps=0,
+        ),
+        ActionOffsetLossSpec(
+            profile="fixed_delay_rtc",
+            focus=0.5,
+            exec_horizon=8,
+            delay_steps=3,
+        ),
+    ],
+)
+def test_action_offset_weights_reject_invalid_profiles(
+    spec: ActionOffsetLossSpec,
+) -> None:
+    with pytest.raises(ValueError):
+        _action_offset_weights(spec, action_horizon=10)
+
+
+def test_uniform_action_offset_reduction_exactly_matches_reference_mean() -> None:
+    per_offset = np.linspace(-0.5, 3.0, num=100, dtype=np.float32).reshape(2, 50)
+
+    reduced = _reduce_action_offset_loss(
+        per_offset,
+        None,
+        action_horizon=50,
+    )
+
+    assert reduced == per_offset.mean()
+
+
+def test_weighted_action_offset_reduction_normalizes_each_batch_item() -> None:
+    per_offset = np.arange(12, dtype=np.float32).reshape(2, 6)
+    weights = np.asarray([0.5, 1.0, 1.0, 0.5, 0.5, 0.5], dtype=np.float32)
+
+    reduced = _reduce_action_offset_loss(
+        per_offset,
+        weights,
+        action_horizon=6,
+    )
+
+    expected = np.mean(np.sum(per_offset * weights, axis=-1) / np.sum(weights))
+    assert reduced == expected
+
+
+@pytest.mark.parametrize(
+    ("loss_shape", "weight_shape", "message"),
+    [
+        ((2,), None, "compute_loss"),
+        ((2, 49), None, "compute_loss"),
+        ((2, 50), (49,), "weights"),
+        ((2, 50), (1, 50), "weights"),
+    ],
+)
+def test_action_offset_reduction_rejects_shape_drift(
+    loss_shape: tuple[int, ...],
+    weight_shape: tuple[int, ...] | None,
+    message: str,
+) -> None:
+    per_offset = np.zeros(loss_shape, dtype=np.float32)
+    weights = None if weight_shape is None else np.ones(weight_shape, dtype=np.float32)
+
+    with pytest.raises(ValueError, match=message):
+        _reduce_action_offset_loss(per_offset, weights, action_horizon=50)
+
+
+def test_action_offset_reduction_is_jittable_and_has_weighted_gradient() -> None:
+    jax = pytest.importorskip("jax")
+    jnp = pytest.importorskip("jax.numpy")
+    per_offset = jnp.arange(12, dtype=jnp.float32).reshape(2, 6)
+    weights = jnp.asarray([0.5, 1.0, 1.0, 0.5, 0.5, 0.5], dtype=jnp.float32)
+
+    reduce = jax.jit(
+        lambda value: _reduce_action_offset_loss(
+            value,
+            weights,
+            action_horizon=6,
+        )
+    )
+    gradient = jax.grad(reduce)(per_offset)
+
+    expected = np.broadcast_to(
+        np.asarray(weights) / (2 * float(weights.sum())),
+        per_offset.shape,
+    )
+    np.testing.assert_allclose(np.asarray(gradient), expected, rtol=0, atol=0)
+
+
+def test_asset_sampling_manifest_and_sampler_use_training_seed(
+    tmp_path: Path, monkeypatch
+) -> None:
+    spec = dataclasses.replace(
+        compose_jax_sft_spec(_config(tmp_path)),
+        data_sampling=DataSamplingSpec(
+            mode="asset_tempered",
+            alpha=0.5,
+            index=tmp_path / "index.json",
+        ),
+    )
+    index = SimpleNamespace(
+        episodes=(
+            SimpleNamespace(asset_id="asset-a"),
+            SimpleNamespace(asset_id="asset-a"),
+            SimpleNamespace(asset_id="asset-b"),
+        ),
+        asset_frame_counts={"asset-a": 80, "asset-b": 20},
+        total_frames=100,
+        sha256="logical-index-sha",
+    )
+    monkeypatch.setattr(
+        "clothdojo.training.jax_sft._load_asset_sampling_index",
+        lambda _spec: (index, "file-sha"),
+    )
+    calls = []
+    sampler = object()
+
+    def make_sampler(received, *, alpha, seed):
+        calls.append((received, alpha, seed))
+        return sampler
+
+    monkeypatch.setattr(
+        "clothdojo.data.asset_sampling.make_asset_tempered_sampler",
+        make_sampler,
+    )
+
+    manifest = _data_sampling_manifest(spec)
+    actual = _make_data_sampler(spec, {"training": {"data_sampling": manifest}})
+
+    assert manifest == {
+        "mode": "asset_tempered",
+        "alpha": 0.5,
+        "seed": 42,
+        "replacement": True,
+        "num_samples": 100,
+        "index": {
+            "path": str(tmp_path / "index.json"),
+            "logical_sha256": "logical-index-sha",
+            "file_sha256": "file-sha",
+        },
+        "asset_count": 2,
+        "asset_episode_counts": {"asset-a": 2, "asset-b": 1},
+        "asset_frame_counts": {"asset-a": 80, "asset-b": 20},
+    }
+    assert actual is sampler
+    assert calls == [(index, 0.5, 42)]
+
+
+def test_asset_sampler_rejects_index_drift_after_preflight(
+    tmp_path: Path, monkeypatch
+) -> None:
+    spec = dataclasses.replace(
+        compose_jax_sft_spec(_config(tmp_path)),
+        data_sampling=DataSamplingSpec(
+            mode="asset_tempered",
+            alpha=0.5,
+            index=tmp_path / "index.json",
+        ),
+    )
+    index = SimpleNamespace(
+        episodes=(SimpleNamespace(asset_id="asset-a"),),
+        asset_frame_counts={"asset-a": 10},
+        total_frames=10,
+        sha256="logical-index-sha",
+    )
+    monkeypatch.setattr(
+        "clothdojo.training.jax_sft._load_asset_sampling_index",
+        lambda _spec: (index, "new-file-sha"),
+    )
+    expected = {
+        "training": {
+            "data_sampling": {
+                **_data_sampling_manifest(
+                    dataclasses.replace(spec, data_sampling=DataSamplingSpec("frame", None, None))
+                ),
+                "mode": "asset_tempered",
+            }
+        }
+    }
+
+    with pytest.raises(RuntimeError, match="changed after preflight"):
+        _make_data_sampler(spec, expected)
+
+
+def test_openpi_loader_preserves_frame_shuffle_and_only_passes_explicit_sampler() -> None:
+    calls = []
+
+    class Dataset:
+        def __len__(self) -> int:
+            return 5
+
+    class TorchLoader:
+        def __init__(self, dataset, local_batch_size, **kwargs) -> None:
+            calls.append((dataset, local_batch_size, kwargs))
+
+    lerobot = SimpleNamespace(
+        LeRobotDatasetMetadata=lambda _repo: SimpleNamespace(fps=50, tasks=[]),
+        LeRobotDataset=lambda *_args, **_kwargs: Dataset(),
+    )
+    data_config = SimpleNamespace(
+        repo_id="dataset",
+        action_sequence_keys=("actions",),
+        prompt_from_task=False,
+    )
+    config = SimpleNamespace(
+        assets_dirs=(),
+        model=SimpleNamespace(action_horizon=50),
+        data=SimpleNamespace(create=lambda *_args: data_config),
+        batch_size=2,
+        num_workers=0,
+        seed=42,
+    )
+    module = SimpleNamespace(
+        _import_lerobot_dataset=lambda: lerobot,
+        transform_dataset=lambda dataset, _config: dataset,
+        TorchDataLoader=TorchLoader,
+        DataLoaderImpl=lambda _config, loader: loader,
+    )
+
+    _create_openpi_data_loader(
+        config,
+        sharding="sharding",
+        shuffle=True,
+        video_backend="pyav",
+        data_loader_module=module,
+    )
+    sampler = SimpleNamespace(weights=[1.0] * 5)
+    _create_openpi_data_loader(
+        config,
+        sharding="sharding",
+        shuffle=False,
+        sampler=sampler,
+        video_backend="pyav",
+        data_loader_module=module,
+    )
+
+    assert calls[0][2]["shuffle"] is True
+    assert "sampler" not in calls[0][2]
+    assert calls[1][2]["shuffle"] is False
+    assert calls[1][2]["sampler"] is sampler
 
 
 def test_compose_jax_sft_spec_accepts_explicit_fold_task(tmp_path: Path) -> None:
@@ -136,37 +516,43 @@ def test_compose_jax_sft_spec_accepts_reviewed_batch_profile(tmp_path: Path) -> 
 
 
 @pytest.mark.parametrize(
-    ("profile", "seed", "peak_lr", "decay_lr"),
+    ("profile", "seed", "peak_lr", "decay_lr", "steps", "save_interval"),
     [
-        ("decay_60k_lr_2x_seed43", 43, 5.0e-5, 5.0e-6),
-        ("decay_60k_lr_3x", 42, 7.5e-5, 7.5e-6),
+        ("decay_50k_lr_2x_seed42", 42, 5.0e-5, 5.0e-6, 50_000, 5_000),
+        ("decay_60k_lr_2x_seed42", 42, 5.0e-5, 5.0e-6, 60_000, 10_000),
+        ("decay_60k_lr_2x_seed43", 43, 5.0e-5, 5.0e-6, 60_000, 10_000),
+        ("decay_60k_lr_3x", 42, 7.5e-5, 7.5e-6, 60_000, 10_000),
+        ("decay_60k_lr_3x_seed43", 43, 7.5e-5, 7.5e-6, 60_000, 10_000),
     ],
 )
-def test_compose_jax_sft_spec_accepts_reviewed_60k_profiles(
+def test_compose_jax_sft_spec_accepts_reviewed_decay_profiles(
     tmp_path: Path,
     profile: str,
     seed: int,
     peak_lr: float,
     decay_lr: float,
+    steps: int,
+    save_interval: int,
 ) -> None:
     spec = compose_jax_sft_spec(
         _config(tmp_path),
         [
             f"experiment.profile={profile}",
             f"training.seed={seed}",
-            "training.num_train_steps=60000",
+            f"training.num_train_steps={steps}",
+            f"training.save_interval={save_interval}",
             f"optimizer.peak_lr={peak_lr}",
-            "optimizer.decay_steps=60000",
+            f"optimizer.decay_steps={steps}",
             f"optimizer.decay_lr={decay_lr}",
         ],
     )
 
     assert spec.tuning_profile == profile
     assert spec.seed == seed
-    assert spec.num_train_steps == 60_000
-    assert spec.save_interval == 10_000
+    assert spec.num_train_steps == steps
+    assert spec.save_interval == save_interval
     assert spec.peak_lr == peak_lr
-    assert spec.decay_steps == 60_000
+    assert spec.decay_steps == steps
     assert spec.decay_lr == decay_lr
 
 
@@ -285,7 +671,7 @@ def test_preflight_identity_covers_gate_settings_and_pytorch_weights(
     )
     monkeypatch.setattr(
         "clothdojo.training.jax_sft.build_openpi_train_config",
-        lambda _spec: SimpleNamespace(),
+        lambda _spec: SimpleNamespace(model=SimpleNamespace(action_horizon=50)),
     )
     monkeypatch.setattr(
         "clothdojo.training.jax_sft._validate_built_config",
@@ -301,6 +687,37 @@ def test_preflight_identity_covers_gate_settings_and_pytorch_weights(
             "gates.overfit_max_loss_ratio=0.7",
         )
     ]
+    changed_action_offset = inspect_jax_sft(
+        compose_jax_sft_spec(
+            config_path,
+            [
+                "loss.action_offset.profile=fixed_delay_rtc",
+                "loss.action_offset.focus=0.5",
+                "loss.action_offset.exec_horizon=10",
+                "loss.action_offset.delay_steps=0",
+            ],
+        )
+    )
+    sampling_index = SimpleNamespace(
+        episodes=(SimpleNamespace(asset_id="asset-a"),),
+        asset_frame_counts={"asset-a": 100},
+        total_frames=100,
+        sha256="logical-index-sha",
+    )
+    monkeypatch.setattr(
+        "clothdojo.training.jax_sft._load_asset_sampling_index",
+        lambda _spec: (sampling_index, "index-file-sha"),
+    )
+    changed_sampling = inspect_jax_sft(
+        compose_jax_sft_spec(
+            config_path,
+            [
+                "data.sampling.mode=asset_tempered",
+                "data.sampling.alpha=0.5",
+                f"data.sampling.index={tmp_path}/index.json",
+            ],
+        )
+    )
     pytorch_config = pytorch_base / "config.json"
     original_config = pytorch_config.read_bytes()
     pytorch_config.write_bytes(original_config + b"\n")
@@ -314,9 +731,35 @@ def test_preflight_identity_covers_gate_settings_and_pytorch_weights(
         "pilot_steps": 1000,
         "overfit_max_loss_ratio": 0.8,
     }
+    assert original["training"]["action_offset_loss"] == {
+        "profile": "uniform",
+        "focus": 0.0,
+        "exec_horizon": 50,
+        "delay_steps": 0,
+        "weights": [1.0] * 50,
+        "reduction": "batch_mean_of_weight_normalized_action_offset_mean",
+    }
+    assert original["training"]["data_sampling"] == {
+        "mode": "frame",
+        "alpha": None,
+        "seed": 42,
+        "replacement": False,
+        "num_samples": None,
+        "index": None,
+        "asset_count": None,
+        "asset_episode_counts": None,
+        "asset_frame_counts": None,
+    }
+    assert changed_sampling["training"]["data_sampling"]["index"] == {
+        "path": str(tmp_path / "index.json"),
+        "logical_sha256": "logical-index-sha",
+        "file_sha256": "index-file-sha",
+    }
     assert all(
         original["artifact_sha256"] != changed["artifact_sha256"]
         for changed in changed_gates
     )
     assert original["artifact_sha256"] != changed_config["artifact_sha256"]
     assert original["artifact_sha256"] != changed_weights["artifact_sha256"]
+    assert original["artifact_sha256"] != changed_action_offset["artifact_sha256"]
+    assert original["artifact_sha256"] != changed_sampling["artifact_sha256"]

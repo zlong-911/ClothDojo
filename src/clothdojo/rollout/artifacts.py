@@ -240,7 +240,7 @@ def validate_cfg_checkpoint_binding(
         "action_horizon": action_horizon,
         "adapt_to_pi": False,
         "extra_delta_transform": True,
-        "train_expert_only": True,
+        "train_expert_only": False,
         "positive_only_conditional": positive_only_conditional,
     }
     contract = manifest.get("inference_contract")

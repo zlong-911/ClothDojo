@@ -14,6 +14,29 @@ import numpy as np
 
 EVALUATION_RESULT_SCHEMA = "clothdojo_evaluation_condition"
 SUCCESS_CHECKPOINT_SECONDS = (30, 45, 60, 75, 90)
+FORMAL_BENCHMARK_ASSET_COUNT = 24
+FORMAL_BENCHMARK_SEEN_ASSETS = 12
+FORMAL_BENCHMARK_UNSEEN_ASSETS = 12
+FORMAL_BENCHMARK_STATES_PER_ASSET = 4
+FORMAL_BENCHMARK_CASE_COUNT = 96
+FORMAL_BENCHMARK_INITIAL_STATES_SHA256 = (
+    "04e887b1bf2334a4c61c3978b04084457ace409a6b242a51ffcd964868e56775"
+)
+FORMAL_BENCHMARK_PROTOCOL_FINGERPRINT = (
+    "ce1bd2b5c15a42a4130b07c14ca24e179d8acdc8a12c4463dd39f2afc945ea6e"
+)
+FORMAL_BENCHMARK_SCENARIO_FINGERPRINT = (
+    "3bd7245bac1594d0f098638351af5b1c1621cc807b35fca3f902a2bde7b68b5e"
+)
+# Both exact task spellings occur in training datasets. Keep the actual prompt
+# and fingerprint in results; accepting the panel does not make the prompts
+# interchangeable in paired comparisons.
+FORMAL_BENCHMARK_SCENARIO_FINGERPRINTS = frozenset(
+    {
+        FORMAL_BENCHMARK_SCENARIO_FINGERPRINT,
+        "c5d4f890018c1aaf22f868045558ee45670d7bc18869c1d3954448a1dbdec992",
+    }
+)
 
 
 @dataclass(frozen=True, order=True, slots=True)
@@ -40,6 +63,7 @@ class EvaluationCaseResult:
     best_observed_rigid_distance: float
     best_observed_combined_distance: float
     time_average_combined_distance: float | None = None
+    airborne_seconds: float | None = None
 
     def __post_init__(self) -> None:
         if not self.key.asset_id:
@@ -83,6 +107,12 @@ class EvaluationCaseResult:
             raise ValueError(
                 "time_average_combined_distance must be finite and non-negative"
             )
+        if self.airborne_seconds is not None and (
+            isinstance(self.airborne_seconds, bool)
+            or not np.isfinite(self.airborne_seconds)
+            or self.airborne_seconds < 0.0
+        ):
+            raise ValueError("airborne_seconds must be finite and non-negative")
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -107,6 +137,7 @@ class EvaluationCaseResult:
                 "combined_distance": self.best_observed_combined_distance,
             },
             "time_average_combined_distance": self.time_average_combined_distance,
+            "airborne_seconds": self.airborne_seconds,
         }
 
 
@@ -153,8 +184,10 @@ def write_evaluation_cases(
 
 def load_evaluation_condition(source: str | Path) -> EvaluationConditionResults:
     root = Path(source).expanduser().resolve()
+    meta_path = root / "meta.json"
     try:
-        meta = json.loads((root / "meta.json").read_text(encoding="utf-8"))
+        original_metadata = meta_path.read_text(encoding="utf-8")
+        meta = json.loads(original_metadata)
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"cannot read evaluation condition {root}: {exc}") from exc
     if meta.get("schema") != EVALUATION_RESULT_SCHEMA:
@@ -173,6 +206,14 @@ def load_evaluation_condition(source: str | Path) -> EvaluationConditionResults:
                 cases.append(_case_from_json(json.loads(line)))
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"cannot read evaluation cases from {root}: {exc}") from exc
+    # Publishing replaces results and metadata separately. A reader that saw
+    # the previous complete metadata must not return a newly published score
+    # file under that previous protocol, even if both publications completed.
+    try:
+        if meta_path.read_text(encoding="utf-8") != original_metadata:
+            raise RuntimeError("evaluation condition changed while reading results")
+    except OSError as exc:
+        raise RuntimeError(f"cannot reread evaluation condition {root}: {exc}") from exc
     if len(cases) != meta.get("case_count"):
         raise ValueError("evaluation case count differs from metadata")
     if len({item.key for item in cases}) != len(cases):
@@ -180,12 +221,19 @@ def load_evaluation_condition(source: str | Path) -> EvaluationConditionResults:
     return EvaluationConditionResults(root, meta, tuple(cases))
 
 
-def summarize_paired_conditions(sources: Iterable[str | Path]) -> dict[str, Any]:
+def summarize_paired_conditions(
+    sources: Iterable[str | Path],
+    *,
+    require_formal: bool = False,
+) -> dict[str, Any]:
     """Macro/micro summaries over an exactly paired case set."""
 
     conditions = tuple(load_evaluation_condition(source) for source in sources)
     if len(conditions) < 1:
         raise ValueError("at least one evaluation condition is required")
+    if require_formal:
+        for condition in conditions:
+            validate_formal_evaluation_metadata(condition.meta)
     ids = [condition.condition_id for condition in conditions]
     if len(ids) != len(set(ids)):
         raise ValueError("evaluation condition ids must be unique")
@@ -265,6 +313,84 @@ def summarize_paired_conditions(sources: Iterable[str | Path]) -> dict[str, Any]
     }
 
 
+def validate_formal_evaluation_metadata(meta: dict[str, Any]) -> None:
+    """Reject conditions outside the frozen 24-asset benchmark panel."""
+
+    expected = {
+        "case_count": FORMAL_BENCHMARK_CASE_COUNT,
+        "initial_states_sha256": FORMAL_BENCHMARK_INITIAL_STATES_SHA256,
+    }
+    for field, value in expected.items():
+        if meta.get(field) != value:
+            raise ValueError(
+                f"formal benchmark requires {field}={value!r}, got {meta.get(field)!r}"
+            )
+    protocol = meta.get("protocol")
+    scenario = meta.get("scenario")
+    if not isinstance(protocol, dict) or (
+        protocol.get("fingerprint") != FORMAL_BENCHMARK_PROTOCOL_FINGERPRINT
+    ):
+        raise ValueError("condition does not use the formal benchmark protocol")
+    if not isinstance(scenario, dict) or (
+        scenario.get("fingerprint") not in FORMAL_BENCHMARK_SCENARIO_FINGERPRINTS
+    ):
+        raise ValueError("condition does not use the formal benchmark scenario")
+
+    trajectories = meta.get("trajectories")
+    if trajectories is None:
+        return
+    if not isinstance(trajectories, list) or len(trajectories) != FORMAL_BENCHMARK_CASE_COUNT:
+        raise ValueError("formal benchmark requires exactly 96 indexed trajectories")
+    per_asset: dict[str, set[tuple[int, int]]] = {}
+    for item in trajectories:
+        if not isinstance(item, dict):
+            raise ValueError("formal benchmark trajectory index is invalid")
+        asset_id = item.get("asset_id")
+        index = item.get("initial_state_index")
+        replicate = item.get("replicate")
+        if not isinstance(asset_id, str) or not asset_id:
+            raise ValueError("formal benchmark trajectory asset_id is invalid")
+        if isinstance(index, bool) or not isinstance(index, int):
+            raise ValueError("formal benchmark initial_state_index is invalid")
+        if isinstance(replicate, bool) or not isinstance(replicate, int):
+            raise ValueError("formal benchmark replicate is invalid")
+        per_asset.setdefault(asset_id, set()).add((index, replicate))
+    expected_cases = {(index, 0) for index in range(FORMAL_BENCHMARK_STATES_PER_ASSET)}
+    if len(per_asset) != FORMAL_BENCHMARK_ASSET_COUNT or any(
+        cases != expected_cases for cases in per_asset.values()
+    ):
+        raise ValueError(
+            "formal benchmark requires 24 assets with state indices 0..3 and replicate 0"
+        )
+
+
+def validate_formal_evaluation_summary(summary: dict[str, Any]) -> None:
+    """Validate a published comparison before it is reported as benchmark evidence."""
+
+    if summary.get("case_count") != FORMAL_BENCHMARK_CASE_COUNT:
+        raise ValueError("formal benchmark summary requires exactly 96 paired cases")
+    if summary.get("asset_count") != FORMAL_BENCHMARK_ASSET_COUNT:
+        raise ValueError("formal benchmark summary requires exactly 24 assets")
+    if summary.get("initial_states_sha256") != FORMAL_BENCHMARK_INITIAL_STATES_SHA256:
+        raise ValueError("formal benchmark summary does not use the frozen state panel")
+    protocol = summary.get("protocol")
+    if not isinstance(protocol, dict) or (
+        protocol.get("fingerprint") != FORMAL_BENCHMARK_PROTOCOL_FINGERPRINT
+    ):
+        raise ValueError("formal benchmark summary does not use the frozen protocol")
+    conditions = summary.get("conditions")
+    if (
+        not isinstance(conditions, list)
+        or not conditions
+        or any(
+            not isinstance(item, dict)
+            or item.get("case_count") != FORMAL_BENCHMARK_CASE_COUNT
+            for item in conditions
+        )
+    ):
+        raise ValueError("formal benchmark summary contains an incomplete condition")
+
+
 def _condition_summary(condition, mapping, ordered_keys):
     successes = np.asarray([mapping[key].success for key in ordered_keys], dtype=bool)
     successes_at_end = np.asarray(
@@ -293,6 +419,7 @@ def _condition_summary(condition, mapping, ordered_keys):
     time_averages = [
         mapping[key].time_average_combined_distance for key in ordered_keys
     ]
+    airborne_times = [mapping[key].airborne_seconds for key in ordered_keys]
     success_rates_by_seconds = {
         str(seconds): float(
             np.mean(
@@ -310,6 +437,11 @@ def _condition_summary(condition, mapping, ordered_keys):
     return {
         "condition_id": condition.condition_id,
         "case_count": len(ordered_keys),
+        "airborne_metric": condition.meta.get("airborne_metric"),
+        "airborne_seconds_mean": (
+            None if any(value is None for value in airborne_times)
+            else float(np.mean(airborne_times))
+        ),
         "success_count": int(successes.sum()),
         "success_rate_micro": float(successes.mean()),
         "success_at_end_rate_micro": float(successes_at_end.mean()),
@@ -379,4 +511,5 @@ def _case_from_json(value: Any) -> EvaluationCaseResult:
             if value.get("time_average_combined_distance") is None
             else float(value["time_average_combined_distance"])
         ),
+        airborne_seconds=value.get("airborne_seconds"),
     )

@@ -5,6 +5,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import websockets.sync.client
+from openpi_client import msgpack_numpy
 
 import clothdojo.rollout.policy as policy_module
 from clothdojo.rollout.policy import (
@@ -53,6 +55,7 @@ def _metadata(**changes):
         "transport_image_size": [224, 224],
         "batched_inference": True,
         "num_steps": 10,
+        "image_preprocessing": "none",
         "rtc_guidance": rtc_guidance,
     }
     identity.update(changes)
@@ -162,6 +165,29 @@ def test_remote_policy_transports_one_batched_request() -> None:
     assert client.requests[0]["observation.images.cam_high"].shape == (3, 224, 224, 3)
 
 
+def test_default_remote_client_does_not_timeout_during_long_inference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = {}
+
+    class Connection:
+        def recv(self):
+            return msgpack_numpy.packb(_metadata())
+
+    def connect(uri, **kwargs):
+        calls["uri"] = uri
+        calls.update(kwargs)
+        return Connection()
+
+    monkeypatch.setattr(websockets.sync.client, "connect", connect)
+
+    client = policy_module._connect_remote_policy("ws://policy:8080")
+
+    assert client.get_server_metadata() == _metadata()
+    assert calls["uri"] == "ws://policy:8080"
+    assert calls["ping_timeout"] is None
+
+
 def test_policy_router_rejects_interleaved_sessions() -> None:
     class Backend:
         def __init__(self):
@@ -216,6 +242,25 @@ def test_remote_sft_policy_rejects_wrong_checkpoint() -> None:
             action_horizon=4,
             client_factory=lambda **_: _Client(_metadata(checkpoint_sha256="ef" * 32)),
         )
+
+
+@pytest.mark.parametrize("actual", ["none", "training_fixed_crop", None])
+@pytest.mark.parametrize("expected", ["none", "training_fixed_crop"])
+def test_remote_policy_checks_image_preprocessing(actual, expected) -> None:
+    metadata = _metadata(image_preprocessing=actual)
+    if actual is None:
+        metadata["clothdojo"].pop("image_preprocessing")
+    kwargs = {
+        "action_horizon": 4,
+        "expected_image_preprocessing": expected,
+        "client_factory": lambda **_: _Client(metadata),
+    }
+    if (actual or "none") == expected:
+        connected = RemotePolicy("ws://policy:8080", **kwargs)
+        assert connected.identity["image_preprocessing"] == expected
+    else:
+        with pytest.raises(ValueError, match="image_preprocessing"):
+            RemotePolicy("ws://policy:8080", **kwargs)
 
 
 def test_remote_sft_policy_records_server_checkpoint_without_expected_hash() -> None:
@@ -400,9 +445,11 @@ def test_checkpoint_identity_is_independent_of_checkpoint_root(tmp_path: Path) -
     assert checkpoint_sha256(roots[0]) == checkpoint_sha256(roots[1])
 
 
+@pytest.mark.parametrize("image_preprocessing", ["none", "training_fixed_crop"])
 def test_serve_validates_checkpoint_before_constructing_model(
     tmp_path: Path,
     monkeypatch,
+    image_preprocessing,
 ) -> None:
     checkpoint = tmp_path / "checkpoint"
     checkpoint.mkdir()
@@ -418,6 +465,7 @@ def test_serve_validates_checkpoint_before_constructing_model(
             "format_version": 1,
             "loader": "rlinf.models.embodiment.openpi",
             "weights_format": "pytorch",
+            "state_dict_layout": "pi0_core",
             "weights_sha256": CHECKPOINT_SHA,
             "tensor_count": 813,
             "dtype_counts": {"bfloat16": 691, "float32": 122},
@@ -428,13 +476,15 @@ def test_serve_validates_checkpoint_before_constructing_model(
 
     class FakePolicy:
         def __init__(self, *args, **kwargs):
-            del args, kwargs
+            del args
+            assert kwargs["image_preprocessing"] == image_preprocessing
             assert events == ["validated"]
             events.append("model")
 
     class FakeServer:
         def __init__(self, *args, **kwargs):
-            del args, kwargs
+            del args
+            assert kwargs["metadata"]["clothdojo"]["image_preprocessing"] == image_preprocessing
 
         def serve_forever(self):
             events.append("served")
@@ -458,13 +508,16 @@ def test_serve_validates_checkpoint_before_constructing_model(
     monkeypatch.setattr(policy_module, "_RLinfSFTPolicy", FakePolicy)
     monkeypatch.setattr(server_module, "WebsocketPolicyServer", FakeServer)
 
-    identity = serve_sft_policy(checkpoint, norm, device="cpu")
+    identity = serve_sft_policy(
+        checkpoint, norm, device="cpu", image_preprocessing=image_preprocessing
+    )
 
     assert events == ["validated", "model", "served"]
     assert identity["checkpoint_sha256"] == CHECKPOINT_SHA
     assert identity["checkpoint_validation"]["tensor_count"] == 813
-    assert identity["checkpoint_validation"]["strict_reload"] is True
+    assert identity["checkpoint_validation"]["exact_layout"] is True
     assert identity["inference_precision"] == "native_bfloat16"
+    assert identity["image_preprocessing"] == image_preprocessing
 
 
 def test_jax_serve_binds_artifacts_before_constructing_model(

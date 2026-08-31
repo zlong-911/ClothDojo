@@ -20,14 +20,23 @@ ClothDojo 将公开基于 Style3D 的动态布料交互环境。它在单张 RTX
 
 ## 任务怎么评测
 
+- 正式面板固定为 12 个 seen 与 12 个 unseen 资产，每资产 4 个固定初态，
+  共 96 个配对 case。所有模型和部署参数必须使用同一批初态与 policy seed。
+- 推理文本按模型的实际训练文本对齐：优先看 launch manifest 的 `training_prompt`，
+  历史模型参考 `tasks.jsonl`。当前面板接受 `flatten the shirt`
+  和 `Flatten the shirt.` 两种已使用的文本，原样记录各自 scenario fingerprint。
+  文本不同的结果不能冒充严格同 scenario 的单变量对照。
+- 少于 96 case 或改变资产组成的运行只用于 smoke，不形成模型、RTC 参数或
+  seen/unseen 结论。
 - 初态由衣服随机 `SO(3)` 旋转、随机固定一点、自然垂落和释放产生。
 - 只剔除未落桌、未稳定或异常接触等无效状态，不筛背面朝上、局部翻面和严重自遮挡。
-- 成功状态必须正面朝上，并匹配 canonical target 的 `0°/90°/180°/270°` 四种布局之一；`45°` 不算等价布局。
+- canonical target 使用默认自由沉降状态；rigid 取绕工作台 z 轴
+  `0°/90°/180°/270°` 四种朝向中的最小误差，`45°` 不算等价朝向。
+  只保存一个模板，评分时处理旋转；XY 平移不惩罚，NOCS 顶点对应和高度误差保留，
+  deformable 定义不变，翻面不因此成为等价状态。
 - 成功继续使用项目已有的 deformable 和 rigid distance 阈值，不增加 workspace 或 coverage 判据。
 - 初态难度由 initial deformable、rigid 和 combined distance 表示。
 - 资产难度由人工按结构、实际尺寸和易翻面程度分组；这些标签用于后续分层与划分，不影响当前数据生成。
-
-当前代码只支持 `0°/180°`，四模板评测尚待实现。
 
 ## 数据怎么产生
 
@@ -90,6 +99,23 @@ NOCS 数据量实验用于区分样本效率和最终能力。比较 NOCS 与纯
 
 主结果使用 success，以及 terminal、best 和 time-average deformable/rigid/combined distance。初始 distance 用于画难度曲线。
 
+默认评测结果表和对用户的实验汇报固定包含六项：Peak、终态、AUC combined distance，
+曾成功率、终态成功率，以及抬起时间（秒）。抬起时间不是可省略的附加列；
+复用旧冻结运行时或历史评分时，也要从完整轨迹离线补算后一起报告。
+确实缺少可用轨迹时应明确标为未计算，不省略该列、不把缺失当作0。
+
+离线评分默认计算 `airborne_seconds`（抬起时间）：至少50%的布料顶点高于该资产自然平铺模板的中位高度5 cm，按评分采样频率对浮点指示值做梯形积分。表格报告每条轨迹的平均累计秒数，标准汇总字段为 `airborne_seconds_mean`；这不是整件衣服完全离桌的时间，也不参与 reward 或成功判据，没有越短越好的预设。
+
+成功的两个阈值分别从完整、非镜像的人工轨迹终态估计。每个资产总权重相等，
+资产内每条轨迹权重为 `1 / 该资产轨迹数`；对 deformable 和 rigid 各取
+`加权中位数 + 3 × 1.4826 × 加权 MAD` 作为上侧异常值分界。两项独立计算，
+不迭代剔除、不先按另一项筛选，也不删除被判为异常的原始训练轨迹。
+具体阈值以 `configs/evaluation/shirt_flatten.yaml` 为准。
+
+指标或阈值更新后，使用 `benchmark score --rescore-from <原采集协议.yaml>`
+从完整轨迹重算；保留原采集协议，新结果绑定当前评分协议。任务、时长和模板
+生成条件必须保持一致，不能把重评分当作新 rollout。不同评分口径的表格不可混用。
+
 暂不人工划分 fling、拉伸、翻面和 pick-place。动作本身连续且经常穿插，强行分类会引入主观规则。需要解释行为时，使用 distance 曲线、最佳状态到终态的退化、成功时间和动作量。
 
 ## 后续方向
@@ -100,9 +126,8 @@ NOCS 数据量实验用于区分样本效率和最终能力。比较 NOCS 与纯
 
 ## 近期需要补齐
 
-1. 实现 `0°/90°/180°/270°` 四模板评测。
-2. 实现成功轨迹的最佳有效状态裁剪与发布。
-3. 补齐资产语义与难度标签；候选轨迹池完成后再生成 seen/unseen manifests 和独立 test state pools。
-4. 建立纹理语义标签及 train/test material split。
-5. 接通高保真随机视觉条件下的闭环评测。
-6. 从旧项目迁移跨机器人 retargeting，并保留几何转换、动力学 rollout 和成功复验的边界。
+1. 实现成功轨迹的最佳有效状态裁剪与发布。
+2. 补齐资产语义与难度标签；候选轨迹池完成后再生成 seen/unseen manifests 和独立 test state pools。
+3. 建立纹理语义标签及 train/test material split。
+4. 接通高保真随机视觉条件下的闭环评测。
+5. 从旧项目迁移跨机器人 retargeting，并保留几何转换、动力学 rollout 和成功复验的边界。

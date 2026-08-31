@@ -25,6 +25,8 @@ CFG_ROLES = ("sft", "rollout")
 class CfgDatasetReport:
     role: str
     dataset_path: str
+    advantage_tag: str | None
+    prompt: str
     weight: float
     episodes: int
     frames: int
@@ -45,15 +47,17 @@ def inspect_cfg_training(
     config_path: str | Path,
     overrides: tuple[str, ...] | list[str] = (),
 ) -> dict[str, Any]:
-    """Validate both labeled datasets referenced by one CFG config."""
+    """Validate every labeled dataset referenced by one CFG config."""
 
     from clothdojo.rollout.checkpoint import rlinf_openpi_weights_sha256
+    from clothdojo.training.openpi import TrainingPrompt
     from clothdojo.training.rlinf import compose_config
 
     cfg = compose_config(config_path, overrides)
     if cfg.actor.model.model_type != "clothdojo_cfg_model":
         raise ValueError("CFG config must use model_type=clothdojo_cfg_model")
     openpi_data = cfg.actor.model.get("openpi_data", {})
+    training_prompt = TrainingPrompt(openpi_data.get("default_prompt")).prompt
     if openpi_data.get("adapt_to_pi") is not False:
         raise ValueError("Piper CFG requires actor.model.openpi_data.adapt_to_pi=false")
     if openpi_data.get("extra_delta_transform") is not True:
@@ -70,23 +74,23 @@ def inspect_cfg_training(
     init_weights_sha256 = rlinf_openpi_weights_sha256(model_path)
 
     data_cfg = cfg.data
-    if data_cfg.get("balance_dataset_weights", True):
-        raise ValueError(
-            "CFG requires balance_dataset_weights=false so configured weights are "
-            "the actual source probabilities"
-        )
+    balance_dataset_weights = bool(data_cfg.get("balance_dataset_weights", True))
     entries = list(data_cfg.get("train_data_paths", ()))
-    if len(entries) != 2:
-        raise ValueError("CFG requires exactly one sft and one rollout dataset")
     roles = [str(entry.get("type", "")) for entry in entries]
-    if sorted(roles) != sorted(CFG_ROLES):
-        raise ValueError(f"CFG dataset types must be {CFG_ROLES}, got {roles}")
+    if roles.count("sft") != 1 or roles.count("rollout") < 1:
+        raise ValueError(
+            f"CFG requires exactly one sft dataset and at least one rollout dataset, got {roles}"
+        )
+    unsupported = sorted(set(roles) - set(CFG_ROLES))
+    if unsupported:
+        raise ValueError(f"unsupported CFG dataset types: {unsupported}")
 
     reports = [
         inspect_cfg_dataset(
             entry["dataset_path"],
             role=str(entry["type"]),
             weight=float(entry.get("weight", 1.0)),
+            advantage_tag=entry.get("advantage_tag"),
             episodes=entry.get("episodes"),
             episodes_path=entry.get("episodes_path"),
         )
@@ -102,15 +106,30 @@ def inspect_cfg_training(
     if sum(report.negative_frames for report in reports) == 0:
         raise ValueError("CFG mixture has no negative advantage labels")
 
-    weights = np.asarray([report.weight for report in reports], dtype=np.float64)
-    if not np.isfinite(weights).all() or np.any(weights <= 0):
-        raise ValueError(f"CFG dataset weights must be finite and positive: {weights}")
-    probabilities = weights / weights.sum()
+    raw_weights = np.asarray([report.weight for report in reports], dtype=np.float64)
+    if not np.isfinite(raw_weights).all() or np.any(raw_weights <= 0):
+        raise ValueError(f"CFG dataset weights must be finite and positive: {raw_weights}")
+    sampling_weights = raw_weights.copy()
+    if balance_dataset_weights:
+        sampling_weights *= np.asarray([report.frames for report in reports], dtype=np.float64)
+    probabilities = sampling_weights / sampling_weights.sum()
+    role_probabilities = {
+        role: float(
+            sum(
+                probability
+                for report, probability in zip(reports, probabilities, strict=True)
+                if report.role == role
+            )
+        )
+        for role in CFG_ROLES
+    }
     model = cfg.actor.model
     norm_file = norm_root / "norm_stats.json"
     provenance_file = norm_root / "clothdojo.json"
     return {
         "compatible": True,
+        "training_prompt": training_prompt,
+        "image_augmentation": False,
         "config": str(Path(config_path).expanduser().resolve()),
         "model_type": str(cfg.actor.model.model_type),
         "model_path": str(model_path),
@@ -125,19 +144,24 @@ def inspect_cfg_training(
             "action_dim": int(model.action_dim),
             "action_horizon": int(model.num_action_chunks),
             "num_steps": int(model.openpi.num_steps),
+            "guidance_type": str(model.openpi.guidance_type),
+            "guidance_scale": float(model.openpi.cfgrl_guidance_scale),
             "adapt_to_pi": False,
             "extra_delta_transform": True,
             "train_expert_only": bool(model.openpi.train_expert_only),
-            "positive_only_conditional": bool(
-                model.openpi.positive_only_conditional
-            ),
+            "positive_only_conditional": bool(model.openpi.positive_only_conditional),
             "unconditional_prob": float(model.openpi.unconditional_prob),
         },
-        "balance_dataset_weights": False,
-        "sampling_probabilities": {
-            report.role: float(probability)
+        "balance_dataset_weights": balance_dataset_weights,
+        "sampling_probabilities": role_probabilities,
+        "dataset_sampling_probabilities": [
+            {
+                "role": report.role,
+                "dataset_path": report.dataset_path,
+                "probability": float(probability),
+            }
             for report, probability in zip(reports, probabilities, strict=True)
-        },
+        ],
         "datasets": [report.to_json_dict() for report in reports],
     }
 
@@ -173,6 +197,7 @@ def inspect_cfg_dataset(
     *,
     role: str,
     weight: float,
+    advantage_tag: Any = None,
     episodes: Any = None,
     episodes_path: Any = None,
 ) -> CfgDatasetReport:
@@ -191,6 +216,9 @@ def inspect_cfg_dataset(
     fps = _positive_int(info.get("fps"), "fps")
     _validate_features(info.get("features"), root)
     _validate_sidecar(root)
+    from clothdojo.data.lerobot import load_single_task_prompt
+
+    prompt = load_single_task_prompt(root)
     lengths = _episode_lengths(root, total_episodes, total_frames)
     selected = resolve_cfg_episode_selection(
         episodes=episodes,
@@ -198,12 +226,16 @@ def inspect_cfg_dataset(
         total_episodes=total_episodes,
     )
 
-    advantage_path = root / "meta" / "advantages.parquet"
+    tag = _optional_advantage_tag(advantage_tag)
+    filename = f"advantages_{tag}.parquet" if tag else "advantages.parquet"
+    advantage_path = root / "meta" / filename
     positive, negative, selected_frames = _validate_advantages(advantage_path, lengths, selected)
     manifest_path = advantage_path.with_suffix(".json")
     manifest = _validate_advantage_manifest(
         manifest_path,
         root=root,
+        role=role,
+        prompt=prompt,
         selected=selected,
         rows=selected_frames,
         positive=positive,
@@ -212,6 +244,8 @@ def inspect_cfg_dataset(
     return CfgDatasetReport(
         role=role,
         dataset_path=str(root),
+        advantage_tag=tag,
+        prompt=prompt,
         weight=float(weight),
         episodes=len(selected),
         frames=selected_frames,
@@ -228,6 +262,14 @@ def inspect_cfg_dataset(
         ),
         steam_stride=_positive_int(manifest.get("stride"), "STEAM stride"),
     )
+
+
+def _optional_advantage_tag(value: Any) -> str | None:
+    if value is None:
+        return None
+    from clothdojo.training.steam_advantages import _advantage_tag
+
+    return _advantage_tag(value)
 
 
 def resolve_cfg_episode_selection(
@@ -254,6 +296,8 @@ def _validate_advantage_manifest(
     path: Path,
     *,
     root: Path,
+    role: str,
+    prompt: str,
     selected: np.ndarray,
     rows: int,
     positive: int,
@@ -266,13 +310,44 @@ def _validate_advantage_manifest(
         raise ValueError(f"unsupported STEAM advantage provenance: {path}")
     if manifest.get("dataset_info_sha256") != _sha256(root / "meta" / "info.json"):
         raise ValueError(f"STEAM advantages target a different dataset revision: {path}")
+    expected_contract = {
+        "role": role,
+        "prompt": prompt,
+        "state_key": "observation.state",
+        "camera_keys": [
+            "observation.images.cam_high",
+            "observation.images.cam_low",
+        ],
+    }
+    for field, expected in expected_contract.items():
+        if manifest.get(field) != expected:
+            raise ValueError(f"STEAM advantage {field} provenance differs: {path}")
     if tuple(manifest.get("episodes", ())) != tuple(int(value) for value in selected):
         raise ValueError(f"STEAM advantage episode selection differs from CFG: {path}")
     expected_counts = {"rows": rows, "positive": positive, "negative": negative}
     for key, expected in expected_counts.items():
         if manifest.get(key) != expected:
             raise ValueError(f"STEAM advantage {key} provenance differs: {path}")
+    for field, lower, upper in (
+        ("threshold", -1.0001, 1.0001),
+        ("positive_fraction_requested", 0.0, 1.0),
+    ):
+        value = manifest.get(field)
+        if type(value) not in (int, float) or not np.isfinite(value) or not lower < value < upper:
+            raise ValueError(f"invalid STEAM advantage {field}: {path}")
     return manifest
+
+
+def _validate_advantage_columns(table: Any, path: Path) -> None:
+    import pyarrow as pa
+
+    for name in ("episode_index", "frame_index", "advantage"):
+        column = table[name]
+        expected = pa.types.is_boolean if name == "advantage" else pa.types.is_integer
+        if not expected(column.type):
+            raise TypeError(f"CFG advantage {name} has an invalid column type: {path}")
+        if column.null_count:
+            raise ValueError(f"CFG advantage {name} contains null values: {path}")
 
 
 def _validate_advantages(
@@ -284,12 +359,10 @@ def _validate_advantages(
         raise FileNotFoundError(
             f"CFG advantage labels do not exist: {path}; run STEAM advantage labeling first"
         )
-    import pyarrow as pa
     import pyarrow.parquet as pq
 
     table = pq.read_table(path, columns=["episode_index", "frame_index", "advantage"])
-    if not pa.types.is_boolean(table.schema.field("advantage").type):
-        raise TypeError(f"CFG advantage column must be boolean: {path}")
+    _validate_advantage_columns(table, path)
     episode = np.asarray(
         table["episode_index"].combine_chunks().to_numpy(zero_copy_only=False),
         dtype=np.int64,
@@ -384,29 +457,44 @@ def _validate_sidecar(root: Path) -> None:
 
 
 def _require_compatible_datasets(reports: list[CfgDatasetReport]) -> None:
-    if reports[0].fps != reports[1].fps:
-        raise ValueError(f"CFG dataset FPS differs: {reports[0].fps} != {reports[1].fps}")
+    if len(reports) < 2:
+        raise ValueError("CFG compatibility checks require at least two datasets")
+    reference = reports[0]
+    for report in reports[1:]:
+        if reference.fps != report.fps:
+            raise ValueError(f"CFG dataset FPS differs: {reference.fps} != {report.fps}")
+        if reference.prompt != report.prompt:
+            raise ValueError("CFG dataset task prompts differ")
     infos = [
         _read_object(Path(report.dataset_path) / "meta" / "info.json", "LeRobot info")
         for report in reports
     ]
-    for key in ("robot_type",):
-        if infos[0].get(key) != infos[1].get(key):
-            raise ValueError(f"CFG dataset {key} differs")
-    for key in REQUIRED_FEATURES:
-        left = infos[0]["features"][key]
-        right = infos[1]["features"][key]
-        for field in ("dtype", "shape", "names"):
-            if left.get(field) != right.get(field):
-                raise ValueError(f"CFG dataset feature differs: {key}.{field}")
+    for info in infos[1:]:
+        for key in ("robot_type",):
+            if infos[0].get(key) != info.get(key):
+                raise ValueError(f"CFG dataset {key} differs")
+        for key in REQUIRED_FEATURES:
+            reference_feature = infos[0]["features"][key]
+            feature = info["features"][key]
+            for field in ("dtype", "shape", "names"):
+                if reference_feature.get(field) != feature.get(field):
+                    raise ValueError(f"CFG dataset feature differs: {key}.{field}")
     identity_fields = (
         "steam_checkpoint_config_sha256",
         "steam_checkpoint_weights_sha256",
         "steam_stride",
     )
-    for field in identity_fields:
-        if getattr(reports[0], field) != getattr(reports[1], field):
-            raise ValueError(f"CFG datasets were labeled by different STEAM {field}")
+    for report in reports[1:]:
+        for field in identity_fields:
+            if getattr(reference, field) != getattr(report, field):
+                raise ValueError(f"CFG datasets were labeled by different STEAM {field}")
+    role_thresholds: dict[str, tuple[float, float]] = {}
+    for report in reports:
+        manifest = _read_object(Path(report.advantage_manifest_path), "STEAM advantage provenance")
+        threshold = (manifest["threshold"], manifest["positive_fraction_requested"])
+        if report.role in role_thresholds and role_thresholds[report.role] != threshold:
+            raise ValueError(f"CFG {report.role} shards use different STEAM label thresholds")
+        role_thresholds[report.role] = threshold
 
 
 def _read_object(path: Path, context: str) -> dict[str, Any]:
@@ -437,9 +525,7 @@ def _require_sha256(value: Any, field: str) -> str:
     try:
         int(value, 16)
     except ValueError as exc:
-        raise ValueError(
-            f"{field} SHA-256 must contain 64 hexadecimal characters"
-        ) from exc
+        raise ValueError(f"{field} SHA-256 must contain 64 hexadecimal characters") from exc
     return value
 
 

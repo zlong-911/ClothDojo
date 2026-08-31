@@ -23,10 +23,13 @@ from clothdojo.evaluation.protocol import (
 )
 from clothdojo.evaluation.results import (
     EVALUATION_RESULT_SCHEMA,
+    FORMAL_BENCHMARK_INITIAL_STATES_SHA256,
+    FORMAL_BENCHMARK_PROTOCOL_FINGERPRINT,
     EvaluationCaseKey,
     EvaluationCaseResult,
     load_evaluation_condition,
     summarize_paired_conditions,
+    validate_formal_evaluation_summary,
     write_evaluation_cases,
 )
 from clothdojo.evaluation.scoring import result_from_curve, score_evaluation_trajectory
@@ -142,21 +145,138 @@ def test_factorized_metric_detects_deformation_and_180_symmetry() -> None:
     assert translated_symmetric.symmetry_index[0] == 1
 
 
-def test_planar_180_requires_an_explicit_finite_center() -> None:
+@pytest.mark.parametrize("symmetry", ["planar_180", "planar_90"])
+def test_planar_symmetry_requires_an_explicit_finite_center(symmetry: str) -> None:
     template = _template()
     state = template.particle_q[None]
     velocity = np.zeros_like(state)
 
     with pytest.raises(ValueError, match="symmetry_center_xy"):
-        factorized_cloth_distance(state, velocity, template, symmetry="planar_180")
+        factorized_cloth_distance(state, velocity, template, symmetry=symmetry)
     with pytest.raises(ValueError, match="symmetry_center_xy"):
         factorized_cloth_distance(
             state,
             velocity,
             template,
-            symmetry="planar_180",
+            symmetry=symmetry,
             symmetry_center_xy=(np.nan, 0.0),
         )
+
+
+def _rotate_target(points: np.ndarray, degrees: float) -> np.ndarray:
+    theta = np.deg2rad(degrees)
+    rotation = np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+    result = points.astype(np.float64).copy()
+    center = np.asarray(TABLE_CENTER_XY)
+    result[:, :2] = (result[:, :2] - center) @ rotation.T + center
+    return result
+
+
+def test_quarter_turns_are_equivalent_but_diagonal_headings_are_not() -> None:
+    template = _template()
+    states = np.stack([_rotate_target(template.particle_q, angle)
+                       for angle in (0, 90, 180, 270, 45, 135)])
+    zero = np.zeros_like(states)
+    values = factorized_cloth_distance(
+        states, zero, template, symmetry_center_xy=TABLE_CENTER_XY
+    )
+    np.testing.assert_allclose(values.deformable_distance, 0.0, atol=1e-6)
+    np.testing.assert_allclose(values.rigid_distance[:4], 0.0, atol=1e-6)
+    np.testing.assert_array_equal(values.symmetry_index[:4], [0, 1, 2, 3])
+    assert np.all(values.rigid_distance[4:] > 0.056)
+    legacy = factorized_cloth_distance(
+        states, zero, template, symmetry="planar_180", symmetry_center_xy=TABLE_CENTER_XY
+    )
+    assert np.all(legacy.rigid_distance[[1, 3]] > 0.056)
+
+
+@pytest.mark.parametrize("weight", [0.0, 0.65, 1.0])
+def test_quarter_turn_metric_matches_explicit_rotated_vertex_targets(weight: float) -> None:
+    template = _template()
+    rng = np.random.default_rng(173)
+    positions = np.stack([_rotate_target(template.particle_q, angle)
+                          for angle in (4, 48, 90, 178, 223, 271)])
+    positions += rng.normal(0, 0.13, positions.shape)
+    velocities = rng.normal(0, 0.04, positions.shape)
+    actual = factorized_cloth_distance(
+        positions, velocities, template, deformable_weight=weight,
+        symmetry="planar_90", symmetry_center_xy=TABLE_CENTER_XY,
+    )
+    expected_deformable, expected_rigid, expected_indices = [], [], []
+    for current in positions:
+        candidates = []
+        xy_mean = current[:, :2].mean(0)
+        xy = current[:, :2] - xy_mean
+        for heading in (0, 90, 180, 270):
+            goal = _rotate_target(template.particle_q, heading)
+            centered = goal[:, :2] - goal[:, :2].mean(0)
+            theta = np.arctan2(
+                np.sum(centered[:, 0] * xy[:, 1] - centered[:, 1] * xy[:, 0]),
+                np.sum(centered * xy),
+            )
+            rotation = np.array([[np.cos(theta), -np.sin(theta)],
+                                 [np.sin(theta), np.cos(theta)]])
+            aligned_xy = centered @ rotation.T
+            aligned = np.column_stack((aligned_xy + xy_mean, goal[:, 2]))
+            candidates.append((np.linalg.norm(current - aligned, axis=1).mean(),
+                               np.linalg.norm(aligned_xy - centered, axis=1).mean()))
+        index = int(np.argmin([r for _, r in candidates]))
+        deformable, rigid = candidates[index]
+        expected_deformable.append(deformable / template.normalization_scale_m)
+        expected_rigid.append(rigid / template.normalization_scale_m)
+        expected_indices.append(index)
+    np.testing.assert_allclose(actual.deformable_distance, expected_deformable, atol=1e-7)
+    np.testing.assert_allclose(actual.rigid_distance, expected_rigid, atol=1e-7)
+    np.testing.assert_array_equal(actual.symmetry_index, expected_indices)
+    np.testing.assert_allclose(actual.combined_distance,
+        weight * np.array(expected_deformable) + (1 - weight) * np.array(expected_rigid), atol=1e-7)
+    for symmetry in ("none", "planar_180"):
+        reference = factorized_cloth_distance(
+            positions, velocities, template, deformable_weight=weight,
+            symmetry=symmetry, symmetry_center_xy=TABLE_CENTER_XY,
+        )
+        np.testing.assert_array_equal(actual.deformable_distance, reference.deformable_distance)
+        np.testing.assert_array_equal(actual.speed_rms_m_s, reference.speed_rms_m_s)
+        assert np.all(actual.rigid_distance <= reference.rigid_distance + 1e-7)
+
+
+@pytest.mark.parametrize("heading", [0, 90, 180, 270])
+def test_quarter_turn_symmetry_preserves_flip_height_and_fold_penalties(heading: int) -> None:
+    template = _template()
+    flipped = template.particle_q.copy()
+    flipped[:, 1:] *= -1  # A physical upside-down rotation around x, not a z rotation.
+    lifted = template.particle_q.copy()
+    lifted[:, 2] += 0.5
+    folded = template.particle_q.copy()
+    folded[0, :2] = folded[2, :2]
+    states = np.stack([_rotate_target(q, heading) for q in (flipped, lifted, folded)])
+    values = factorized_cloth_distance(
+        states, np.zeros_like(states), template, symmetry_center_xy=TABLE_CENTER_XY
+    )
+    assert np.all(values.deformable_distance > 0.093)
+
+
+def test_quarter_turn_metric_ignores_xy_translation_and_remains_asset_normalized() -> None:
+    template = _template()
+    states = _rotate_target(template.particle_q, 123)[None]
+    states[0, 0, 2] += 0.2
+    velocities = np.zeros_like(states)
+    reference = factorized_cloth_distance(
+        states, velocities, template, symmetry_center_xy=TABLE_CENTER_XY
+    )
+    translated = states.copy()
+    translated[:, :, :2] += [11.0, -7.0]
+    shifted = factorized_cloth_distance(
+        translated, velocities, template, symmetry_center_xy=(-3.0, 8.0)
+    )
+    scaled = factorized_cloth_distance(
+        states * 2, velocities, replace(template, particle_q=template.particle_q * 2,
+            normalization_scale_m=template.normalization_scale_m * 2),
+        symmetry_center_xy=TABLE_CENTER_XY,
+    )
+    for metric in ("deformable_distance", "rigid_distance", "combined_distance"):
+        np.testing.assert_allclose(getattr(shifted, metric), getattr(reference, metric), atol=1e-7)
+        np.testing.assert_allclose(getattr(scaled, metric), getattr(reference, metric), atol=1e-7)
 
 
 def test_success_only_uses_distance_thresholds_and_is_absorbing() -> None:
@@ -226,6 +346,9 @@ def test_protocol_and_template_round_trip(tmp_path: Path) -> None:
     assert protocol.stage == "calibration"
     assert protocol.horizon_steps == 4500
     assert protocol.metric_stride == 5
+    assert protocol.symmetry == "planar_90"
+    assert protocol.fingerprint == FORMAL_BENCHMARK_PROTOCOL_FINGERPRINT
+    assert replace(protocol, symmetry="planar_180").fingerprint != protocol.fingerprint
     assert protocol.target.symmetry_center_xy == TABLE_CENTER_XY
     assert protocol.target_min_settle_steps == 400
     assert protocol.target_max_settle_steps == 1500
@@ -248,7 +371,7 @@ def test_protocol_rejects_non_integral_sampling_grid() -> None:
         _protocol(horizon_seconds=0.3)
 
 
-def test_evaluation_is_scored_from_the_standard_complete_trajectory(tmp_path: Path) -> None:
+def _offline_evaluation(tmp_path: Path, *, quarter_turn: bool = False):
     protocol = _protocol()
     template = _template()
     condition = tmp_path / "condition"
@@ -299,6 +422,8 @@ def test_evaluation_is_scored_from_the_standard_complete_trajectory(tmp_path: Pa
     writer.write_initial_state(_trajectory_state(0, template.particle_q))
     deformed = template.particle_q.copy()
     deformed[0, 0] -= 1.0
+    if quarter_turn:
+        deformed[:, :2] = deformed[:, :2] @ np.asarray([[0.0, 1.0], [-1.0, 0.0]])
     for index in range(protocol.horizon_steps):
         writer.append_transition(
             TrajectoryAction(
@@ -311,12 +436,6 @@ def test_evaluation_is_scored_from_the_standard_complete_trajectory(tmp_path: Pa
     writer.close()
 
     scored = score_evaluation_trajectory(output, template, protocol)
-
-    assert scored.result.key == EvaluationCaseKey("shirt", 3, 2)
-    assert scored.result.success is True
-    assert scored.result.success_at_end is False
-    assert scored.result.confirmed_step == 0
-    assert scored.curve.shape == (protocol.sample_count, 4)
 
     protocol_path = tmp_path / "protocol.yaml"
     protocol_path.write_text(
@@ -362,6 +481,16 @@ target:
     (condition / "meta.json").write_text(
         json.dumps(condition_meta), encoding="utf-8"
     )
+    return condition, protocol_path, templates, scored
+
+
+def test_evaluation_is_scored_from_the_standard_complete_trajectory(tmp_path: Path) -> None:
+    condition, protocol_path, templates, scored = _offline_evaluation(tmp_path)
+    assert scored.result.key == EvaluationCaseKey("shirt", 3, 2)
+    assert scored.result.success is True
+    assert scored.result.success_at_end is False
+    assert scored.result.confirmed_step == 0
+    assert scored.curve.shape == (_protocol().sample_count, 4)
 
     summary = score_evaluation_condition(condition, protocol_path, templates, workers=2)
 
@@ -370,6 +499,174 @@ target:
     export = inspect_rollout_collection_export(condition)
     assert export["source_kind"] == "evaluation_condition"
     assert export["training_eligible"] is False
+
+
+def test_rescore_requires_original_protocol_and_preserves_collection(tmp_path: Path) -> None:
+    condition, original_path, templates, old_scores = _offline_evaluation(
+        tmp_path, quarter_turn=True
+    )
+    original = load_evaluation_protocol(original_path)
+    updated = replace(original, symmetry="planar_90", rigid_distance_max=0.05)
+    updated_path = tmp_path / "updated.yaml"
+    updated_path.write_text(json.dumps(updated.to_json_dict()), encoding="utf-8")
+    original_meta = json.loads((condition / "meta.json").read_text())
+    trajectory_manifest = condition / "trajectories/shirt_000003_r002/manifest.json"
+    trajectory_bytes = trajectory_manifest.read_bytes()
+
+    with pytest.raises(ValueError, match="differs from the recorded"):
+        score_evaluation_condition(condition, updated_path, templates)
+    with pytest.raises(ValueError, match="source protocol differs"):
+        score_evaluation_condition(
+            condition, updated_path, templates, rescore_from=updated_path
+        )
+    assert json.loads((condition / "meta.json").read_text()) == original_meta
+
+    score_evaluation_condition(condition, updated_path, templates, rescore_from=original_path)
+    actual = load_evaluation_condition(condition)
+    assert actual.meta["protocol"]["fingerprint"] == updated.fingerprint
+    assert actual.meta["scoring_protocol"] == updated.to_json_dict()
+    assert actual.meta["collection_protocol"] == {
+        **original_meta["protocol"], "definition": original.to_json_dict()
+    }
+    assert actual.cases[0].terminal_rigid_distance < old_scores.result.terminal_rigid_distance
+    assert trajectory_manifest.read_bytes() == trajectory_bytes
+
+    # Repeating the current score still validates immutable, old trajectory fingerprints.
+    score_evaluation_condition(condition, updated_path, templates)
+    repeated = load_evaluation_condition(condition)
+    assert repeated == actual
+    score_evaluation_condition(condition, updated_path, templates, rescore_from=original_path)
+    assert load_evaluation_condition(condition) == actual
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"task_name": "other_task"},
+        {"metric_hz": 10},
+        {"horizon_seconds": 2.0},
+        {"target": replace(_protocol().target, symmetry_center_xy=(0.0, 0.0))},
+        {"protocol_id": "other_protocol"},
+    ],
+)
+def test_rescore_rejects_non_scoring_changes(tmp_path: Path, changes) -> None:
+    condition, original_path, templates, _ = _offline_evaluation(tmp_path)
+    updated = replace(_protocol(), symmetry="planar_90", **changes)
+    updated_path = tmp_path / "updated.yaml"
+    updated_path.write_text(json.dumps(updated.to_json_dict()), encoding="utf-8")
+    before = (condition / "meta.json").read_bytes()
+    with pytest.raises(ValueError, match="may change only metric and success"):
+        score_evaluation_condition(condition, updated_path, templates, rescore_from=original_path)
+    assert (condition / "meta.json").read_bytes() == before
+
+
+def test_rescore_formal_validation_uses_current_scoring_protocol(tmp_path, monkeypatch) -> None:
+    condition, original_path, templates, _ = _offline_evaluation(tmp_path)
+    updated = replace(_protocol(), symmetry="planar_90")
+    updated_path = tmp_path / "updated.yaml"
+    updated_path.write_text(json.dumps(updated.to_json_dict()), encoding="utf-8")
+    checked = []
+    monkeypatch.setattr(
+        "clothdojo.evaluation.collection.validate_formal_evaluation_metadata",
+        lambda meta: checked.append(meta["protocol"]["fingerprint"]),
+    )
+    score_evaluation_condition(
+        condition, updated_path, templates, rescore_from=original_path, require_formal=True
+    )
+    assert checked == [updated.fingerprint]
+
+
+def test_formal_panel_checks_pool_payload_against_frozen_metadata(tmp_path, monkeypatch):
+    from clothdojo.evaluation import collection
+
+    states = tmp_path / "states"
+    templates = tmp_path / "templates"
+    states.mkdir()
+    templates.mkdir()
+    assets = []
+    for index in range(24):
+        asset_id = f"shirt_{index}"
+        path = states / asset_id / "states.npz"
+        path.parent.mkdir()
+        path.write_bytes(f"frozen pool {index}".encode())
+        assets.append(
+            {
+                "asset_id": asset_id,
+                "split": "seen" if index < 12 else "unseen",
+                "state_count": 4,
+                "sha256": file_sha256(path),
+            }
+        )
+    meta = {
+        "selection_provenance": {"panel_id": "rapid_iteration"},
+        "seen_assets": 12,
+        "unseen_assets": 12,
+        "assets": assets,
+    }
+    (states / "meta.json").write_text(json.dumps(meta))
+    (templates / "meta.json").write_text("{}")
+    frozen_meta_hash = file_sha256(states / "meta.json")
+    monkeypatch.setattr(collection, "FORMAL_BENCHMARK_INITIAL_STATES_SHA256", frozen_meta_hash)
+    monkeypatch.setattr(
+        collection, "_FORMAL_TEMPLATES_META_SHA256", file_sha256(templates / "meta.json")
+    )
+    checked = []
+
+    def count_hash(path):
+        checked.append(path)
+        return file_sha256(path)
+
+    monkeypatch.setattr(collection, "file_sha256", count_hash)
+    assert collection._validate_formal_inputs(states, meta, templates) == {
+        asset["asset_id"]: asset["sha256"] for asset in assets
+    }
+    assert all(checked.count(states / asset["asset_id"] / "states.npz") == 1 for asset in assets)
+    (states / assets[0]["asset_id"] / "states.npz").write_bytes(b"replacement pool")
+    assert file_sha256(states / "meta.json") == frozen_meta_hash
+    with pytest.raises(ValueError, match="initial-state pool changed"):
+        collection._validate_formal_inputs(states, meta, templates)
+
+
+@pytest.mark.parametrize("field", ["protocol_fingerprint", "template_sha256"])
+def test_rescore_still_validates_original_trajectory_provenance(tmp_path, field) -> None:
+    condition, original_path, templates, _ = _offline_evaluation(tmp_path)
+    updated = replace(_protocol(), symmetry="planar_90")
+    updated_path = tmp_path / "updated.yaml"
+    updated_path.write_text(json.dumps(updated.to_json_dict()), encoding="utf-8")
+    manifest_path = condition / "trajectories/shirt_000003_r002/manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["metadata"][field] = updated.fingerprint
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    before = (condition / "meta.json").read_bytes()
+    with pytest.raises(ValueError, match="trajectory scoring provenance differs"):
+        score_evaluation_condition(condition, updated_path, templates, rescore_from=original_path)
+    assert (condition / "meta.json").read_bytes() == before
+
+
+def test_score_publication_failure_never_exposes_mismatched_results(tmp_path, monkeypatch) -> None:
+    condition, original_path, templates, _ = _offline_evaluation(tmp_path)
+    score_evaluation_condition(condition, original_path, templates)
+    updated = replace(_protocol(), symmetry="planar_90")
+    updated_path = tmp_path / "updated.yaml"
+    updated_path.write_text(json.dumps(updated.to_json_dict()), encoding="utf-8")
+    from clothdojo.evaluation import collection
+
+    real_write = collection.atomic_write_json
+
+    def fail_completion(path, meta):
+        if meta["status"] == "complete":
+            raise OSError("simulated publication failure")
+        real_write(path, meta)
+
+    monkeypatch.setattr(collection, "atomic_write_json", fail_completion)
+    with pytest.raises(OSError, match="simulated publication failure"):
+        score_evaluation_condition(condition, updated_path, templates, rescore_from=original_path)
+    with pytest.raises(RuntimeError, match="not complete"):
+        load_evaluation_condition(condition)
+    monkeypatch.setattr(collection, "atomic_write_json", real_write)
+    score_evaluation_condition(condition, updated_path, templates, rescore_from=original_path)
+    actual = load_evaluation_condition(condition).meta["protocol"]["fingerprint"]
+    assert actual == updated.fingerprint
 
 
 def _trajectory_state(index: int, particles: np.ndarray) -> TrajectoryState:
@@ -480,6 +777,27 @@ def test_paired_summary_uses_macro_assets_and_failure_censoring(tmp_path: Path) 
     assert rtc["time_average_combined_distance_mean"] is None
     assert summary["paired_comparisons"][0]["success_wins"] == 2
     assert summary["paired_comparisons"][0]["success_losses"] == 0
+
+    with pytest.raises(ValueError, match="formal benchmark"):
+        summarize_paired_conditions(
+            [tmp_path / "base", tmp_path / "rtc"], require_formal=True
+        )
+
+
+def test_formal_summary_requires_the_frozen_96_case_panel() -> None:
+    summary = {
+        "case_count": 96,
+        "asset_count": 24,
+        "initial_states_sha256": FORMAL_BENCHMARK_INITIAL_STATES_SHA256,
+        "protocol": {"fingerprint": FORMAL_BENCHMARK_PROTOCOL_FINGERPRINT},
+        "conditions": [{"condition_id": "formal", "case_count": 96}],
+    }
+
+    validate_formal_evaluation_summary(summary)
+
+    summary["case_count"] = 32
+    with pytest.raises(ValueError, match="96 paired cases"):
+        validate_formal_evaluation_summary(summary)
 
 
 def test_summary_reports_preregistered_success_checkpoints(tmp_path: Path) -> None:

@@ -62,6 +62,29 @@ trials:
         compose_jax_sft_matrix(path)
 
 
+def test_asset_tempered_matrix_is_one_reviewed_sampling_intervention(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("CLOTHDOJO_JAX_MATRIX_DIR", str(tmp_path / "matrix"))
+    monkeypatch.setenv("CLOTHDOJO_LEROBOT_DATASET", str(tmp_path / "dataset"))
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "configs/training/pi05_aloha_jax_asset_tempered.yaml"
+    )
+
+    matrix = compose_jax_sft_matrix(path)
+
+    assert len(matrix.trials) == 1
+    trial = matrix.trials[0]
+    assert trial.name == "decay60k_lr2x_seed42_asset_tempered"
+    assert "data.sampling.mode=asset_tempered" in trial.overrides
+    assert "data.sampling.alpha=0.5" in trial.overrides
+    assert (
+        f"data.sampling.index={tmp_path}/dataset/meta/asset_sampling_index.json"
+        in trial.overrides
+    )
+
+
 def test_matrix_reports_failure_after_continuing_to_later_trials(
     tmp_path: Path, monkeypatch
 ) -> None:

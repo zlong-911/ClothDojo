@@ -362,6 +362,112 @@ def test_rollout_run_calls_collection_workflow(monkeypatch, capsys) -> None:
     assert json.loads(capsys.readouterr().out) == {"compatible": True}
 
 
+@pytest.mark.parametrize("cloth_visual", [None, "white"])
+def test_benchmark_run_has_one_fixed_panel_contract(monkeypatch, capsys, cloth_visual) -> None:
+    call = {}
+    monkeypatch.setattr(
+        "clothdojo.evaluation.collection.run_evaluation_condition",
+        lambda *args, **kwargs: call.update(args=args, kwargs=kwargs)
+        or {"compatible": True},
+    )
+
+    cli.main(
+        [
+            "benchmark",
+            "run",
+            "--condition-id",
+            "formal",
+            "--scenario",
+            "scenario.yaml",
+            "--protocol",
+            "protocol.yaml",
+            "--states",
+            "states",
+            "--templates",
+            "templates",
+            "--policy",
+            "ws://policy:8080",
+            "--output",
+            "evaluation",
+            *(["--cloth-visual", cloth_visual] if cloth_visual else []),
+        ]
+    )
+
+    assert call == {
+        "args": (
+            "scenario.yaml",
+            "protocol.yaml",
+            "states",
+            "templates",
+            ("ws://policy:8080",),
+            "evaluation",
+        ),
+        "kwargs": {
+            "condition_id": "formal",
+            "cloth_visual": cloth_visual or "nocs",
+            "expected_checkpoint_sha256": None,
+            "image_preprocessing": "none",
+            "assets_root": "assets",
+            "gpus": ("0",),
+            "execution": "chunk",
+            "exec_horizon": 10,
+            "rtc_delay_steps": 0,
+            "batch_size": 4,
+            "defer_scoring": False,
+            "score_workers": 1,
+        },
+    }
+    assert json.loads(capsys.readouterr().out) == {"compatible": True}
+
+
+@pytest.mark.parametrize("original_protocol", [None, "original.yaml"])
+def test_benchmark_score_explicit_rescore(monkeypatch, capsys, original_protocol) -> None:
+    call = {}
+    monkeypatch.setattr(
+        "clothdojo.evaluation.collection.score_evaluation_condition",
+        lambda *args, **kwargs: call.update(args=args, kwargs=kwargs)
+        or {"compatible": True},
+    )
+    args = [
+        "benchmark", "score", "--condition", "evaluation", "--protocol", "protocol.yaml",
+        "--templates", "templates", "--workers", "3",
+    ]
+    if original_protocol is not None:
+        args.extend(["--rescore-from", original_protocol])
+    cli.main(args)
+    assert call == {
+        "args": ("evaluation", "protocol.yaml", "templates"),
+        "kwargs": {"workers": 3, "require_formal": True, "rescore_from": original_protocol},
+    }
+    assert json.loads(capsys.readouterr().out) == {"compatible": True}
+
+
+def test_benchmark_run_rejects_asset_count_overrides() -> None:
+    with pytest.raises(SystemExit):
+        cli.main(
+            [
+                "benchmark",
+                "run",
+                "--condition-id",
+                "invalid",
+                "--scenario",
+                "scenario.yaml",
+                "--protocol",
+                "protocol.yaml",
+                "--states",
+                "states",
+                "--templates",
+                "templates",
+                "--output",
+                "evaluation",
+                "--seen-assets",
+                "4",
+                "--unseen-assets",
+                "4",
+            ]
+        )
+
+
 def test_policy_serve_calls_rlinf_boundary(monkeypatch) -> None:
     call = {}
     monkeypatch.setattr(
@@ -388,6 +494,7 @@ def test_policy_serve_calls_rlinf_boundary(monkeypatch) -> None:
         "args": ("/models/sft", "/data/norm"),
         "kwargs": {
             "num_steps": 10,
+            "image_preprocessing": "none",
             "rtc_guidance_horizon": 10,
             "rtc_max_guidance_weight": 10.0,
             "rtc_prefix_schedule": "linear",
@@ -424,6 +531,7 @@ def test_policy_serve_jax_keeps_the_original_reference_boundary(monkeypatch) -> 
         "args": ("/models/jax/40000", "/data/norm", "/configs/jax.yaml"),
         "kwargs": {
             "num_steps": 5,
+            "image_preprocessing": "none",
             "host": "127.0.0.1",
             "port": 8080,
         },
@@ -454,6 +562,7 @@ def test_policy_serve_cfg_calls_composed_rollout_boundary(monkeypatch) -> None:
         "args": ("/models/cfg", "/data/norm"),
         "kwargs": {
             "num_steps": 5,
+            "image_preprocessing": "none",
             "guidance_scale": 1.5,
             "guidance_type": "positive",
             "positive_only_conditional": False,
@@ -544,6 +653,9 @@ def test_export_lerobot_detects_rollout_collection(
             "device": "cuda:5",
             "repo_id": None,
             "image_writer_threads": 6,
+            "shard_index": None,
+            "shard_count": None,
+            "cloth_visual": "nocs",
         },
     }
     assert json.loads(capsys.readouterr().out) == {"compatible": True}
@@ -599,6 +711,9 @@ def test_trajectory_lerobot_uses_direct_replay_and_default_output(
             "image_writer_threads": 6,
             "min_segment_frames": 1,
             "whole_trajectory_good_only": False,
+            "shard_index": None,
+            "shard_count": None,
+            "cloth_visual": "nocs",
         },
     }
 

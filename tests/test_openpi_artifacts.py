@@ -21,7 +21,9 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _artifacts(tmp_path: Path, *, frames: int = 65) -> tuple[Path, Path]:
+def _artifacts(
+    tmp_path: Path, *, frames: int = 65, task: str = "flatten the shirt"
+) -> tuple[Path, Path]:
     dataset = tmp_path / "dataset"
     info = {
         "codebase_version": "v2.1",
@@ -58,7 +60,7 @@ def _artifacts(tmp_path: Path, *, frames: int = 65) -> tuple[Path, Path]:
     _write_json(dataset / "meta/info.json", info)
     _write_json(dataset / "meta/clothdojo.json", sidecar)
     (dataset / "meta/tasks.jsonl").write_text(
-        json.dumps({"task_index": 0, "task": "flatten the shirt"}) + "\n",
+        json.dumps({"task_index": 0, "task": task}) + "\n",
         encoding="utf-8",
     )
     (dataset / "meta/episodes.jsonl").write_text(
@@ -108,6 +110,46 @@ def test_openpi_artifacts_validate_current_dataset_and_norm_stats(tmp_path: Path
 
     assert dataset["frames"] == 65
     assert norm["dataset_info_sha256"] == dataset["info_sha256"]
+
+
+def test_openpi_artifacts_accept_equivalent_prompt_formatting(tmp_path: Path) -> None:
+    dataset_path, _ = _artifacts(tmp_path, task="Flatten the shirt.")
+
+    dataset = inspect_openpi_dataset(dataset_path)
+
+    assert dataset["task"] == "flatten the shirt"
+    assert dataset["prompt"] == "Flatten the shirt."
+
+
+def test_norm_stats_are_prompt_independent_but_keep_original_provenance(tmp_path):
+    dataset_path, norm_path = _artifacts(tmp_path)
+    stats_before = (norm_path / "norm_stats.json").read_bytes()
+    provenance_before = (norm_path / "clothdojo.json").read_bytes()
+    kwargs = {
+        "dataset": inspect_openpi_dataset(dataset_path),
+        "config_name": "pi05_aloha_robotwin",
+        "action_horizon": 50,
+    }
+    result = inspect_openpi_norm_stats(
+        norm_path, data_kwargs={"default_prompt": "flatten the shirt"}, **kwargs
+    )
+    assert result["data_kwargs"] == {"default_prompt": "Flatten the shirt."}
+    assert (norm_path / "norm_stats.json").read_bytes() == stats_before
+    assert (norm_path / "clothdojo.json").read_bytes() == provenance_before
+    for name in ("adapt_to_pi", "extra_delta_transform"):
+        with pytest.raises(ValueError, match="data_kwargs"):
+            inspect_openpi_norm_stats(
+                norm_path,
+                data_kwargs={"default_prompt": "flatten the shirt", name: True},
+                **kwargs,
+            )
+
+
+def test_openpi_artifacts_reject_another_task(tmp_path: Path) -> None:
+    dataset_path, _ = _artifacts(tmp_path, task="Fold the shirt.")
+
+    with pytest.raises(ValueError, match="task must be exactly"):
+        inspect_openpi_dataset(dataset_path)
 
 
 def test_openpi_artifacts_reject_short_dataset(tmp_path: Path) -> None:

@@ -10,6 +10,7 @@ from safetensors.torch import save_file
 from clothdojo.rollout.checkpoint import (
     ExpectedCheckpointLayout,
     TensorSpec,
+    _read_pytorch_metadata,
     inspect_rlinf_openpi_checkpoint,
     resolve_rlinf_openpi_weights,
     strict_reload_matching_rlinf_openpi_checkpoint,
@@ -43,6 +44,30 @@ def _inspect(root: Path) -> dict:
     )
 
 
+def test_pytorch_metadata_falls_back_to_meta_for_fsdp_tensor_rebuild(
+    monkeypatch, tmp_path: Path
+) -> None:
+    path = tmp_path / "full_weights.pt"
+    path.write_bytes(b"checkpoint")
+    calls = []
+
+    def load(source, **kwargs):
+        calls.append((source, kwargs))
+        if kwargs["map_location"] == "cpu":
+            raise RuntimeError("FakeTensor cannot rebuild FSDP Tensor metadata")
+        return {"weight": torch.empty((3, 2), device="meta")}
+
+    monkeypatch.setattr(torch, "load", load)
+
+    result = _read_pytorch_metadata(path)
+
+    assert result["weight"].spec == TensorSpec((3, 2), "float32")
+    assert result["weight"].storage_identity is None
+    assert [call[1]["map_location"] for call in calls] == ["cpu", "meta"]
+    assert all(call[1]["mmap"] is True for call in calls)
+    assert all(call[1]["weights_only"] is True for call in calls)
+
+
 def test_strict_checkpoint_accepts_layout_without_tied_weights(tmp_path: Path) -> None:
     layout = ExpectedCheckpointLayout(
         tensors={"projection.weight": TensorSpec((2, 2), "float32")},
@@ -60,6 +85,73 @@ def test_strict_checkpoint_accepts_layout_without_tied_weights(tmp_path: Path) -
     )
 
     assert manifest["tied_aliases"] == []
+
+
+def test_native_sft_contract_identifies_wrapper_state_dict(tmp_path: Path) -> None:
+    weights = _write_full_weights(
+        tmp_path,
+        {
+            "model.embedding.weight": torch.zeros(4, 2),
+            "model.lm_head.weight": torch.zeros(4, 2),
+            "model.projection.weight": torch.zeros(2, 2, dtype=torch.bfloat16),
+        },
+    )
+    actor = weights.parents[1]
+    (actor / "clothdojo_weights.json").write_text(
+        '{"schema":"clothdojo_openpi_rlinf_checkpoint","format_version":1,'
+        '"ema":{"decay":0.99,"path":"model_state_dict/full_weights.pt",'
+        '"purpose":"inference and rollout"}}'
+    )
+    layout = ExpectedCheckpointLayout(
+        tensors={
+            "model.embedding.weight": TensorSpec((4, 2), "float32"),
+            "model.lm_head.weight": TensorSpec((4, 2), "float32"),
+            "model.projection.weight": TensorSpec((2, 2), "bfloat16"),
+        },
+        tied_groups=(),
+    )
+
+    manifest = inspect_rlinf_openpi_checkpoint(
+        actor,
+        action_horizon=50,
+        expected_layout=layout,
+    )
+
+    assert manifest["state_dict_layout"] == "sft_wrapper"
+    assert manifest["stored_dtype_contract"] == "native_openpi_rlinf_wrapper_float32"
+
+
+def test_native_cfg_contract_identifies_wrapper_from_step_root(tmp_path: Path) -> None:
+    weights = _write_full_weights(
+        tmp_path,
+        {
+            "model.embedding.weight": torch.zeros(4, 2),
+            "model.lm_head.weight": torch.zeros(4, 2),
+            "model.projection.weight": torch.zeros(2, 2, dtype=torch.bfloat16),
+        },
+    )
+    actor = weights.parents[1]
+    (actor / "clothdojo_weights.json").write_text(
+        '{"schema":"clothdojo_openpi_rlinf_cfg_checkpoint","format_version":1,'
+        '"weights":{"path":"model_state_dict/full_weights.pt",'
+        '"purpose":"inference and rollout","source":"online"}}'
+    )
+    layout = ExpectedCheckpointLayout(
+        tensors={
+            "model.embedding.weight": TensorSpec((4, 2), "float32"),
+            "model.lm_head.weight": TensorSpec((4, 2), "float32"),
+            "model.projection.weight": TensorSpec((2, 2), "bfloat16"),
+        },
+        tied_groups=(),
+    )
+
+    manifest = inspect_rlinf_openpi_checkpoint(
+        tmp_path,
+        action_horizon=50,
+        expected_layout=layout,
+    )
+
+    assert manifest["state_dict_layout"] == "cfg_wrapper"
 
 
 class _TiedModel(torch.nn.Module):
@@ -282,10 +374,15 @@ def test_safetensors_rejects_post_conversion_dtype_in_base_artifact(tmp_path: Pa
 
 
 def test_resolver_matches_rlinf_loader_precedence_and_ignores_dcp(tmp_path: Path) -> None:
-    _write_full_weights(tmp_path, {"actor": torch.zeros(1)})
+    from rlinf.models.embodiment.openpi_rlinf.utils.rlt_utils import (
+        load_full_wrapper_weights,
+        resolve_full_weights,
+    )
+
+    actor = _write_full_weights(tmp_path, {"model.weight": torch.full((1, 1), 2.0)})
     direct = tmp_path / "model_state_dict/full_weights.pt"
     direct.parent.mkdir(parents=True)
-    torch.save({"direct": torch.zeros(1)}, direct)
+    torch.save({"model.weight": torch.full((1, 1), -3.0)}, direct)
     dcp = tmp_path / "actor/dcp_checkpoint"
     dcp.mkdir(parents=True)
     (dcp / ".metadata").write_bytes(b"metadata")
@@ -293,7 +390,21 @@ def test_resolver_matches_rlinf_loader_precedence_and_ignores_dcp(tmp_path: Path
 
     resolved = resolve_rlinf_openpi_weights(tmp_path)
 
-    assert resolved.paths == (direct,)
+    loaded_path = resolve_full_weights(tmp_path)
+    assert resolved.paths == (loaded_path,) == (actor,)
+    wrapper = torch.nn.Module()
+    wrapper.model = torch.nn.Linear(1, 1, bias=False)
+    load_full_wrapper_weights(wrapper, loaded_path, expect_rlt=False)
+    assert wrapper.model.weight.item() == 2.0
+    manifest = inspect_rlinf_openpi_checkpoint(
+        tmp_path,
+        action_horizon=50,
+        expected_layout=ExpectedCheckpointLayout(
+            tensors={"model.weight": TensorSpec((1, 1), "float32")}, tied_groups=()
+        ),
+    )
+    assert manifest["weights_sha256"] == hashlib.sha256(actor.read_bytes()).hexdigest()
+    assert resolve_rlinf_openpi_weights(direct).paths == (resolve_full_weights(direct),)
 
 
 def test_resolver_rejects_dcp_only_checkpoint(tmp_path: Path) -> None:

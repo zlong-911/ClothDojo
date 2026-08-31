@@ -1,0 +1,25 @@
+schema: clothdojo_pi05_jax_matrix
+format_version: 1
+name: pi05_aloha_asset_tempered_20260827
+base_config: pi05_aloha_jax.yaml
+status_dir: ${oc.env:CLOTHDOJO_JAX_MATRIX_DIR}
+continue_on_error: false
+stages: [initialize, overfit, pilot, parity, full]
+
+# Match the completed 2x/60k/seed42 cell and change only frame selection. The
+# per-frame weight n_asset^(alpha-1) tempers the observed asset distribution;
+# alpha=0.5 is the single reviewed sampling intervention.
+trials:
+  - name: decay60k_lr2x_seed42_asset_tempered
+    overrides:
+      - experiment.profile=decay_60k_lr_2x_seed42
+      - training.num_train_steps=60000
+      - optimizer.peak_lr=5.0e-5
+      - optimizer.decay_steps=60000
+      - optimizer.decay_lr=5.0e-6
+      - gates.pilot_steps=3000
+      - data.sampling.mode=asset_tempered
+      - data.sampling.alpha=0.5
+      - data.sampling.index=${oc.env:CLOTHDOJO_LEROBOT_DATASET}/meta/asset_sampling_index.json
+      - logging.run_name=shirt_flatten_reviewed_good_pi05_jax_decay60k_lr2x_seed42_asset_tempered
+      - logging.wandb_group=pi05_sft_asset_sampling

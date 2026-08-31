@@ -16,8 +16,10 @@ datasets:
   # Both ordinary v2.1 datasets contain the STEAM and OpenPI cameras.
   - role: sft
     dataset_path: ${oc.env:CLOTHDOJO_CFG_EXPERT_DATASET}
+    advantage_tag: ${oc.env:CLOTHDOJO_STEAM_ADVANTAGE_TAG}
     positive_fraction: 0.80
 
   - role: rollout
     dataset_path: ${oc.env:CLOTHDOJO_CFG_ROLLOUT_DATASET}
+    advantage_tag: ${oc.env:CLOTHDOJO_STEAM_ADVANTAGE_TAG}
     positive_fraction: 0.30

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,14 +12,18 @@ from torch.utils.data.distributed import DistributedSampler
 
 from clothdojo.training import rlinf
 from clothdojo.training.openpi_rlinf_sft import (
+    _action_offset_loss_manifest_from_config,
+    _action_offset_weights_from_config,
     _adapt_official_openpi_loader,
     _EpochAdvancingSampler,
     _initialize_ema_state,
+    _reduce_action_offset_loss,
     _swap_parameter_data_with_ema,
     _update_ema_state,
     _validate_fp32_training_state,
 )
 from clothdojo.training.steam import configure_steam_member
+from clothdojo.training.worker_environment import apply_worker_environment
 
 
 def test_run_config_delegates_to_rlinf_runner(monkeypatch) -> None:
@@ -28,6 +33,12 @@ def test_run_config_delegates_to_rlinf_runner(monkeypatch) -> None:
         "inspect_openpi_rlinf_sft",
         lambda cfg, **_kwargs: events.append(("preflight", cfg))
         or {"compatible": True, "openpi_data_home": "/openpi-cache"},
+    )
+    monkeypatch.setattr(
+        rlinf,
+        "write_openpi_rlinf_launch_manifest",
+        lambda cfg, manifest: events.append(("manifest", cfg, manifest))
+        or Path("/output/clothdojo_launch.json"),
     )
 
     class Multiprocessing:
@@ -93,16 +104,48 @@ def test_run_config_delegates_to_rlinf_runner(monkeypatch) -> None:
 
     assert events[0] == ("preflight", cfg)
     assert os.environ["OPENPI_DATA_HOME"] == "/openpi-cache"
-    assert events[1] == ("start_method", "spawn", True)
+    assert events[1] == (
+        "manifest",
+        cfg,
+        {"compatible": True, "openpi_data_home": "/openpi-cache"},
+    )
+    assert events[2] == ("start_method", "spawn", True)
     assert ("strategy", "actor") in events
     assert ("runner", cfg, "actor-group") in events
     assert events[-2:] == [("init_workers",), ("run",)]
-
 
 def test_openpi_rlinf_runtime_uses_current_worker() -> None:
     from clothdojo.training.openpi_rlinf_sft import OpenPiRlinfSftWorker
 
     assert rlinf._load_runtime("openpi-rlinf").worker_type is OpenPiRlinfSftWorker
+
+
+def test_worker_environment_overrides_ray_actor_defaults(monkeypatch) -> None:
+    from omegaconf import OmegaConf
+
+    cfg = OmegaConf.create(
+        {
+            "clothdojo": {
+                "worker_environment": {
+                    "GLOO_SOCKET_IFNAME": "br0",
+                    "NCCL_SOCKET_IFNAME": "br0",
+                    "NCCL_IB_DISABLE": "0",
+                    "NCCL_IB_GID_INDEX": None,
+                }
+            }
+        }
+    )
+    monkeypatch.setenv("GLOO_SOCKET_IFNAME", "eth1")
+    monkeypatch.setenv("NCCL_SOCKET_IFNAME", "eth1")
+    monkeypatch.setenv("NCCL_IB_DISABLE", "1")
+    monkeypatch.setenv("NCCL_IB_GID_INDEX", "7")
+
+    apply_worker_environment(cfg)
+
+    assert os.environ["GLOO_SOCKET_IFNAME"] == "br0"
+    assert os.environ["NCCL_SOCKET_IFNAME"] == "br0"
+    assert os.environ["NCCL_IB_DISABLE"] == "0"
+    assert "NCCL_IB_GID_INDEX" not in os.environ
 
 
 def test_openpi_rlinf_check_does_not_import_scheduler_runtime(monkeypatch) -> None:
@@ -232,7 +275,104 @@ def test_openpi_rlinf_config_preserves_training_contract(monkeypatch, tmp_path) 
     assert cfg.actor.model.openpi_data.adapt_to_pi is False
     assert cfg.actor.model.openpi_data.extra_delta_transform is True
     assert cfg.actor.model.openpi_data.norm_stats_path == str(tmp_path / "norm-stats")
-    assert cfg.clothdojo.jax_reference.trial == "decay60k_lr2x_seed43"
+    assert cfg.clothdojo.jax_reference is None
+    assert cfg.clothdojo.image_augmentation is False
+    assert cfg.actor.model.openpi_data.default_prompt == "flatten the shirt"
+
+    from omegaconf import OmegaConf
+
+    base = OmegaConf.to_container(
+        rlinf.compose_config(
+            project_root / "configs/training/pi05_aloha_openpi_rlinf_bs128_30k.yaml"
+        ), resolve=True,
+    )
+    noaug = OmegaConf.to_container(
+        rlinf.compose_config(
+            project_root / "configs/training/pi05_aloha_openpi_rlinf_noaug_bs128_30k.yaml"
+        ), resolve=True,
+    )
+    assert noaug["clothdojo"]["image_augmentation"] is False
+    noaug["runner"]["logger"]["experiment_name"] = base["runner"]["logger"]["experiment_name"]
+    assert noaug == base
+
+
+def test_openpi_rlinf_constant_tail_preserves_cosine_prefix() -> None:
+    from rlinf.hybrid_engines.fsdp.utils import get_lr_scheduler
+
+    project_root = Path(__file__).resolve().parents[1]
+    config_path = (
+        project_root
+        / "configs/training/pi05_aloha_openpi_rlinf_mirrored_noaug_bs256_wd001_40k.yaml"
+    )
+    cfg = rlinf.compose_config(config_path)
+    baseline = rlinf.compose_config(config_path, ["runner.max_steps=30000"])
+
+    def trace(config):
+        optim = config.actor.optim
+        optimizer = torch.optim.AdamW([torch.nn.Parameter(torch.zeros(()))], lr=optim.lr)
+        scheduler = get_lr_scheduler(
+            lr_scheduler=optim.lr_scheduler,
+            optimizer=optimizer,
+            num_warmup_steps=optim.lr_warmup_steps,
+            num_training_steps=optim.total_training_steps,
+            num_cycles=optim.num_cycles,
+            min_lr=optim.min_lr,
+        )
+        rates = []
+        for _ in range(config.runner.max_steps):
+            rates.append(optimizer.param_groups[0]["lr"])
+            optimizer.step()
+            scheduler.step()
+        return rates
+
+    rates = trace(cfg)
+    assert len(rates) == 40000
+    assert rates[:30000] == trace(baseline)
+    assert rates[1000] == pytest.approx(5.0e-5)
+    assert rates[29999] > 5.0e-6
+    assert rates[30000:] == pytest.approx([5.0e-6] * 10000, rel=1e-12, abs=0)
+
+
+def test_openpi_rlinf_execution_focus_changes_only_loss_reduction(monkeypatch, tmp_path) -> None:
+    for name, value in {
+        "CLOTHDOJO_LEROBOT_DATASET": tmp_path / "dataset",
+        "CLOTHDOJO_PI05_CHECKPOINT": tmp_path / "checkpoint",
+        "CLOTHDOJO_PI05_NORM_STATS": tmp_path / "norm-stats",
+        "CLOTHDOJO_TRAIN_OUTPUT": tmp_path / "outputs",
+        "CLOTHDOJO_OPENPI_CACHE": tmp_path / "openpi-cache",
+    }.items():
+        monkeypatch.setenv(name, str(value))
+
+    project_root = Path(__file__).resolve().parents[1]
+    baseline = rlinf.compose_config(
+        project_root / "configs/training/pi05_aloha_openpi_rlinf_lr2x_60k.yaml"
+    )
+    focused = rlinf.compose_config(
+        project_root / "configs/training/pi05_aloha_openpi_rlinf_lr2x_60k_execution_focus.yaml"
+    )
+
+    assert baseline.actor.seed == focused.actor.seed == 43
+    assert baseline.runner.max_steps == focused.runner.max_steps == 60000
+    assert baseline.actor.optim == focused.actor.optim
+    assert _action_offset_weights_from_config(baseline) == (1.0,) * 50
+    assert _action_offset_weights_from_config(focused) == ((1.0,) * 10 + (0.5,) * 40)
+    manifest = _action_offset_loss_manifest_from_config(focused)
+    assert manifest["profile"] == "fixed_delay_rtc"
+    assert manifest["reduction"] == "batch_mean_of_weight_normalized_action_offset_mean"
+
+
+def test_openpi_rlinf_action_offset_reduction_matches_manual_weighting() -> None:
+    per_offset = torch.tensor([[1.0, 3.0, 9.0], [2.0, 4.0, 8.0]])
+
+    loss = _reduce_action_offset_loss(per_offset, (1.0, 1.0, 0.5))
+
+    expected = torch.tensor(
+        [
+            (1.0 + 3.0 + 0.5 * 9.0) / 2.5,
+            (2.0 + 4.0 + 0.5 * 8.0) / 2.5,
+        ]
+    ).mean()
+    torch.testing.assert_close(loss, expected)
 
 
 def test_openpi_rlinf_contract_is_derived_from_the_named_jax_trial(
@@ -256,6 +396,12 @@ def test_openpi_rlinf_contract_is_derived_from_the_named_jax_trial(
     project_root = Path(__file__).resolve().parents[1]
     config_path = project_root / "configs/training/pi05_aloha_openpi_rlinf_lr2x_60k.yaml"
     cfg = rlinf.compose_config(config_path)
+    # Historical framework comparisons explicitly retain their original inputs.
+    cfg.clothdojo.jax_reference = {
+        "matrix": "pi05_aloha_jax_lr2x_60k_seed43.yaml",
+        "trial": "decay60k_lr2x_seed43",
+    }
+    cfg.actor.model.openpi_data.default_prompt = "Flatten the shirt."
     contract = {
         "seed": 43,
         "global_batch_size": 64,
@@ -279,15 +425,55 @@ def test_openpi_rlinf_contract_is_derived_from_the_named_jax_trial(
     with pytest.raises(ValueError, match="differs from its JAX reference"):
         rlinf._inspect_jax_reference(cfg, config_path, {**contract, "seed": 42})
 
+    from omegaconf import OmegaConf
 
+    from clothdojo.training import jax_sft
+
+    OmegaConf.update(
+        cfg,
+        "loss.action_offset",
+        {
+            "profile": "fixed_delay_rtc",
+            "focus": 0.5,
+            "exec_horizon": 10,
+            "delay_steps": 0,
+        },
+        force_add=True,
+    )
+    with pytest.raises(ValueError, match="action-offset loss differs"):
+        rlinf._inspect_jax_reference(cfg, config_path, contract)
+
+    compose_reference = jax_sft.compose_jax_sft_spec
+    sampling = jax_sft.DataSamplingSpec("frame", None, None)
+
+    def focused_reference(*args, **kwargs):
+        return dataclasses.replace(
+            compose_reference(*args, **kwargs),
+            action_offset_loss=jax_sft.ActionOffsetLossSpec("fixed_delay_rtc", 0.5, 10, 0),
+            data_sampling=sampling,
+        )
+
+    monkeypatch.setattr(jax_sft, "compose_jax_sft_spec", focused_reference)
+    assert rlinf._inspect_jax_reference(cfg, config_path, contract) is not None
+    sampling = jax_sft.DataSamplingSpec("asset_tempered", 0.5, tmp_path / "sampling.json")
+    with pytest.raises(ValueError, match="only supports frame sampling"):
+        rlinf._inspect_jax_reference(cfg, config_path, contract)
+
+
+@pytest.mark.parametrize("resume_setting", [{}, {"resume_dir": None}])
 def test_openpi_rlinf_preflight_reuses_shared_artifact_contract(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, resume_setting
 ) -> None:
     from omegaconf import OmegaConf
 
     cfg = OmegaConf.create(
         {
-            "runner": {"max_steps": 60000, "save_interval": 10000},
+            "runner": {
+                "max_steps": 60000,
+                "save_interval": 10000,
+                "logger": {"log_path": str(tmp_path / "run")},
+                **resume_setting,
+            },
             "data": {
                 "train_data_paths": "/dataset",
                 "openpi_data_home": str(tmp_path / "openpi-cache"),
@@ -348,7 +534,11 @@ def test_openpi_rlinf_preflight_reuses_shared_artifact_contract(
 
     result = rlinf.inspect_openpi_rlinf_sft(cfg)
 
+    assert result["schema"] == "clothdojo_pi05_launch_preflight"
+    assert result["format_version"] == 1
     assert result["compatible"] is True
+    assert result["image_augmentation"] is False
+    assert result["training_prompt"] == "Flatten the shirt."
     assert calls[0] == ("dataset", "/dataset")
     assert calls[1][0:2] == ("norm", "/norm")
     assert calls[1][2]["data_kwargs"] == {
@@ -356,6 +546,112 @@ def test_openpi_rlinf_preflight_reuses_shared_artifact_contract(
         "extra_delta_transform": True,
         "default_prompt": "Flatten the shirt.",
     }
+
+    with monkeypatch.context() as patch:
+        patch.setattr(rlinf, "_inspect_jax_reference", lambda *_args: {"trial": "reference"})
+        source_prompt = "flatten the shirt"
+        patch.setattr(
+            "clothdojo.training.openpi_artifacts.inspect_openpi_dataset",
+            lambda path: {"root": path, "prompt": source_prompt},
+        )
+        with pytest.raises(ValueError, match="training prompt differs from its JAX dataset prompt"):
+            rlinf.inspect_openpi_rlinf_sft(cfg)
+        source_prompt = "Flatten the shirt."
+        assert rlinf.inspect_openpi_rlinf_sft(cfg)["training_prompt"] == source_prompt
+
+    cfg.runner.max_steps = 65000
+    result = rlinf.inspect_openpi_rlinf_sft(cfg)
+    assert result["training_contract"]["steps"] == 65000
+    assert result["training_contract"]["decay_steps"] == 60000
+
+    cfg.runner.max_steps = 59000
+    with pytest.raises(ValueError, match="warmup_steps < decay_steps <= steps"):
+        rlinf.inspect_openpi_rlinf_sft(cfg)
+    cfg.runner.max_steps = 60000
+    cfg.actor.optim.lr_warmup_steps = 60000
+    with pytest.raises(ValueError, match="warmup_steps < decay_steps <= steps"):
+        rlinf.inspect_openpi_rlinf_sft(cfg)
+    cfg.actor.optim.lr_warmup_steps = 1000
+
+    cfg.clothdojo = {"image_augmentation": False}
+    result = rlinf.inspect_openpi_rlinf_sft(cfg)
+    assert result["image_augmentation"] is False
+    assert result["resolved_config"]["clothdojo"]["image_augmentation"] is False
+    cfg.clothdojo.image_augmentation = "false"
+    with pytest.raises(TypeError, match="image_augmentation must be a boolean"):
+        rlinf.inspect_openpi_rlinf_sft(cfg)
+
+
+def test_openpi_rlinf_launch_manifest_is_atomic_and_immutable(tmp_path) -> None:
+    output = tmp_path / "run"
+    cfg = SimpleNamespace(
+        runner=SimpleNamespace(logger=SimpleNamespace(log_path=str(output)))
+    )
+    manifest = {
+        "schema": "clothdojo_pi05_launch_preflight",
+        "format_version": 1,
+        "compatible": True,
+    }
+
+    path = rlinf.write_openpi_rlinf_launch_manifest(cfg, manifest)
+
+    assert path == output / "clothdojo_launch.json"
+    assert path.read_text() == (
+        '{\n  "compatible": true,\n  "format_version": 1,\n'
+        '  "schema": "clothdojo_pi05_launch_preflight"\n}\n'
+    )
+    original = path.read_bytes()
+    for repeat in (manifest, {**manifest, "compatible": False}):
+        with pytest.raises(FileExistsError, match="new output directory"):
+            rlinf.write_openpi_rlinf_launch_manifest(cfg, repeat)
+        assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("entry", [rlinf.check, rlinf.run])
+@pytest.mark.parametrize("resume_dir", ["/old/checkpoints/global_step_10000", ""])
+def test_sft_rejects_resume_before_launch(monkeypatch, tmp_path, entry, resume_dir):
+    from omegaconf import OmegaConf
+
+    output = tmp_path / "run"
+    cfg = OmegaConf.create(
+        {"runner": {"resume_dir": resume_dir, "logger": {"log_path": str(output)}}}
+    )
+    monkeypatch.setattr(rlinf, "compose_config", lambda *args, **kwargs: cfg)
+    monkeypatch.setattr(
+        rlinf, "_load_runtime", lambda kind: pytest.fail("must reject before initializing Ray")
+    )
+
+    with pytest.raises(ValueError, match="SFT resume is disabled"):
+        entry(kind="openpi-rlinf", config_path="unused.yaml")
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("has_checkpoint", [False, True])
+def test_sft_rejects_existing_output_even_without_launch_manifest(tmp_path, has_checkpoint):
+    from omegaconf import OmegaConf
+
+    output = tmp_path / "run"
+    output.mkdir()
+    checkpoint = output / "legacy" / "checkpoints" / "global_step_10000" / "weights.pt"
+    if has_checkpoint:
+        checkpoint.parent.mkdir(parents=True)
+        checkpoint.write_bytes(b"old weights")
+    cfg = OmegaConf.create({"runner": {"logger": {"log_path": str(output)}}})
+
+    with pytest.raises(FileExistsError, match="new output directory"):
+        rlinf.inspect_openpi_rlinf_sft(cfg)
+    with pytest.raises(FileExistsError, match="new output directory"):
+        rlinf.write_openpi_rlinf_launch_manifest(cfg, {})
+    assert not (output / "clothdojo_launch.json").exists()
+    if has_checkpoint:
+        assert checkpoint.read_bytes() == b"old weights"
+
+
+def test_sft_worker_rejects_direct_checkpoint_restore():
+    from clothdojo.training.openpi_rlinf_sft import OpenPiRlinfSftWorker
+
+    with pytest.raises(ValueError, match="SFT resume is disabled"):
+        OpenPiRlinfSftWorker.load_checkpoint(None, "/old/checkpoints/global_step_10000/actor")
 
 
 def test_openpi_loader_adapter_uses_actor_seed_and_advances_epoch() -> None:

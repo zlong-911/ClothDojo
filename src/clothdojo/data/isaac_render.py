@@ -941,8 +941,15 @@ def _require_isaac5_runtime() -> None:
 
 
 def _start_isaac_app(gpu_id: int, portable: Path):
+    import isaacsim
     from isaacsim import SimulationApp
 
+    extension_cache = Path(isaacsim.__file__).resolve().parent / "extscache"
+    if not extension_cache.is_dir():
+        raise RuntimeError(
+            "Isaac RTX export requires the local Isaac Sim extension cache; "
+            "run scripts/setup-environment.sh"
+        )
     original_argv = sys.argv
     sys.argv = [sys.argv[0], "--portable-root", str(portable)]
     try:
@@ -959,6 +966,8 @@ def _start_isaac_app(gpu_id: int, portable: Path):
                 "enable_crashreporter": False,
                 "limit_cpu_threads": 4,
                 "extra_args": [
+                    "--ext-folder",
+                    str(extension_cache),
                     "--/rtx/hydra/supportMultiTickRate=false",
                     "--/rtx/post/motionBlur/enabled=false",
                 ],

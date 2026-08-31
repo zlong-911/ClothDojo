@@ -4,13 +4,17 @@ import json
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from clothdojo.data.rollout import (
     CAMERA_NAMES,
     RolloutLeRobotWriter,
+    _balanced_group_shards,
     _export_canonical_collection,
     _features,
     _restore_render_state,
+    _select_trajectory_shard,
+    _trajectory_shard_source_ids,
     _TrajectoryRenderState,
 )
 from clothdojo.robots import (
@@ -50,6 +54,27 @@ class _Robot:
 
     def set_attribute(self, name, state, value) -> None:
         assert getattr(state, name) is value
+
+
+def test_rollout_writer_never_reuses_unverified_staging(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("CLOTHDOJO_RESUME_STAGING", "1")
+    staging = tmp_path / ".rollout.tmp"
+    staging.mkdir()
+    artifact = staging / "existing-data"
+    artifact.write_bytes(b"previous export")
+
+    with pytest.raises(FileExistsError, match="unfinished rollout staging"):
+        RolloutLeRobotWriter(
+            tmp_path / "rollout",
+            fps=50,
+            prompt="Flatten the shirt.",
+            scenario={},
+            trajectory="/different/collection",
+            policy={},
+            training_eligible=True,
+        )
+
+    assert artifact.read_bytes() == b"previous export"
 
 
 def test_live_rollout_export_is_atomic_and_explicitly_ineligible(tmp_path) -> None:
@@ -108,6 +133,91 @@ def test_rollout_features_match_expert_policy_order() -> None:
     assert fr3_features["observation.state"]["shape"] == (16,)
     assert fr3_features["observation.state"]["names"][7] == "left_gripper_open_state"
     assert fr3_features["action"]["names"][8] == "right/fr3v2_joint1_target"
+
+
+def test_trajectory_shards_are_deterministic_and_disjoint() -> None:
+    manifest = {
+        "trajectories": [
+            {"asset_id": asset, "episode": episode}
+            for asset in ("a", "b", "c", "d", "e")
+            for episode in range(2)
+        ],
+        "policy": {"kind": "test"},
+    }
+
+    shards = [
+        _select_trajectory_shard(manifest, shard_index=index, shard_count=3)
+        for index in range(3)
+    ]
+
+    assert [
+        [episode["asset_id"] for episode in shard["trajectories"]]
+        for shard in shards
+    ] == [
+        ["a", "a", "d", "d"],
+        ["b", "b", "e", "e"],
+        ["c", "c"],
+    ]
+    assert len(manifest["trajectories"]) == 10
+
+
+def test_trajectory_shards_balance_whole_groups_by_work() -> None:
+    assert _balanced_group_shards(
+        [("heavy", 8), ("left", 4), ("right", 4)], 2
+    ) == [{"heavy"}, {"left", "right"}]
+
+
+def test_rollout_shards_balance_recorded_action_counts() -> None:
+    manifest = {
+        "trajectories": [
+            {"asset_id": "heavy", "action_count": 8},
+            {"asset_id": "left", "action_count": 4},
+            {"asset_id": "right", "action_count": 4},
+        ]
+    }
+
+    shards = [
+        _select_trajectory_shard(manifest, shard_index=index, shard_count=2)
+        for index in range(2)
+    ]
+
+    assert [
+        [episode["asset_id"] for episode in shard["trajectories"]] for shard in shards
+    ] == [["heavy"], ["left", "right"]]
+
+
+def test_recorded_trajectory_shards_keep_asset_episodes_together(tmp_path) -> None:
+    trajectories = tmp_path / "trajectories"
+    for source_id, asset_id in (
+        ("a", "shirt_0"),
+        ("a__mirror", "shirt_0"),
+        ("b", "shirt_1"),
+        ("b__mirror", "shirt_1"),
+        ("c", "shirt_2"),
+        ("c__mirror", "shirt_2"),
+    ):
+        path = trajectories / source_id
+        path.mkdir(parents=True)
+        (path / "manifest.json").write_text(
+            json.dumps(
+                {
+                    "status": "complete",
+                    "metadata": {"asset_id": asset_id},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    shards = [
+        _trajectory_shard_source_ids(tmp_path, shard_index=index, shard_count=2)
+        for index in range(2)
+    ]
+
+    assert shards == [
+        frozenset({"a", "a__mirror", "c", "c__mirror"}),
+        frozenset({"b", "b__mirror"}),
+    ]
+    assert shards[0].isdisjoint(shards[1])
 
 
 def test_rollout_writer_can_publish_multiple_episodes(tmp_path) -> None:
@@ -287,7 +397,7 @@ def test_canonical_export_owns_backend_camera_lifecycle(monkeypatch, tmp_path) -
     monkeypatch.setattr("clothdojo.data.rollout.RolloutLeRobotWriter", lambda *_a, **_kw: sink)
     monkeypatch.setattr(
         "clothdojo.data.rollout.inspect_rollout_collection_export",
-        lambda _root: {"renderer": "newton"},
+        lambda _root, **_kwargs: {"renderer": "newton"},
     )
 
     result = _export_canonical_collection(

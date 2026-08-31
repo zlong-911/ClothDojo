@@ -18,6 +18,12 @@ openpi:
     # host FFmpeg installation and is therefore not the portable SFT baseline.
     video_backend: pyav
 
+# The reference path keeps OpenPI's seeded frame shuffle unchanged. Alternative
+# sampling must be explicit because it changes the training artifact identity.
+data:
+  sampling:
+    mode: frame
+
 paths:
   dataset: ${oc.env:CLOTHDOJO_LEROBOT_DATASET}
   norm_stats: ${oc.env:CLOTHDOJO_PI05_NORM_STATS}

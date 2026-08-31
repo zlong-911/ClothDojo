@@ -7,12 +7,10 @@ ClothDojo 是基于 Newton 1.5 的布料操作研究项目，统一管理仿真�
 默认环境需要 Linux、Python 3.11 和支持 CUDA 的 NVIDIA GPU：
 
 ```bash
-python3.11 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-.venv/bin/pip install --no-deps -e .
+./scripts/setup-environment.sh
 ```
 
-Newton、训练、评测和默认数据导出都使用 `requirements.txt`。可选 Isaac RTX 离线渲染使用独立环境和 `requirements-isaac-render.txt`；H100/A100 可运行 Newton 与训练，但不用于需要 RT Core 的 Isaac 渲染。
+项目只维护一个 `requirements.txt` 和一个 `.venv`。安装脚本先解析主依赖，再在同一环境中补齐 Isaac Sim 5 的 RTX、Replicator 和离线 extension cache；Isaac 的包元数据与训练栈存在硬版本冲突，因此不能用一条裸 `pip install -r requirements.txt` 正确完成两部分安装。H100/A100 可运行 Newton 与训练，但不用于需要 RT Core 的 Isaac 渲染。
 
 ## 统一入口
 
@@ -44,17 +42,12 @@ Newton、训练、评测和默认数据导出都使用 `requirements.txt`。可�
 
 ## Rollout 与评测
 
-先准备固定初态和自由沉降 canonical target：
+任意规模的数据生成先准备初态；它不属于正式评测：
 
 ```bash
 .venv/bin/clothdojo rollout make-states \
   --states-per-asset 8 --unseen-assets 10 \
   --gpus 0,1 --output data/initial_states
-
-.venv/bin/clothdojo benchmark make-templates \
-  --states data/initial_states \
-  --protocol configs/evaluation/shirt_flatten.yaml \
-  --gpus 0,1 --output data/templates
 ```
 
 策略服务启动后，同一入口可运行 chunk 或 RTC：
@@ -69,18 +62,28 @@ Newton、训练、评测和默认数据导出都使用 `requirements.txt`。可�
 .venv/bin/clothdojo benchmark run --condition-id example_chunk \
   --scenario configs/rollout/shirt_flatten.yaml \
   --protocol configs/evaluation/shirt_flatten.yaml \
-  --states data/initial_states --templates data/templates \
+  --states data/state_panels/rapid_iteration \
+  --templates data/benchmarks/shirt_flatten_v1 \
   --policy ws://127.0.0.1:8080 --gpus 0 --batch-size 4 \
   --output data/evaluations/example_chunk
 ```
 
-轨迹保存完整的 50 Hz 状态与动作；评测指标随后从轨迹离线计算，不依赖策略服务或 GPU。结果同时保留终态、best-observed、时域平均距离和成功判据。重新打分与配对汇总分别使用：
+`benchmark run` 固定使用 12 个 seen、12 个 unseen 资产及每资产前 4 个初态，
+共 96 个配对 case；不提供资产数、初态数或 replicate 覆盖参数。小规模链路检查
+使用 `rollout run`，不能进入正式评测汇总。
+
+轨迹保存完整的 50 Hz 状态与动作；评测指标随后从轨迹离线计算，不依赖策略服务或 GPU。默认结果表包含 Peak、终态、AUC distance、曾成功率、终态成功率和抬起时间（`airborne_seconds_mean`，每条轨迹平均累计秒数）。抬起时间不参与成功判据，定义见 [`docs/benchmark.md`](docs/benchmark.md)。重新打分与配对汇总分别使用：
 
 ```bash
 .venv/bin/clothdojo benchmark score --condition <condition> \
-  --protocol configs/evaluation/shirt_flatten.yaml --templates data/templates
+  --protocol configs/evaluation/shirt_flatten.yaml \
+  --templates data/benchmarks/shirt_flatten_v1
 .venv/bin/clothdojo benchmark summarize --condition <condition-a> --condition <condition-b>
 ```
+
+更改指标或成功阈值后，仍使用 `benchmark score`，额外传入
+`--rescore-from <原采集协议.yaml>`。这只重新评分：原始轨迹和采集协议保留，
+不允许借此更改任务、评测时长或模板生成条件。
 
 `benchmark run` 产物固定标记为 `training_eligible=false`；训练 rollout 使用 `rollout run`。RTC 的 `rtc-delay-steps` 是确定性的逻辑延迟，不随机器推理 wall time 改变。
 
@@ -94,11 +97,41 @@ Newton、训练、评测和默认数据导出都使用 `requirements.txt`。可�
 .venv/bin/clothdojo collect serve --config configs/collection.yaml
 ```
 
+Piper 原始 collection 可以离线扩充为“原轨迹 + 双臂中轴镜像轨迹”的独立
+canonical collection。转换完整复制原轨迹和 annotation，并对状态与动作做确定性
+代数变换，不调用 FK、IK 或物理 solver：
+
+```bash
+.venv/bin/clothdojo data augment-mirror \
+  --source data/collections/shirt_flatten \
+  --output data/collections/shirt_flatten_mirrored
+```
+
 需要训练数据时，同一入口直接读取 canonical trajectory 和审查标注，回放四路视角并导出标准 LeRobot v2.1；审查视频不是训练输入：
 
 ```bash
 .venv/bin/clothdojo data export-lerobot \
   --source data/collections/shirt_flatten --device cuda:0
+```
+
+同一批轨迹可只替换衣物纹理为纯白，用于与 NOCS 做严格配对对照：
+
+```bash
+.venv/bin/clothdojo data export-lerobot \
+  --source data/collections/shirt_flatten \
+  --output data/datasets/shirt_flatten_reviewed_good_white \
+  --cloth-visual white --device cuda:0
+```
+
+canonical rollout 和历史 trajectory collection 都可以用
+`--shard-count N --shard-index I` 做确定性的互斥分片：rollout 按 asset 分组，
+trajectory collection 按原轨迹及其镜像配对分组。每个进程输出一个完整的
+LeRobot shard，适合绑定到不同 GPU 并行导出。trajectory shards 完成后可以无视频重编码合并：
+
+```bash
+.venv/bin/clothdojo data merge-lerobot-shards \
+  --shard data/datasets/shard_00 --shard data/datasets/shard_01 \
+  --output data/datasets/shirt_flatten_mirrored_reviewed_good
 ```
 
 Isaac RTX 外观随机化仍使用这个 `data export-lerobot` 入口。首次使用先准备固定的视觉资产集合：
@@ -121,6 +154,7 @@ OpenPI SFT 只保留两个入口：
 ```
 
 JAX EMA checkpoint 通过 `policy convert-jax` 做一次带数值对齐门禁的 PyTorch 转换，之后 chunk 与 RTC 都走同一策略协议和 rollout runner。STEAM critic 与 CFG 是后续算法训练，仍分别使用 `train steam`、`steam merge` 和 `train cfg`，不是额外的 OpenPI SFT 后端。
+新 OpenPI_RLinf SFT/CFG 默认文本为 `flatten the shirt`，关闭图像随机增强及固定左上裁剪；新模型部署使用同一文本与 `--image-preprocessing none`。详见 [训练边界](docs/development.md#openpi_rlinf-训练边界)。
 用于框架比较的 `openpi-rlinf` 配置显式引用对应 JAX trial；启动前会从该
 reference 推导并核对 batch、seed、optimizer、LR schedule、EMA、数据和初始化，
 不在训练实现中硬编码某一组实验超参数。

@@ -2,15 +2,27 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
 
 from clothdojo.assets import GarmentLibrary
-from clothdojo.evaluation.metric import file_sha256, load_canonical_template
-from clothdojo.evaluation.protocol import load_evaluation_protocol
-from clothdojo.evaluation.results import load_evaluation_condition, write_evaluation_cases
+from clothdojo.evaluation.metric import AIRBORNE_METRIC, file_sha256, load_canonical_template
+from clothdojo.evaluation.protocol import EvaluationProtocol, load_evaluation_protocol
+from clothdojo.evaluation.results import (
+    FORMAL_BENCHMARK_CASE_COUNT,
+    FORMAL_BENCHMARK_INITIAL_STATES_SHA256,
+    FORMAL_BENCHMARK_PROTOCOL_FINGERPRINT,
+    FORMAL_BENCHMARK_SCENARIO_FINGERPRINTS,
+    FORMAL_BENCHMARK_SEEN_ASSETS,
+    FORMAL_BENCHMARK_STATES_PER_ASSET,
+    FORMAL_BENCHMARK_UNSEEN_ASSETS,
+    load_evaluation_condition,
+    validate_formal_evaluation_metadata,
+    write_evaluation_cases,
+)
 from clothdojo.evaluation.scoring import score_evaluation_trajectory
 from clothdojo.evaluation.templates import (
     garment_topology_sha256,
@@ -27,7 +39,6 @@ from clothdojo.rollout.policy import RemotePolicy
 from clothdojo.rollout.scenario import load_rollout_scenario
 from clothdojo.rollout.scheduling import (
     policy_endpoints_for_workers,
-    select_assets,
     validate_policy_identities,
 )
 from clothdojo.rollout.trajectory_collection import (
@@ -38,11 +49,60 @@ from clothdojo.rollout.trajectory_collection import (
     collect_trajectory_index,
     execution_settings,
 )
-from clothdojo.sim.scene import WORLD_LAYOUT, WORLD_SPACING_M, ShirtFlattenSpec
 from clothdojo.trajectory import TrajectoryReader
 
 EVALUATION_CONDITION_SCHEMA = "clothdojo_evaluation_condition"
 _SCORING_TEMPLATE_CACHE: dict[tuple[str, str], Any] = {}
+_FORMAL_TEMPLATES_META_SHA256 = (
+    "cc317115126c391c4e928dca7f1bc749754c34930ee1d20d16e8c6f3d82764fe"
+)
+
+
+def _validate_formal_inputs(
+    states_root: Path,
+    states_meta: dict[str, Any],
+    templates_root: Path,
+) -> dict[str, str]:
+    if file_sha256(states_root / "meta.json") != FORMAL_BENCHMARK_INITIAL_STATES_SHA256:
+        raise ValueError("benchmark run requires data/state_panels/rapid_iteration")
+    if file_sha256(templates_root / "meta.json") != _FORMAL_TEMPLATES_META_SHA256:
+        raise ValueError("benchmark run requires data/benchmarks/shirt_flatten_v1")
+    provenance = states_meta.get("selection_provenance")
+    if not isinstance(provenance, dict) or provenance.get("panel_id") != "rapid_iteration":
+        raise ValueError("benchmark state collection is not the frozen rapid_iteration panel")
+    if (
+        states_meta.get("seen_assets") != FORMAL_BENCHMARK_SEEN_ASSETS
+        or states_meta.get("unseen_assets") != FORMAL_BENCHMARK_UNSEEN_ASSETS
+    ):
+        raise ValueError("benchmark panel must contain 12 seen and 12 unseen assets")
+    assets = states_meta.get("assets")
+    if not isinstance(assets, list) or len(assets) != (
+        FORMAL_BENCHMARK_SEEN_ASSETS + FORMAL_BENCHMARK_UNSEEN_ASSETS
+    ):
+        raise ValueError("benchmark panel must contain exactly 24 assets")
+    split_counts = {
+        split: sum(item.get("split") == split for item in assets if isinstance(item, dict))
+        for split in ("seen", "unseen")
+    }
+    if split_counts != {
+        "seen": FORMAL_BENCHMARK_SEEN_ASSETS,
+        "unseen": FORMAL_BENCHMARK_UNSEEN_ASSETS,
+    }:
+        raise ValueError("benchmark panel split metadata is invalid")
+    if any(
+        not isinstance(item, dict)
+        or item.get("state_count", 0) < FORMAL_BENCHMARK_STATES_PER_ASSET
+        for item in assets
+    ):
+        raise ValueError("every benchmark asset requires at least four initial states")
+    pool_hashes = {}
+    for item in assets:
+        asset_id = item["asset_id"]
+        digest = file_sha256(states_root / asset_id / "states.npz")
+        if digest != item.get("sha256"):
+            raise ValueError(f"benchmark initial-state pool changed for asset {asset_id}")
+        pool_hashes[asset_id] = digest
+    return pool_hashes
 
 
 def score_evaluation_condition(
@@ -51,18 +111,78 @@ def score_evaluation_condition(
     templates_path: str | Path,
     *,
     workers: int = 1,
+    require_formal: bool = False,
+    rescore_from: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Recompute one condition from its trajectories without policy or Newton."""
+    """Score saved trajectories; changing scoring requires the original protocol."""
 
     if isinstance(workers, bool) or not isinstance(workers, int) or workers < 1:
         raise ValueError("evaluation scoring workers must be a positive integer")
 
     root = Path(condition).expanduser().resolve()
+    # Keep this inode after closing: unlinking allows concurrent callers to
+    # hold locks on different files. Readers still use the publication marker.
+    with (root / ".scoring.lock").open("a+") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise RuntimeError(f"evaluation scoring is already running: {root}") from exc
+        return _score_evaluation_condition_locked(
+            root,
+            protocol_path,
+            templates_path,
+            workers=workers,
+            require_formal=require_formal,
+            rescore_from=rescore_from,
+        )
+
+
+def _score_evaluation_condition_locked(
+    root: Path,
+    protocol_path: str | Path,
+    templates_path: str | Path,
+    *,
+    workers: int,
+    require_formal: bool,
+    rescore_from: str | Path | None,
+) -> dict[str, Any]:
     meta_path = root / "meta.json"
     meta = _load_running_meta(meta_path)
     protocol = load_evaluation_protocol(protocol_path)
-    if protocol.fingerprint != meta.get("protocol", {}).get("fingerprint"):
+    recorded_protocol = meta.get("protocol", {})
+    collection_protocol = dict(meta.get("collection_protocol", recorded_protocol))
+    if rescore_from is None and protocol.fingerprint != recorded_protocol.get("fingerprint"):
         raise ValueError("evaluation protocol differs from the recorded condition")
+    if rescore_from is not None:
+        original = load_evaluation_protocol(rescore_from)
+        if original.fingerprint != collection_protocol.get("fingerprint"):
+            raise ValueError("rescore source protocol differs from the original collection")
+        original_definition = original.to_json_dict()
+        changed = [
+            field for field, value in protocol.to_json_dict().items()
+            if field not in {"metric", "success"} and original_definition[field] != value
+        ]
+        if changed:
+            raise ValueError(
+                "rescoring may change only metric and success; changed: " + ", ".join(changed)
+            )
+        if (
+            "definition" in collection_protocol
+            and collection_protocol["definition"] != original_definition
+        ):
+            raise ValueError("recorded collection protocol definition differs")
+        collection_protocol["definition"] = original_definition
+    elif collection_protocol.get("fingerprint") == protocol.fingerprint:
+        collection_protocol["definition"] = protocol.to_json_dict()
+    scored_meta = {
+        **meta,
+        "protocol": _protocol_summary(protocol),
+        "collection_protocol": collection_protocol,
+        "scoring_protocol": protocol.to_json_dict(),
+        "airborne_metric": {**AIRBORNE_METRIC, "sample_hz": protocol.metric_hz},
+    }
+    if require_formal:
+        validate_formal_evaluation_metadata(scored_meta)
     trajectories = meta.get("trajectories")
     if not isinstance(trajectories, list) or len(trajectories) != meta.get("case_count"):
         raise RuntimeError("evaluation condition does not contain every trajectory")
@@ -94,8 +214,12 @@ def score_evaluation_condition(
             raise ValueError("evaluation trajectory path is not flat")
         reader = TrajectoryReader(root / relative)
         metadata = reader.manifest.metadata
+        if metadata.get("policy", {}).get("image_preprocessing", "none") != meta.get(
+            "policy", {}
+        ).get("image_preprocessing", "none"):
+            raise ValueError("evaluation trajectory image preprocessing differs from condition")
         if (
-            metadata.get("protocol_fingerprint") != protocol.fingerprint
+            metadata.get("protocol_fingerprint") != collection_protocol.get("fingerprint")
             or metadata.get("template_sha256") != meta["templates"][item["asset_id"]]
         ):
             raise ValueError("evaluation trajectory scoring provenance differs")
@@ -119,17 +243,32 @@ def score_evaluation_condition(
         if actual_key != expected_key:
             raise ValueError("evaluation trajectory identity differs from its index")
 
+    # Two files cannot be replaced together. Mark the condition unreadable before
+    # replacing results, then publish their matching scoring protocol atomically.
+    # A failed publication never exposes new scores as belonging to the old one.
+    atomic_write_json(meta_path, {**meta, "status": "running", "phase": "publishing_scores"})
     write_evaluation_cases(root / "results.jsonl", cases)
-    meta["status"] = "complete"
-    meta["phase"] = "complete"
-    meta.pop("error", None)
-    atomic_write_json(meta_path, meta)
+    scored_meta["status"] = "complete"
+    scored_meta["phase"] = "complete"
+    scored_meta.pop("error", None)
+    atomic_write_json(meta_path, scored_meta)
     return {
         "compatible": True,
         "output": str(root),
         "condition_id": meta["condition_id"],
         "case_count": len(cases),
         "training_eligible": False,
+    }
+
+
+def _protocol_summary(protocol: EvaluationProtocol) -> dict[str, Any]:
+    return {
+        "id": protocol.protocol_id,
+        "stage": protocol.stage,
+        "fingerprint": protocol.fingerprint,
+        "horizon_steps": protocol.horizon_steps,
+        "control_fps": protocol.control_fps,
+        "metric_backend": "numpy_float64_reference",
     }
 
 
@@ -142,24 +281,26 @@ def run_evaluation_condition(
     output: str | Path,
     *,
     condition_id: str,
+    cloth_visual: str = "nocs",
     expected_checkpoint_sha256: str | None = None,
+    image_preprocessing: str = "none",
     assets_root: str | Path = "assets",
     gpus: tuple[str, ...] = ("0",),
-    limit_per_asset: int | None = None,
-    seen_assets: int | None = None,
-    unseen_assets: int | None = None,
     execution: str = "chunk",
     exec_horizon: int = 10,
     rtc_delay_steps: int = 0,
     batch_size: int = 4,
-    replicates: int = 1,
     defer_scoring: bool = False,
     score_workers: int = 1,
 ) -> dict[str, Any]:
     """Collect canonical trajectories, then score one immutable condition offline."""
 
+    from clothdojo.sim.scene import WORLD_LAYOUT, WORLD_SPACING_M, ShirtFlattenSpec
+
     if not condition_id.strip():
         raise ValueError("condition_id must not be empty")
+    if cloth_visual not in {"nocs", "white"}:
+        raise ValueError("cloth_visual must be 'nocs' or 'white'")
     if not policy_endpoints or any(not endpoint.strip() for endpoint in policy_endpoints):
         raise ValueError("at least one policy endpoint is required")
     if not gpus or any(not gpu.strip() for gpu in gpus):
@@ -168,7 +309,6 @@ def run_evaluation_condition(
         raise ValueError("execution must be 'chunk' or 'rtc'")
     for name, value in (
         ("batch_size", batch_size),
-        ("replicates", replicates),
         ("score_workers", score_workers),
     ):
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -182,6 +322,10 @@ def run_evaluation_condition(
 
     scenario = load_rollout_scenario(scenario_path)
     protocol = load_evaluation_protocol(protocol_path)
+    if protocol.fingerprint != FORMAL_BENCHMARK_PROTOCOL_FINGERPRINT:
+        raise ValueError("benchmark run requires the frozen shirt-flatten protocol")
+    if scenario.fingerprint not in FORMAL_BENCHMARK_SCENARIO_FINGERPRINTS:
+        raise ValueError("benchmark run requires the frozen shirt-flatten scenario")
     if scenario.task_name != protocol.task_name:
         raise ValueError("scenario task differs from evaluation protocol")
     if scenario.steps != protocol.horizon_steps:
@@ -197,12 +341,11 @@ def run_evaluation_condition(
     states_root = Path(initial_states_path).expanduser().resolve()
     states_meta = load_initial_state_collection(states_root)
     templates_root = Path(templates_path).expanduser().resolve()
+    pool_hashes = _validate_formal_inputs(states_root, states_meta, templates_root)
     assets = Path(assets_root).expanduser().resolve()
     garments = GarmentLibrary(assets)
     destination = Path(output).expanduser().resolve()
-    selected_assets = select_assets(
-        states_meta["assets"], seen_assets=seen_assets, unseen_assets=unseen_assets
-    )
+    selected_assets = list(states_meta["assets"])
     selected_assets.sort(key=lambda item: int(item["particle_count"]), reverse=True)
     resolved_templates = resolve_canonical_templates(
         templates_root,
@@ -213,9 +356,7 @@ def run_evaluation_condition(
     for item in selected_assets:
         pool_path = states_root / item["asset_id"] / "states.npz"
         pool = InitialStatePool.load(pool_path)
-        count = pool.state_count if limit_per_asset is None else int(limit_per_asset)
-        if count < 1 or count > pool.state_count:
-            raise ValueError(f"limit_per_asset must be in [1, {pool.state_count}]")
+        count = FORMAL_BENCHMARK_STATES_PER_ASSET
         template_path, template_sha256 = resolved_templates[item["asset_id"]]
         template = load_canonical_template(template_path)
         if template.asset_id != item["asset_id"]:
@@ -237,9 +378,9 @@ def run_evaluation_condition(
             TrajectoryAssetJob(
                 asset_id=item["asset_id"],
                 pool=str(pool_path),
-                pool_sha256=file_sha256(pool_path),
+                pool_sha256=pool_hashes[item["asset_id"]],
                 state_count=count,
-                replicates=tuple(range(replicates)),
+                replicates=(0,),
                 metadata={
                     "condition_id": condition_id,
                     "protocol_fingerprint": protocol.fingerprint,
@@ -254,6 +395,7 @@ def run_evaluation_condition(
         RemotePolicy(
             endpoint,
             expected_checkpoint_sha256=expected_checkpoint_sha256,
+            expected_image_preprocessing=image_preprocessing,
             action_horizon=scenario.action_horizon,
         ).identity
         for endpoint in active_endpoints
@@ -265,16 +407,9 @@ def run_evaluation_condition(
     )
     requested = {
         "condition_id": condition_id,
-        "protocol": {
-            "id": protocol.protocol_id,
-            "stage": protocol.stage,
-            "fingerprint": protocol.fingerprint,
-            "horizon_steps": protocol.horizon_steps,
-            "control_fps": protocol.control_fps,
-            "metric_backend": "numpy_float64_reference",
-        },
+        "protocol": _protocol_summary(protocol),
         "scenario": scenario.to_json_dict(),
-        "cloth_visual": "nocs",
+        "cloth_visual": cloth_visual,
         "observation": policy_observation_settings(),
         "initial_states_sha256": file_sha256(states_root / "meta.json"),
         "initial_state_pools": {job.asset_id: job.pool_sha256 for job in jobs},
@@ -287,7 +422,13 @@ def run_evaluation_condition(
             exec_horizon,
             rtc_delay_steps=logical_delay,
         ),
-        "replicates": replicates,
+        "benchmark": {
+            "panel_id": "rapid_iteration",
+            "seen_assets": FORMAL_BENCHMARK_SEEN_ASSETS,
+            "unseen_assets": FORMAL_BENCHMARK_UNSEEN_ASSETS,
+            "states_per_asset": FORMAL_BENCHMARK_STATES_PER_ASSET,
+        },
+        "replicates": 1,
         "parallelism": {
             "worlds_per_batch": batch_size,
             "simulation": {
@@ -299,7 +440,7 @@ def run_evaluation_condition(
             "policy": "single-batch-request",
         },
         "trajectory_storage": {"npz_compressed": False},
-        "case_count": sum(job.state_count for job in jobs) * replicates,
+        "case_count": FORMAL_BENCHMARK_CASE_COUNT,
     }
     collection_spec = TrajectoryCollectionSpec(
         scenario_path=str(Path(scenario_path).expanduser().resolve()),
@@ -315,6 +456,7 @@ def run_evaluation_condition(
         producer="clothdojo_evaluation",
         training_eligible=False,
         compressed=False,
+        cloth_visual=cloth_visual,
     )
     meta_path = destination / "meta.json"
     if meta_path.is_file():
@@ -342,6 +484,10 @@ def run_evaluation_condition(
             "training_eligible": False,
             "results": "results.jsonl",
             "trajectories": [],
+            "collection_protocol": {
+                **_protocol_summary(protocol),
+                "definition": protocol.to_json_dict(),
+            },
             **requested,
         }
         atomic_write_json(meta_path, meta)
@@ -368,6 +514,7 @@ def run_evaluation_condition(
             protocol_path,
             templates_path,
             workers=score_workers,
+            require_formal=True,
         )
     except Exception as exc:
         meta["status"] = "failed"

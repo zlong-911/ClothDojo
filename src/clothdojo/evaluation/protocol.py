@@ -81,7 +81,7 @@ class EvaluationProtocol:
     horizon_seconds: float
     metric_hz: int
     deformable_weight: float
-    symmetry: Literal["none", "planar_180"]
+    symmetry: Literal["none", "planar_90", "planar_180"]
     deformable_distance_max: float
     rigid_distance_max: float | None
     target: CanonicalTargetProtocol = field(default_factory=CanonicalTargetProtocol)
@@ -104,7 +104,7 @@ class EvaluationProtocol:
             raise ValueError("horizon_seconds must be positive")
         if not 0.0 <= self.deformable_weight <= 1.0:
             raise ValueError("deformable_weight must be in [0, 1]")
-        if self.symmetry not in {"none", "planar_180"}:
+        if self.symmetry not in {"none", "planar_90", "planar_180"}:
             raise ValueError("unsupported symmetry")
         if self.deformable_distance_max <= 0.0:
             raise ValueError("deformable_distance_max must be positive")

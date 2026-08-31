@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import struct
+import zipfile
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 
@@ -33,6 +35,43 @@ _DTYPES = {
     **STATE_ARRAY_DTYPES,
     **ACTION_ARRAY_DTYPES,
 }
+
+
+def _stored_array_view(path: Path, archive: zipfile.ZipFile, key: str) -> np.ndarray:
+    """Map a numeric NPY member without reading the other trajectory frames."""
+    info = archive.getinfo(f"{key}.npy")
+    if info.compress_type != zipfile.ZIP_STORED or info.compress_size != info.file_size:
+        raise ValueError("stored trajectory member size or compression differs")
+    if info.flag_bits & 1:
+        raise ValueError("encrypted trajectory arrays are unsupported")
+    # ZipFile.open validates the local header, name and member boundaries.
+    with archive.open(info) as member:
+        version = np.lib.format.read_magic(member)
+        if version == (1, 0):
+            shape, fortran, dtype = np.lib.format.read_array_header_1_0(member)
+        elif version == (2, 0):
+            shape, fortran, dtype = np.lib.format.read_array_header_2_0(member)
+        else:
+            raise ValueError(f"unsupported trajectory NPY version {version}")
+        payload_offset = member.tell()
+    if dtype.hasobject:
+        raise ValueError("object trajectory arrays are unsupported")
+    count = int(np.prod(shape, dtype=np.int64))
+    if count * dtype.itemsize != info.file_size - payload_offset:
+        raise ValueError(f"trajectory array payload size differs: {key}")
+    if count == 0:
+        return np.empty(shape, dtype=dtype)
+    with path.open("rb") as stream:
+        stream.seek(info.header_offset)
+        header = stream.read(30)
+        if len(header) != 30 or header[:4] != b"PK\x03\x04":
+            raise ValueError("invalid trajectory ZIP local header")
+        name_length, extra_length = struct.unpack_from("<HH", header, 26)
+    offset = info.header_offset + 30 + name_length + extra_length + payload_offset
+    return np.memmap(
+        path, mode="r", dtype=dtype, offset=offset, shape=shape,
+        order="F" if fortran else "C",
+    )
 
 
 class TrajectoryReader:
@@ -95,9 +134,15 @@ class TrajectoryReader:
         return self.state_at(self.manifest.state_count - 1)
 
     def state_arrays(
-        self, fields: Iterable[str] | None = None
+        self, fields: Iterable[str] | None = None, *, mmap: bool = False
     ) -> dict[str, np.ndarray]:
-        """Return selected validated read-only arrays for vectorized consumers."""
+        """Return selected validated read-only arrays for vectorized consumers.
+
+        ``mmap`` avoids loading unsampled frames from uncompressed recordings.
+        Shape/dtype/index validation is unchanged; as with NPY memory maps,
+        partial reads do not verify the full ZIP payload CRC. Compressed or
+        derived recordings retain the normal reader path.
+        """
 
         if fields is None:
             return dict(self._states())
@@ -114,6 +159,7 @@ class TrajectoryReader:
             self.manifest.state_count,
             self.manifest.state_shapes,
             load_keys=("sample_index", *selected),
+            mmap=mmap,
         )
 
     def action_arrays(self) -> dict[str, np.ndarray]:
@@ -338,6 +384,7 @@ class TrajectoryReader:
         expected_count: int,
         expected_shapes: dict[str, list[int]],
         load_keys: tuple[str, ...] | None = None,
+        mmap: bool = False,
     ) -> dict[str, np.ndarray]:
         if not path.is_file():
             raise RuntimeError(f"trajectory data file is missing: {path.name}")
@@ -353,7 +400,18 @@ class TrajectoryReader:
             selected_keys = required_keys if load_keys is None else load_keys
             if any(key not in required_keys for key in selected_keys):
                 raise ValueError(f"{path.name} requested unknown fields")
-            arrays = {key: data[key] for key in selected_keys}
+            if mmap:
+                with zipfile.ZipFile(path) as archive:
+                    arrays = {
+                        key: (
+                            _stored_array_view(path, archive, key)
+                            if archive.getinfo(f"{key}.npy").compress_type == zipfile.ZIP_STORED
+                            else data[key]
+                        )
+                        for key in selected_keys
+                    }
+            else:
+                arrays = {key: data[key] for key in selected_keys}
 
         wrong_dtypes = {
             key: str(arrays[key].dtype)

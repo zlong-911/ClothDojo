@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
 
-from clothdojo.evaluation.metric import CanonicalTemplate, factorized_cloth_distance
+from clothdojo.evaluation.metric import (
+    CanonicalTemplate,
+    cloth_airborne_mask,
+    factorized_cloth_distance,
+)
 from clothdojo.evaluation.protocol import EvaluationProtocol
 from clothdojo.evaluation.results import (
     EvaluationCaseKey,
@@ -55,7 +59,7 @@ def score_evaluation_trajectory(
     if metadata.get("asset_id") != template.asset_id:
         raise ValueError("evaluation trajectory and canonical template asset differ")
 
-    arrays = reader.state_arrays(("particle_q", "particle_qd"))
+    arrays = reader.state_arrays(("particle_q", "particle_qd"), mmap=True)
     sample_steps = np.arange(
         0,
         protocol.horizon_steps + 1,
@@ -63,11 +67,14 @@ def score_evaluation_trajectory(
         dtype=np.int32,
     )
     curve = np.empty((protocol.sample_count, len(METRIC_NAMES)), dtype=np.float32)
+    airborne = np.empty(protocol.sample_count, dtype=np.float64)
     for start in range(0, protocol.sample_count, metric_batch_size):
         stop = min(start + metric_batch_size, protocol.sample_count)
         selection = sample_steps[start:stop]
+        positions = arrays["particle_q"][selection]
+        airborne[start:stop] = cloth_airborne_mask(positions, template)
         values = factorized_cloth_distance(
-            arrays["particle_q"][selection],
+            positions,
             arrays["particle_qd"][selection],
             template,
             deformable_weight=protocol.deformable_weight,
@@ -97,6 +104,12 @@ def score_evaluation_trajectory(
             metadata["initial_state"]["seed"], "initial_state seed"
         ),
         policy_seed=_non_negative_integer(metadata["policy_seed"], "policy seed"),
+    )
+    # Integrate floating indicators: NumPy boolean addition is logical OR,
+    # which would incorrectly halve the duration of consecutive airborne frames.
+    result = replace(
+        result,
+        airborne_seconds=float(np.trapz(airborne, dx=1.0 / protocol.metric_hz)),
     )
     sample_steps.setflags(write=False)
     curve.setflags(write=False)

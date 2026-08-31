@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-from types import SimpleNamespace
 
 import pytest
 import torch
@@ -10,7 +9,7 @@ from clothdojo.rollout.guided_rtc import (
     GuidedRTCConfig,
     guided_velocity,
     prefix_weights,
-    sample_guided_cfg_actions,
+    sample_guided_cfg_openpi_rlinf_actions,
     sample_guided_openpi_rlinf_actions,
 )
 
@@ -150,72 +149,94 @@ def test_openpi_rlinf_rtc_uses_one_prefix_cache_and_requested_steps(
     assert core.suffix_calls == 2
 
 
-class _FakePaligemma:
-    def __init__(self) -> None:
-        self.paligemma = SimpleNamespace(
-            language_model=SimpleNamespace(config=SimpleNamespace())
-        )
+def test_current_openpi_rlinf_cfg_composes_velocity_before_rtc(
+    monkeypatch,
+) -> None:
+    from rlinf.models.embodiment.openpi_rlinf.pi0_model import model as model_module
 
-    def forward(self, *, inputs_embeds, **kwargs):
-        del kwargs
-        return None, inputs_embeds[0]
+    monkeypatch.setattr(
+        model_module,
+        "preprocess_observation",
+        lambda observation, *, train: observation,
+    )
+    monkeypatch.setattr(torch, "randn", lambda *shape, **kwargs: torch.ones(shape))
+
+    class Core:
+        action_horizon = 1
+        action_dim = 1
+
+        def __init__(self) -> None:
+            self.cache_calls = 0
+
+        def build_prefix_cache(self, observation):
+            self.cache_calls += 1
+            return None, torch.ones((1, 1), dtype=torch.bool), observation
+
+        def run_suffix(self, observation, latent, time, cache, prefix_mask):
+            del observation, time, prefix_mask
+            return cache * latent
+
+        def velocity_from_suffix(self, suffix):
+            return suffix
+
+    core = Core()
+    result = sample_guided_cfg_openpi_rlinf_actions(
+        core,
+        torch.tensor(1.0),
+        torch.tensor(3.0),
+        torch.zeros((1, 1, 1)),
+        inference_delay=0,
+        num_steps=1,
+        guidance_scale=0.5,
+        config=GuidedRTCConfig(
+            guidance_horizon=1,
+            prefix_attention_schedule="zeros",
+        ),
+    )
+
+    # x=1; unconditional velocity=1; positive velocity=3; CFG velocity=2.
+    assert result.item() == pytest.approx(-1.0)
+    assert core.cache_calls == 2
 
 
-class _FakeCFGModel:
-    def __init__(self, scale: float, batch_size: int = 1) -> None:
-        self.batch_size = batch_size
-        self.config = SimpleNamespace(
-            guidance_type="positive",
-            positive_only_conditional=False,
-            cfgrl_guidance_scale=scale,
-            num_steps=1,
-            action_horizon=1,
-            action_dim=1,
-        )
-        self.paligemma_with_expert = _FakePaligemma()
+@pytest.fixture
+def cfg_core(monkeypatch):
+    from rlinf.models.embodiment.openpi_rlinf.pi0_model import model as model_module
 
-    def _preprocess_observation(self, observation, *, train):
-        del observation, train
-        image = [torch.zeros((self.batch_size, 1, 1, 1))]
-        image_mask = [torch.ones((self.batch_size, 1), dtype=torch.bool)]
-        token_mask = torch.ones((self.batch_size, 1), dtype=torch.bool)
-        return (
-            image,
-            image_mask,
-            torch.ones((self.batch_size, 1)),
-            token_mask,
-            torch.full((self.batch_size, 1), 3.0),
-            token_mask,
-            torch.full((self.batch_size, 1), -1.0),
-            token_mask,
-            torch.zeros((self.batch_size, 1)),
-        )
+    monkeypatch.setattr(model_module, "preprocess_observation",
+                        lambda observation, *, train: observation)
+    monkeypatch.setattr(torch, "randn", lambda *shape, **kwargs: torch.ones(shape))
 
-    def embed_prefix(self, images, image_masks, tokens, masks):
-        del images, image_masks
-        return tokens[..., None], masks, torch.ones_like(masks)
+    class Core:
+        action_horizon = 1
+        action_dim = 1
 
-    def _prepare_attention_masks_4d(self, value):
-        return value
+        def build_prefix_cache(self, observation):
+            return None, torch.ones((1, 1), dtype=torch.bool), observation
 
-    def sample_noise(self, shape, device):
-        return torch.ones(shape, device=device)
+        def run_suffix(self, observation, latent, time, cache, prefix_mask):
+            return cache * latent
 
-    def denoise_step(self, state, masks, cache, latent, time):
-        del state, masks, time
-        return cache * latent
+        def velocity_from_suffix(self, suffix):
+            return suffix
+
+    return Core()
 
 
 @pytest.mark.parametrize(("scale", "expected"), [(0.0, 0.0), (1.0, -2.0)])
 def test_cfg_scale_selects_unconditional_or_positive_velocity(
     scale: float,
     expected: float,
+    cfg_core,
 ) -> None:
-    result = sample_guided_cfg_actions(
-        _FakeCFGModel(scale),
-        object(),
+    result = sample_guided_cfg_openpi_rlinf_actions(
+        cfg_core,
+        torch.tensor(1.0),
+        torch.tensor(3.0),
         torch.full((1, 1, 1), 2.0),
         inference_delay=0,
+        num_steps=1,
+        guidance_scale=scale,
         config=GuidedRTCConfig(
             guidance_horizon=1,
             max_guidance_weight=5.0,
@@ -226,12 +247,15 @@ def test_cfg_scale_selects_unconditional_or_positive_velocity(
     assert result.item() == pytest.approx(expected)
 
 
-def test_rtc_vjp_wraps_the_composed_cfg_velocity() -> None:
-    result = sample_guided_cfg_actions(
-        _FakeCFGModel(0.5),
-        object(),
+def test_rtc_vjp_wraps_the_composed_cfg_velocity(cfg_core) -> None:
+    result = sample_guided_cfg_openpi_rlinf_actions(
+        cfg_core,
+        torch.tensor(1.0),
+        torch.tensor(3.0),
         torch.full((1, 1, 1), 2.0),
         inference_delay=0,
+        num_steps=1,
+        guidance_scale=0.5,
         config=GuidedRTCConfig(
             guidance_horizon=1,
             max_guidance_weight=5.0,
@@ -242,12 +266,15 @@ def test_rtc_vjp_wraps_the_composed_cfg_velocity() -> None:
     assert result.item() == pytest.approx(-16.0)
 
 
-def test_zero_prefix_rtc_equals_plain_cfg_euler_step() -> None:
-    result = sample_guided_cfg_actions(
-        _FakeCFGModel(0.5),
-        object(),
+def test_zero_prefix_rtc_equals_plain_cfg_euler_step(cfg_core) -> None:
+    result = sample_guided_cfg_openpi_rlinf_actions(
+        cfg_core,
+        torch.tensor(1.0),
+        torch.tensor(3.0),
         torch.zeros((1, 1, 1)),
         inference_delay=0,
+        num_steps=1,
+        guidance_scale=0.5,
         config=GuidedRTCConfig(
             guidance_horizon=1,
             max_guidance_weight=5.0,
@@ -259,7 +286,7 @@ def test_zero_prefix_rtc_equals_plain_cfg_euler_step() -> None:
     assert result.item() == pytest.approx(-1.0)
 
 
-def test_cfg_rtc_batch_matches_independent_rows() -> None:
+def test_cfg_rtc_batch_matches_independent_rows(cfg_core) -> None:
     previous = torch.tensor([[[2.0]], [[4.0]]])
     config = GuidedRTCConfig(
         guidance_horizon=1,
@@ -267,20 +294,26 @@ def test_cfg_rtc_batch_matches_independent_rows() -> None:
         prefix_attention_schedule="ones",
     )
 
-    batched = sample_guided_cfg_actions(
-        _FakeCFGModel(0.5, batch_size=2),
-        object(),
+    batched = sample_guided_cfg_openpi_rlinf_actions(
+        cfg_core,
+        torch.tensor(1.0),
+        torch.tensor(3.0),
         previous,
         inference_delay=0,
+        num_steps=1,
+        guidance_scale=0.5,
         config=config,
     )
     rows = torch.cat(
         [
-            sample_guided_cfg_actions(
-                _FakeCFGModel(0.5),
-                object(),
+            sample_guided_cfg_openpi_rlinf_actions(
+                cfg_core,
+                torch.tensor(1.0),
+                torch.tensor(3.0),
                 previous[index : index + 1],
                 inference_delay=0,
+                num_steps=1,
+                guidance_scale=0.5,
                 config=config,
             )
             for index in range(2)

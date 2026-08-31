@@ -91,12 +91,22 @@ def inspect_openpi_rlinf_sft(
 ) -> dict[str, Any]:
     """Validate the current RLINF OpenPI data and numerical contract."""
 
+    if cfg.runner.get("resume_dir") is not None:
+        raise ValueError("SFT resume is disabled; restart training in a new output directory")
+    output = Path(str(cfg.runner.logger.log_path)).expanduser().resolve()
+    if output.exists():
+        raise FileExistsError(f"SFT requires a new output directory: {output}")
+
     from omegaconf import OmegaConf
 
     from clothdojo.training.openpi_artifacts import (
         inspect_openpi_dataset,
         inspect_openpi_norm_stats,
     )
+    from clothdojo.training.openpi_rlinf_sft import (
+        _action_offset_loss_manifest_from_config,
+    )
+    from clothdojo.training.worker_environment import worker_environment_from_config
 
     model_type = str(cfg.actor.model.model_type)
     if model_type != "openpi_rlinf":
@@ -140,11 +150,21 @@ def inspect_openpi_rlinf_sft(
         "ema_decay": float(cfg.actor.optim.ema_decay),
     }
     _validate_openpi_rlinf_runtime_contract(cfg, training_contract)
+    image_augmentation = cfg.get("clothdojo", {}).get("image_augmentation", False)
+    if not isinstance(image_augmentation, bool):
+        raise TypeError("clothdojo.image_augmentation must be a boolean")
     jax_reference = _inspect_jax_reference(cfg, config_path, training_contract)
     dataset = inspect_openpi_dataset(cfg.data.train_data_paths)
     openpi_data = OmegaConf.to_container(cfg.actor.model.openpi_data, resolve=True)
     if not isinstance(openpi_data, dict):
         raise TypeError("OpenPI/RLinf openpi_data config must be a mapping")
+    from clothdojo.training.openpi import TrainingPrompt
+
+    training_prompt = TrainingPrompt(openpi_data.get("default_prompt")).prompt
+    # JAX reads the dataset task; its default_prompt only fills a missing key.
+    # RLINF explicitly overrides that text, so compare the actual tokenizer input.
+    if jax_reference is not None and dataset["prompt"] != training_prompt:
+        raise ValueError("OpenPI/RLinf training prompt differs from its JAX dataset prompt")
     norm_path = openpi_data.pop("norm_stats_path", None)
     if norm_path is None:
         raise ValueError("OpenPI/RLinf requires openpi_data.norm_stats_path")
@@ -159,16 +179,21 @@ def inspect_openpi_rlinf_sft(
     if not isinstance(resolved, dict):
         raise TypeError("resolved OpenPI/RLinf config must be a mapping")
     return {
-        "schema": "clothdojo_openpi_rlinf_sft_preflight",
+        "schema": "clothdojo_pi05_launch_preflight",
+        "format_version": 1,
         "compatible": True,
         "model_type": model_type,
         "numerical_contract": numerical,
         "training_contract": training_contract,
+        "image_augmentation": image_augmentation,
+        "training_prompt": training_prompt,
         "jax_reference": jax_reference,
         "openpi_data_home": str(openpi_data_home),
         "tokenizer": str(tokenizer),
         "dataset": dataset,
         "norm_stats": norm,
+        "action_offset_loss": _action_offset_loss_manifest_from_config(cfg),
+        "worker_environment": worker_environment_from_config(cfg),
         "resolved_config": resolved,
     }
 
@@ -190,7 +215,8 @@ def run_config(
     if kind == "openpi-rlinf":
         manifest = inspect_openpi_rlinf_sft(cfg, config_path=config_path)
         os.environ["OPENPI_DATA_HOME"] = manifest["openpi_data_home"]
-        logging.info("OpenPI/RLinf preflight:\n%s", json.dumps(manifest, indent=2))
+        manifest_path = write_openpi_rlinf_launch_manifest(cfg, manifest)
+        logging.info("OpenPI/RLinf launch manifest: %s", manifest_path)
     elif kind == "cfg":
         if cfg_manifest is None:
             raise ValueError("CFG training requires its checked launch manifest")
@@ -250,6 +276,23 @@ def run_config(
     runner.run()
 
 
+def write_openpi_rlinf_launch_manifest(cfg: Any, manifest: dict[str, Any]) -> Path:
+    """Claim a fresh SFT output directory and publish its training identity."""
+
+    output = Path(str(cfg.runner.logger.log_path)).expanduser().resolve()
+    path = output / "clothdojo_launch.json"
+    payload = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+    # Recheck atomically at launch, including runs whose preflight overlapped.
+    try:
+        output.mkdir(parents=True)
+    except FileExistsError as exc:
+        raise FileExistsError(f"SFT requires a new output directory: {output}") from exc
+    temporary = output / ".clothdojo_launch.json.tmp"
+    temporary.write_text(payload, encoding="utf-8")
+    temporary.replace(path)
+    return path
+
+
 def _validate_openpi_rlinf_runtime_contract(
     cfg: Any,
     contract: dict[str, int | float],
@@ -258,8 +301,10 @@ def _validate_openpi_rlinf_runtime_contract(
         raise ValueError("OpenPI/RLinf comparison requires the OpenPI cosine schedule")
     if float(cfg.actor.optim.num_cycles) != 0.5:
         raise ValueError("OpenPI/RLinf comparison requires a half-cosine decay")
-    if contract["steps"] != contract["decay_steps"]:
-        raise ValueError("OpenPI/RLinf steps and cosine decay horizon must match")
+    # OpenPI cosine clamps at its floor after decay_steps. The runner may
+    # continue beyond that endpoint without stretching the preceding curve.
+    if not 0 <= contract["warmup_steps"] < contract["decay_steps"] <= contract["steps"]:
+        raise ValueError("OpenPI/RLinf requires 0 <= warmup_steps < decay_steps <= steps")
     if int(cfg.runner.save_interval) < 1:
         raise ValueError("OpenPI/RLinf save_interval must be positive")
     if bool(cfg.actor.fsdp_config.get("save_full_model_weights", True)):
@@ -280,8 +325,9 @@ def _inspect_jax_reference(
     if config_path is None:
         raise ValueError("OpenPI/RLinf JAX comparison requires its config path")
 
-    from clothdojo.training.jax_sft import compose_jax_sft_spec
+    from clothdojo.training.jax_sft import _action_offset_weights, compose_jax_sft_spec
     from clothdojo.training.matrix import compose_jax_sft_matrix
+    from clothdojo.training.openpi_rlinf_sft import _action_offset_weights_from_config
 
     root = Path(config_path).expanduser().resolve().parent
     matrix_path = Path(str(reference.get("matrix"))).expanduser()
@@ -325,6 +371,12 @@ def _inspect_jax_reference(
         raise ValueError("OpenPI/RLinf and JAX use different total decoder worker counts")
     if int(cfg.runner.save_interval) != spec.save_interval:
         raise ValueError("OpenPI/RLinf and JAX use different checkpoint intervals")
+    if spec.data_sampling.mode != "frame":
+        raise ValueError("OpenPI/RLinf only supports frame sampling for a JAX comparison")
+    if _action_offset_weights_from_config(cfg) != _action_offset_weights(
+        spec.action_offset_loss, action_horizon=50
+    ):
+        raise ValueError("OpenPI/RLinf action-offset loss differs from its JAX reference")
 
     data_settings = cfg.actor.model.openpi_data
     aligned = {

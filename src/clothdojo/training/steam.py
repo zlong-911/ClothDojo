@@ -26,9 +26,7 @@ _CONFIG_CONTRACT: tuple[tuple[str, Any], ...] = (
     ("cluster.num_nodes", 4),
     ("runner.task_type", "sft"),
     ("runner.max_epochs", -1),
-    ("runner.max_steps", 30_000),
     ("runner.val_check_interval", -1),
-    ("runner.save_interval", 1_000),
     ("data.balance_weights", True),
     ("data.seed", 42),
     ("data.dataset_type", "sft"),
@@ -45,9 +43,8 @@ _CONFIG_CONTRACT: tuple[tuple[str, Any], ...] = (
     ("data.pin_memory", True),
     ("data.do_augment", False),
     ("actor.training_backend", "fsdp"),
-    ("actor.micro_batch_size", 32),
-    ("actor.global_batch_size", 512),
     ("actor.model.model_type", "steam_value_model"),
+    ("actor.model.is_lora", False),
     ("actor.model.precision", "fp32"),
     ("actor.model.fusion_hidden_dim", 512),
     ("actor.model.dropout", 0.1),
@@ -59,19 +56,14 @@ _CONFIG_CONTRACT: tuple[tuple[str, Any], ...] = (
     ("actor.model.freeze_vision_encoder", False),
     ("actor.model.freeze_language_model", False),
     ("actor.model.include_state", True),
-    ("actor.model.state_dim", EXPECTED_STATE_DIM),
     ("actor.model.max_token_len", 16),
     ("actor.model.use_gradient_checkpointing", True),
-    ("actor.optim.lr", 5.0e-5),
-    ("actor.optim.value_lr", 5.0e-5),
     ("actor.optim.adam_beta1", 0.9),
     ("actor.optim.adam_beta2", 0.95),
     ("actor.optim.adam_eps", 1.0e-8),
     ("actor.optim.weight_decay", 1.0e-5),
     ("actor.optim.clip_grad", 10.0),
     ("actor.optim.lr_scheduler", "constant"),
-    ("actor.optim.lr_warmup_steps", 500),
-    ("actor.optim.total_training_steps", 30_000),
     ("actor.fsdp_config.strategy", "fsdp"),
     ("actor.fsdp_config.sharding_strategy", "no_shard"),
     ("actor.fsdp_config.use_orig_params", True),
@@ -106,14 +98,27 @@ def inspect_steam_training(cfg: Any, member_index: int) -> dict[str, Any]:
     """Validate the standard-v2.1, FP32-master STEAM training contract."""
 
     member = configure_steam_member(cfg, member_index)
+    # A geometry recipe derives normalization and feature semantics from the
+    # published training dataset, then validates every value against parquet.
+    if int(cfg.actor.model.state_dim) == 16:
+        from omegaconf import OmegaConf
+
+        root = Path(str(cfg.data.train_data_paths[0].dataset_path))
+        state_config = _read_object(root / "meta/steam_state.json", "STEAM state")
+        for key in ("state_mean", "state_std", "state_keys"):
+            OmegaConf.update(cfg, f"actor.model.{key}", state_config[key], force_add=True)
+        OmegaConf.update(
+            cfg,
+            "actor.model.geometry_contract",
+            json.dumps(state_config["geometry_contract"], sort_keys=True),
+            force_add=True,
+        )
     resolved = _resolved_config(cfg)
     values: dict[str, Any] = {}
     for dotted_key, expected in _CONFIG_CONTRACT:
         actual = _select(resolved, dotted_key)
         if actual != expected:
-            raise ValueError(
-                f"STEAM config changed at {dotted_key}: {actual!r} != {expected!r}"
-            )
+            raise ValueError(f"STEAM config changed at {dotted_key}: {actual!r} != {expected!r}")
         values[dotted_key] = actual
 
     entries = resolved["data"].get("train_data_paths")
@@ -123,17 +128,36 @@ def inspect_steam_training(cfg: Any, member_index: int) -> dict[str, Any]:
     if entry.get("type") != "sft" or not entry.get("dataset_path"):
         raise ValueError("STEAM train_data_paths[0] must be an explicit sft dataset")
 
-    world_size = 8
-    gradient_accumulation = (
-        values["actor.global_batch_size"]
-        // values["actor.micro_batch_size"]
-        // world_size
-    )
-    if gradient_accumulation != 2:
-        raise ValueError("STEAM batch contract must resolve to two accumulation steps")
     placement = resolved["cluster"].get("component_placement", {})
     if list(placement.values()) != [str(os.environ.get("CLOTHDOJO_STEAM_PLACEMENT"))]:
-        raise ValueError("STEAM placement must pin the actor to one 8-GPU node")
+        raise ValueError("STEAM placement differs from the explicitly allocated ranks")
+    rank_range = next(iter(placement.values())).split("-")
+    if len(rank_range) != 2 or not all(v.isdigit() for v in rank_range):
+        raise ValueError("STEAM placement requires an explicit contiguous GPU rank range")
+    first, last = map(int, rank_range)
+    if first < 0 or last >= int(cfg.cluster.num_nodes) * 8 or last < first:
+        raise ValueError("STEAM GPU placement is outside the allocated cluster")
+    world_size = last - first + 1
+    for key in (
+        "actor.micro_batch_size",
+        "actor.global_batch_size",
+        "runner.max_steps",
+        "runner.save_interval",
+        "actor.optim.lr_warmup_steps",
+    ):
+        values[key] = _positive_int(_select(resolved, key), key)
+    micro_global = values["actor.micro_batch_size"] * world_size
+    if values["actor.global_batch_size"] % micro_global:
+        raise ValueError("STEAM global batch must be divisible by world_size * micro batch")
+    gradient_accumulation = values["actor.global_batch_size"] // micro_global
+    for key in ("actor.optim.lr", "actor.optim.value_lr"):
+        values[key] = float(_select(resolved, key))
+        if not np.isfinite(values[key]) or values[key] <= 0:
+            raise ValueError("STEAM learning rates must be finite and positive")
+    if values["actor.optim.lr"] != values["actor.optim.value_lr"]:
+        raise ValueError("STEAM full model and value head must use the same learning rate")
+    if int(cfg.actor.optim.total_training_steps) != values["runner.max_steps"]:
+        raise ValueError("STEAM scheduler and runner step budgets differ")
 
     runtime = inspect_steam_runtime()
     dataset = inspect_steam_dataset(entry["dataset_path"], cfg=cfg)
@@ -152,9 +176,7 @@ def inspect_steam_training(cfg: Any, member_index: int) -> dict[str, Any]:
             "global_batch_size": values["actor.global_batch_size"],
             "gradient_accumulation": gradient_accumulation,
             "master_precision": values["actor.model.precision"],
-            "compute_precision": values[
-                "actor.fsdp_config.mixed_precision.param_dtype"
-            ],
+            "compute_precision": values["actor.fsdp_config.mixed_precision.param_dtype"],
             "full_model": True,
             "include_state": True,
             "steps": values["runner.max_steps"],
@@ -207,10 +229,14 @@ def inspect_steam_dataset(value: Any, *, cfg: Any) -> dict[str, Any]:
         raise ValueError(f"unsupported or incomplete dataset provenance: {provenance_path}")
     selection = provenance.get("selection", {})
     counts = provenance.get("counts", {})
-    if (
+    approved = selection.get("rule") == "approved_whole_trajectory_good"
+    if not approved and (
         selection.get("rule") != "explicit_whole_trajectory_good"
         or selection.get("required_review_status") != "complete"
-        or counts.get("whole_trajectory_good_only") is not True
+    ):
+        raise ValueError("STEAM dataset lacks an explicit whole-trajectory Good selection")
+    if (
+        counts.get("whole_trajectory_good_only") is not True
         or counts.get("output_episodes") != total_episodes
         or counts.get("output_frames") != total_frames
     ):
@@ -219,6 +245,23 @@ def inspect_steam_dataset(value: Any, *, cfg: Any) -> dict[str, Any]:
     features = info.get("features", {})
     if features.get("observation.state", {}).get("shape") != [EXPECTED_STATE_DIM]:
         raise ValueError("STEAM observation.state must be 14-dimensional")
+    state_dim = int(getattr(cfg.actor.model, "state_dim", EXPECTED_STATE_DIM))
+    keys = list(getattr(cfg.actor.model, "state_keys", ["observation.state"]))
+    if (keys, state_dim) not in [
+        (["observation.state"], 14),
+        (["observation.state", "observation.cloth_metrics"], 16),
+    ]:
+        raise ValueError("unsupported STEAM state feature layout")
+    if state_dim == 16:
+        from clothdojo.training.steam_geometry import GEOMETRY_NAMES
+
+        if features.get(keys[1], {}).get("names") != GEOMETRY_NAMES or features[keys[1]].get(
+            "shape"
+        ) != [2]:
+            raise ValueError("STEAM geometry feature layout differs")
+        contract = json.loads(cfg.actor.model.geometry_contract)
+        if provenance.get("geometry", {}).get("contract") != contract:
+            raise ValueError("STEAM geometry observation semantics differ")
     for camera in EXPECTED_CAMERAS:
         if features.get(camera, {}).get("dtype") != "video":
             raise ValueError(f"STEAM camera is absent or not video: {camera}")
@@ -232,7 +275,17 @@ def inspect_steam_dataset(value: Any, *, cfg: Any) -> dict[str, Any]:
         raise ValueError("STEAM episode indices must be contiguous and zero-based")
     if any(
         row.get("quality") != "good"
-        or row.get("review_complete") is not True
+        or (not approved and row.get("review_complete") is not True)
+        or (
+            approved
+            and (
+                not row.get("quality_basis")
+                or row.get("quality_basis")
+                != selection.get("approved_originals", {}).get(
+                    row.get("source_trajectory", "").removesuffix("__mirror")
+                )
+            )
+        )
         or row.get("full_trajectory") is not True
         for row in episodes
     ):
@@ -250,25 +303,26 @@ def inspect_steam_dataset(value: Any, *, cfg: Any) -> dict[str, Any]:
     for path in data_paths:
         table = pq.read_table(
             path,
-            columns=["episode_index", "frame_index", "task_index", "observation.state"],
+            columns=["episode_index", "frame_index", "task_index", *keys],
         )
         episode_parts.append(np.asarray(table["episode_index"].to_numpy(), dtype=np.int64))
         frame_parts.append(np.asarray(table["frame_index"].to_numpy(), dtype=np.int64))
         if np.any(np.asarray(table["task_index"].to_numpy(), dtype=np.int64) != 0):
             raise ValueError(f"STEAM data contains a nonzero task_index: {path}")
-        state_parts.append(_as_list_column(table["observation.state"], EXPECTED_STATE_DIM))
+        state_parts.append(
+            np.concatenate(
+                [_as_list_column(table[key], int(features[key]["shape"][0])) for key in keys],
+                axis=1,
+            )
+        )
     episode_index = np.concatenate(episode_parts)
     frame_index = np.concatenate(frame_parts)
     states = np.concatenate(state_parts).astype(np.float64, copy=False)
-    if states.shape != (total_frames, EXPECTED_STATE_DIM) or not np.isfinite(states).all():
+    if states.shape != (total_frames, state_dim) or not np.isfinite(states).all():
         raise ValueError("STEAM state rows are missing, malformed, or non-finite")
-    if not np.array_equal(
-        episode_index, np.repeat(np.arange(total_episodes), lengths)
-    ):
+    if not np.array_equal(episode_index, np.repeat(np.arange(total_episodes), lengths)):
         raise ValueError("STEAM episode_index is not contiguous")
-    if not np.array_equal(
-        frame_index, np.concatenate([np.arange(length) for length in lengths])
-    ):
+    if not np.array_equal(frame_index, np.concatenate([np.arange(length) for length in lengths])):
         raise ValueError("STEAM frame_index is not contiguous within each episode")
 
     observed_mean = states.mean(axis=0)
@@ -290,7 +344,8 @@ def inspect_steam_dataset(value: Any, *, cfg: Any) -> dict[str, Any]:
         "fps": EXPECTED_FPS,
         "prompt": prompt,
         "camera_keys": list(EXPECTED_CAMERAS),
-        "state_dim": EXPECTED_STATE_DIM,
+        "state_dim": state_dim,
+        "state_keys": keys,
         "state_mean": observed_mean.tolist(),
         "state_std": observed_std.tolist(),
         "episode_length": {
@@ -319,17 +374,36 @@ def write_steam_launch_manifest(cfg: Any, manifest: dict[str, Any]) -> Path:
     return path
 
 
-def merge_steam_members(
-    members: list[str], output: str | Path, *, overwrite: bool = False
-) -> Path:
+def merge_steam_members(members: list[str], output: str | Path, *, overwrite: bool = False) -> Path:
     """Assemble independently trained members with RLINF's canonical merger."""
 
     if len(members) != 3:
         raise ValueError("ClothDojo STEAM requires exactly three member checkpoints")
     from rlinf.models.embodiment.value_model.steam.checkpoint_merge import (
+        _parse_member_spec,
+        _resolve_checkpoint,
         merge_ensemble_checkpoints,
     )
 
+    layouts = []
+    for member in members:
+        checkpoint = _resolve_checkpoint(_parse_member_spec(member).checkpoint)
+        config = _read_object(checkpoint.config_path, "STEAM checkpoint")
+        layouts.append(
+            {
+                key: config.get(key)
+                for key in (
+                    "include_state",
+                    "state_dim",
+                    "state_mean",
+                    "state_std",
+                    "state_keys",
+                    "geometry_contract",
+                )
+            }
+        )
+    if any(layout != layouts[0] for layout in layouts[1:]):
+        raise ValueError("STEAM member state/geometry contracts differ")
     return merge_ensemble_checkpoints(members, output, overwrite=overwrite)
 
 

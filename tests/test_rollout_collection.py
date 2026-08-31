@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -304,7 +305,8 @@ def test_shared_runner_uses_one_layout_for_rollout_and_evaluation_cases() -> Non
         )
 
 
-def test_shared_runner_indexes_evaluation_provenance(tmp_path: Path) -> None:
+@pytest.mark.parametrize("cloth_visual", ["nocs", "white"])
+def test_shared_runner_indexes_evaluation_provenance(tmp_path: Path, cloth_visual) -> None:
     scenario = tmp_path / "scenario.yaml"
     scenario.write_text(
         """schema: clothdojo_rollout_scenario
@@ -342,7 +344,7 @@ action_horizon: 1
             "policy_kind": "openpi",
             "policy": identity,
             "policy_seed": 123,
-            "cloth_visual": "nocs",
+            "cloth_visual": cloth_visual,
             "observation": policy_observation_settings(),
             "execution": execution_settings("chunk", 1),
             "parallelism": {"worlds": 1, "active_worlds": 1, "batch_start": 0},
@@ -386,9 +388,14 @@ action_horizon: 1
         batch_size=1,
         producer="clothdojo_evaluation",
         training_eligible=False,
+        cloth_visual=cloth_visual,
     )
 
     index = collect_trajectory_index([job], spec=spec)
+
+    other_visual = "white" if cloth_visual == "nocs" else "nocs"
+    with pytest.raises(ValueError, match="different provenance"):
+        collect_trajectory_index([job], spec=replace(spec, cloth_visual=other_visual))
 
     assert index == [
         {

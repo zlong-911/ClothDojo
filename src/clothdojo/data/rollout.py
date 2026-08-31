@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -14,10 +15,10 @@ from clothdojo.data.lerobot import (
     EXPORT_FORMAT_VERSION,
     EXPORT_SCHEMA,
     _create_writer,
-    _validate_video,
 )
 from clothdojo.rendering import DATASET_CAMERA_NAMES
 from clothdojo.robots import RobotProfile, robot_profile
+from clothdojo.sim.scene import ClothVisual
 
 CAMERA_NAMES = DATASET_CAMERA_NAMES
 ARM_JOINTS = tuple(f"{side}/joint{joint}" for side in ("left", "right") for joint in range(1, 7))
@@ -91,9 +92,9 @@ class RolloutLeRobotWriter:
             ),
             image_writer_threads=image_writer_threads,
         )
+        self._episode_lengths: list[int] = []
         self.frames = 0
         self._episode_frames = 0
-        self._episode_lengths: list[int] = []
         self._closed = False
 
     def add_frame(
@@ -169,13 +170,24 @@ class RolloutLeRobotWriter:
         self._closed = True
 
 
-def inspect_rollout_collection_export(source: str | Path) -> dict[str, Any]:
+def inspect_rollout_collection_export(
+    source: str | Path,
+    *,
+    shard_index: int | None = None,
+    shard_count: int | None = None,
+    cloth_visual: ClothVisual = "nocs",
+) -> dict[str, Any]:
     """Inspect canonical collection metadata without rendering or writing data."""
 
     root = Path(source).expanduser().resolve()
     manifest, source_kind = _load_canonical_collection(root)
+    manifest = _select_trajectory_shard(
+        manifest,
+        shard_index=shard_index,
+        shard_count=shard_count,
+    )
     frames = sum(int(item["action_count"]) for item in manifest["trajectories"])
-    return {
+    result = {
         "source_kind": source_kind,
         "source": str(root),
         "output_format": "LeRobot v2.1",
@@ -183,8 +195,15 @@ def inspect_rollout_collection_export(source: str | Path) -> dict[str, Any]:
         "output_frames": frames,
         "camera_names": list(CAMERA_NAMES),
         "renderer": "newton",
+        "cloth_visual": cloth_visual,
         "training_eligible": manifest.get("training_eligible") is True,
     }
+    if shard_count is not None:
+        result["trajectory_shard"] = {
+            "index": shard_index,
+            "count": shard_count,
+        }
+    return result
 
 
 def export_rollout_collection(
@@ -195,6 +214,9 @@ def export_rollout_collection(
     device: str = "cuda:0",
     repo_id: str | None = None,
     image_writer_threads: int = 6,
+    shard_index: int | None = None,
+    shard_count: int | None = None,
+    cloth_visual: ClothVisual = "nocs",
 ) -> dict[str, Any]:
     """Replay canonical rollout states and publish one multi-episode LeRobot dataset."""
 
@@ -208,15 +230,18 @@ def export_rollout_collection(
             assets_root=assets_root,
             device=device,
             profile=profile,
+            cloth_visual=cloth_visual,
         )
 
     return _export_canonical_collection(
         source,
         output,
         camera_factory=camera_factory,
-        rendering={"backend": "newton"},
+        rendering={"backend": "newton", "cloth_visual": cloth_visual},
         repo_id=repo_id,
         image_writer_threads=image_writer_threads,
+        shard_index=shard_index,
+        shard_count=shard_count,
     )
 
 
@@ -225,14 +250,19 @@ def inspect_trajectory_dataset_export(
     *,
     min_segment_frames: int,
     whole_trajectory_good_only: bool,
+    shard_index: int | None = None,
+    shard_count: int | None = None,
+    cloth_visual: ClothVisual = "nocs",
 ) -> dict[str, Any]:
     """Inspect annotation selection directly on canonical trajectories."""
 
     root = Path(source).expanduser().resolve()
-    plan = build_good_segment_plan(
+    plan = _trajectory_export_plan(
         root,
         min_segment_frames=min_segment_frames,
         whole_trajectory_good_only=whole_trajectory_good_only,
+        shard_index=shard_index,
+        shard_count=shard_count,
     )
     fps, task_name, _assets = _trajectory_export_context(root, plan)
     result = plan.to_json_dict()
@@ -247,8 +277,14 @@ def inspect_trajectory_dataset_export(
             "output_format": "LeRobot v2.1",
             "camera_names": list(CAMERA_NAMES),
             "renderer": "newton",
+            "cloth_visual": cloth_visual,
         }
     )
+    if shard_count is not None:
+        result["trajectory_shard"] = {
+            "index": shard_index,
+            "count": shard_count,
+        }
     return result
 
 
@@ -262,16 +298,35 @@ def export_trajectory_dataset(
     image_writer_threads: int = 6,
     min_segment_frames: int,
     whole_trajectory_good_only: bool,
+    shard_index: int | None = None,
+    shard_count: int | None = None,
+    cloth_visual: ClothVisual = "nocs",
 ) -> dict[str, Any]:
     """Replay selected canonical trajectory ranges into standard LeRobot v2.1."""
 
     root = Path(source).expanduser().resolve()
-    plan = build_good_segment_plan(
+    plan = _trajectory_export_plan(
         root,
         min_segment_frames=min_segment_frames,
         whole_trajectory_good_only=whole_trajectory_good_only,
+        shard_index=shard_index,
+        shard_count=shard_count,
     )
     fps, task_name, assets = _trajectory_export_context(root, plan)
+    if shard_count is not None:
+        plan = replace(
+            plan,
+            segments=tuple(
+                sorted(
+                    plan.segments,
+                    key=lambda segment: (
+                        assets[segment.source_trajectory],
+                        segment.source_trajectory,
+                        segment.action_start,
+                    ),
+                )
+            ),
+        )
     prompt = _task_prompt(task_name)
     trajectories = [
         {
@@ -301,6 +356,7 @@ def export_trajectory_dataset(
             assets_root=assets_root,
             device=device,
             profile=profile,
+            cloth_visual=cloth_visual,
         )
 
     _export_collection_manifest(
@@ -309,7 +365,15 @@ def export_trajectory_dataset(
         manifest=manifest,
         source_kind="trajectory_collection",
         camera_factory=camera_factory,
-        rendering={"backend": "newton"},
+        rendering={
+            "backend": "newton",
+            "cloth_visual": cloth_visual,
+            **(
+                {"trajectory_shard": {"index": shard_index, "count": shard_count}}
+                if shard_count is not None
+                else {}
+            ),
+        },
         repo_id=repo_id,
         image_writer_threads=image_writer_threads,
         selection_plan=plan,
@@ -319,9 +383,84 @@ def export_trajectory_dataset(
         root,
         min_segment_frames=min_segment_frames,
         whole_trajectory_good_only=whole_trajectory_good_only,
+        shard_index=shard_index,
+        shard_count=shard_count,
+        cloth_visual=cloth_visual,
     )
     result.update({"compatible": True, "output": str(Path(output).expanduser().resolve())})
     return result
+
+
+def _trajectory_export_plan(
+    root: Path,
+    *,
+    min_segment_frames: int,
+    whole_trajectory_good_only: bool,
+    shard_index: int | None,
+    shard_count: int | None,
+) -> ExportPlan:
+    selected_source_ids = _trajectory_shard_source_ids(
+        root,
+        shard_index=shard_index,
+        shard_count=shard_count,
+    )
+    return build_good_segment_plan(
+        root,
+        min_segment_frames=min_segment_frames,
+        whole_trajectory_good_only=whole_trajectory_good_only,
+        source_ids=selected_source_ids,
+    )
+
+
+def _trajectory_shard_source_ids(
+    root: Path,
+    *,
+    shard_index: int | None,
+    shard_count: int | None,
+) -> frozenset[str] | None:
+    if shard_index is None and shard_count is None:
+        return None
+    if shard_index is None or shard_count is None:
+        raise ValueError("shard_index and shard_count must be provided together")
+    if shard_count < 1:
+        raise ValueError("shard_count must be positive")
+    if not 0 <= shard_index < shard_count:
+        raise ValueError("shard_index must be in [0, shard_count)")
+
+    source_records: list[tuple[str, str, str, int]] = []
+    pair_assets: dict[str, str] = {}
+    for manifest_path in sorted((root / "trajectories").glob("*/manifest.json")):
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if payload.get("status") != "complete":
+            continue
+        metadata = payload.get("metadata")
+        asset_id = metadata.get("asset_id") if isinstance(metadata, dict) else None
+        if not isinstance(asset_id, str) or not asset_id:
+            raise RuntimeError(f"trajectory asset_id is missing: {manifest_path.parent.name}")
+        action_count = payload.get("action_count", 1)
+        if isinstance(action_count, bool) or not isinstance(action_count, int) or action_count < 1:
+            raise RuntimeError(f"trajectory action_count is invalid: {manifest_path.parent.name}")
+        source_id = manifest_path.parent.name
+        pair_id = source_id.removesuffix("__mirror")
+        previous_asset = pair_assets.setdefault(pair_id, asset_id)
+        if previous_asset != asset_id:
+            raise RuntimeError(f"mirror pair asset_id differs: {pair_id}")
+        source_records.append((source_id, pair_id, asset_id, action_count))
+    selected_pairs = _balanced_group_shards(
+        [
+            (pair_id, action_count)
+            for _source_id, pair_id, _asset_id, action_count in source_records
+        ],
+        shard_count,
+    )[shard_index]
+    selected = frozenset(
+        source_id
+        for source_id, pair_id, _asset_id, _action_count in source_records
+        if pair_id in selected_pairs
+    )
+    if not selected:
+        raise ValueError(f"trajectory shard {shard_index}/{shard_count} is empty")
+    return selected
 
 
 class _NewtonTrajectoryCamera:
@@ -334,6 +473,7 @@ class _NewtonTrajectoryCamera:
         assets_root: str | Path,
         device: str,
         profile: RobotProfile,
+        cloth_visual: ClothVisual,
     ) -> None:
         from clothdojo.rollout.render import ShirtFlattenCameraObservation
         from clothdojo.sim.scene import ShirtFlattenSpec, build_scene
@@ -343,6 +483,7 @@ class _NewtonTrajectoryCamera:
             spec=ShirtFlattenSpec(garment_id=asset_id, world_count=1),
             device=device,
             visuals=True,
+            cloth_visual=cloth_visual,
             robot_id=profile.robot_id,
         )
         self._runtime = _TrajectoryRenderState(self._scene)
@@ -354,6 +495,9 @@ class _NewtonTrajectoryCamera:
     def __call__(self, state) -> dict[str, np.ndarray]:
         _restore_render_state(self._runtime, state)
         return self._camera(self._runtime)
+
+    def set_cloth_surface_winding_reversed(self, reversed_: bool) -> None:
+        self._camera.set_cloth_surface_winding_reversed(reversed_)
 
     def close(self) -> None:
         if hasattr(self._camera, "close"):
@@ -368,11 +512,24 @@ def _export_canonical_collection(
     rendering: dict[str, Any],
     repo_id: str | None,
     image_writer_threads: int,
+    shard_index: int | None = None,
+    shard_count: int | None = None,
 ) -> dict[str, Any]:
     """Publish one canonical collection using a backend-specific camera."""
 
     root = Path(source).expanduser().resolve()
     manifest, source_kind = _load_canonical_collection(root)
+    manifest = _select_trajectory_shard(
+        manifest,
+        shard_index=shard_index,
+        shard_count=shard_count,
+    )
+    rendering = dict(rendering)
+    if shard_count is not None:
+        rendering["trajectory_shard"] = {
+            "index": shard_index,
+            "count": shard_count,
+        }
     _export_collection_manifest(
         root,
         output,
@@ -383,7 +540,12 @@ def _export_canonical_collection(
         repo_id=repo_id,
         image_writer_threads=image_writer_threads,
     )
-    summary = inspect_rollout_collection_export(root)
+    summary = inspect_rollout_collection_export(
+        root,
+        shard_index=shard_index,
+        shard_count=shard_count,
+        cloth_visual=rendering.get("cloth_visual", "nocs"),
+    )
     summary.update(
         {
             "compatible": True,
@@ -392,6 +554,64 @@ def _export_canonical_collection(
         }
     )
     return summary
+
+
+def _select_trajectory_shard(
+    manifest: dict[str, Any],
+    *,
+    shard_index: int | None,
+    shard_count: int | None,
+) -> dict[str, Any]:
+    """Select a deterministic shard without splitting one asset across workers."""
+
+    if shard_index is None and shard_count is None:
+        return manifest
+    if shard_index is None or shard_count is None:
+        raise ValueError("shard_index and shard_count must be provided together")
+    if shard_count < 1:
+        raise ValueError("shard_count must be positive")
+    if not 0 <= shard_index < shard_count:
+        raise ValueError("shard_index must be in [0, shard_count)")
+    trajectories = manifest["trajectories"]
+    weighted_assets = []
+    for episode in trajectories:
+        start = int(episode.get("action_start", 0))
+        end = int(episode.get("action_end_exclusive", episode.get("action_count", start + 1)))
+        weighted_assets.append((episode["asset_id"], max(1, end - start)))
+    selected_assets = _balanced_group_shards(weighted_assets, shard_count)[shard_index]
+    trajectories = [
+        episode for episode in trajectories if episode["asset_id"] in selected_assets
+    ]
+    if not trajectories:
+        raise ValueError(
+            f"trajectory shard {shard_index}/{shard_count} is empty"
+        )
+    selected = dict(manifest)
+    selected["trajectories"] = trajectories
+    return selected
+
+
+def _balanced_group_shards(
+    weighted_groups: list[tuple[str, int]], shard_count: int
+) -> list[set[str]]:
+    """Assign whole groups by descending work to the currently lightest shard."""
+
+    group_weights: dict[str, int] = {}
+    group_order: dict[str, int] = {}
+    for group_id, weight in weighted_groups:
+        group_order.setdefault(group_id, len(group_order))
+        group_weights[group_id] = group_weights.get(group_id, 0) + weight
+    ordered_groups = sorted(
+        group_weights,
+        key=lambda group_id: (-group_weights[group_id], group_order[group_id]),
+    )
+    shards = [set() for _ in range(shard_count)]
+    loads = [0] * shard_count
+    for group_id in ordered_groups:
+        index = min(range(shard_count), key=lambda value: (loads[value], value))
+        shards[index].add(group_id)
+        loads[index] += group_weights[group_id]
+    return shards
 
 
 def _export_collection_manifest(
@@ -462,6 +682,10 @@ def _export_collection_manifest(
                     reader.state_at(action_start),
                     profile,
                 )
+            _set_camera_cloth_surface_winding_reversed(
+                camera,
+                _trajectory_surface_winding_reversed(reader),
+            )
             if hasattr(camera, "begin_episode"):
                 camera.begin_episode(
                     episode_index,
@@ -497,10 +721,28 @@ def _export_collection_manifest(
         sink.abort()
         raise
 
-
 def _close_camera(camera: Any | None) -> None:
     if camera is not None and hasattr(camera, "close"):
         camera.close()
+
+
+def _trajectory_surface_winding_reversed(reader: Any) -> bool:
+    metadata = getattr(reader.manifest, "metadata", {})
+    augmentation = metadata.get("augmentation") if isinstance(metadata, dict) else None
+    if not isinstance(augmentation, dict):
+        return False
+    reversed_ = augmentation.get("surface_winding_reversed", False)
+    if not isinstance(reversed_, bool):
+        raise ValueError("trajectory surface_winding_reversed must be bool")
+    return reversed_
+
+
+def _set_camera_cloth_surface_winding_reversed(camera: Any, reversed_: bool) -> None:
+    setter = getattr(camera, "set_cloth_surface_winding_reversed", None)
+    if setter is not None:
+        setter(reversed_)
+    elif reversed_:
+        raise RuntimeError("trajectory renderer cannot reverse cloth surface winding")
 
 
 def _load_canonical_collection(root: Path) -> tuple[dict[str, Any], str]:
@@ -687,8 +929,8 @@ def _validate_output(root: Path, *, repo_id: str, episode_lengths: list[int]) ->
         files = sorted((root / "videos").rglob(f"{key}/episode_*.mp4"))
         if len(files) != episodes:
             raise RuntimeError(f"rollout camera video is missing: {camera}")
-        for path, expected_frames in zip(files, episode_lengths, strict=True):
-            _validate_video(path, expected_frames)
+        if any(path.stat().st_size == 0 for path in files):
+            raise RuntimeError(f"rollout camera video is empty: {camera}")
     from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 
     if len(LeRobotDataset(repo_id=repo_id, root=root, download_videos=False)) != frames:

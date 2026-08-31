@@ -39,9 +39,11 @@ data:
   train_data_paths:
     - dataset_path: ${oc.env:CLOTHDOJO_CFG_EXPERT_DATASET}
       type: sft
+      advantage_tag: ${oc.env:CLOTHDOJO_STEAM_ADVANTAGE_TAG}
       weight: 0.75
     - dataset_path: ${oc.env:CLOTHDOJO_CFG_ROLLOUT_DATASET}
       type: rollout
+      advantage_tag: ${oc.env:CLOTHDOJO_STEAM_ADVANTAGE_TAG}
       weight: 0.25
 
 algorithm:
@@ -85,7 +87,7 @@ actor:
     openpi_data:
       adapt_to_pi: false
       extra_delta_transform: true
-      default_prompt: Flatten the shirt.
+      default_prompt: flatten the shirt
       norm_stats_path: ${oc.env:CLOTHDOJO_PI05_NORM_STATS}
   optim:
     # Keep the accepted conservative CFGRL peak LR.  The project-verified

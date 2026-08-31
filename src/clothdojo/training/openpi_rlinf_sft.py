@@ -6,11 +6,16 @@ import json
 import os
 from collections.abc import Iterator
 from pathlib import Path
+from types import MethodType
 from typing import Any
 
 import torch
 from rlinf.workers.sft.fsdp_vla_sft_worker import FSDPVlaSftWorker
 from torch.utils.data.distributed import DistributedSampler
+
+from clothdojo.training.augmentation import install_training_augmentation
+from clothdojo.training.openpi import TrainingPrompt
+from clothdojo.training.worker_environment import apply_worker_environment
 
 
 class _EpochAdvancingSampler:
@@ -44,8 +49,10 @@ class OpenPiRlinfSftWorker(FSDPVlaSftWorker):
     """Current OpenPI_RLinf worker with deterministic official data iteration."""
 
     def __init__(self, cfg: Any) -> None:
+        apply_worker_environment(cfg)
         _select_pyav_backend()
         _seed_rank(int(cfg.actor.seed), int(os.environ.get("RANK", 0)))
+        self._action_offset_weights = _action_offset_weights_from_config(cfg)
         super().__init__(cfg)
 
     def build_dataloader(self, data_paths: Any, eval_dataset: bool = False):
@@ -53,6 +60,7 @@ class OpenPiRlinfSftWorker(FSDPVlaSftWorker):
             data_paths,
             eval_dataset=eval_dataset,
         )
+        _set_training_prompt(data_loader, self.cfg.actor.model.openpi_data.default_prompt)
         if not eval_dataset:
             _adapt_official_openpi_loader(
                 data_loader,
@@ -63,6 +71,12 @@ class OpenPiRlinfSftWorker(FSDPVlaSftWorker):
 
     def init_worker(self) -> None:
         super().init_worker()
+        module = getattr(self.model, "module", self.model)
+        install_training_augmentation(
+            module.model,
+            enabled=self.cfg.get("clothdojo", {}).get("image_augmentation", False),
+        )
+        _install_action_offset_reduction(self.model, self._action_offset_weights)
         _validate_fp32_training_state(self.model, self.optimizer)
         self._ema_decay = float(self.cfg.actor.optim.ema_decay)
         if not 0.0 < self._ema_decay < 1.0:
@@ -102,7 +116,7 @@ class OpenPiRlinfSftWorker(FSDPVlaSftWorker):
                     },
                     "online": {
                         "path": "dcp_checkpoint",
-                        "purpose": "exact resume with optimizer and scheduler state",
+                        "purpose": "online weights and optimizer-update analysis; resume disabled",
                     },
                 }
                 (Path(save_path) / "clothdojo_weights.json").write_text(
@@ -114,42 +128,98 @@ class OpenPiRlinfSftWorker(FSDPVlaSftWorker):
             _swap_parameter_data_with_ema(self.model, self._ema_state)
 
     def load_checkpoint(self, load_path: str) -> None:
-        """Restore online training state and the matching EMA shadow."""
+        """Reject upstream resume calls; SFT runs always start from step zero."""
 
-        super().load_checkpoint(load_path)
-        weights_path = Path(load_path) / "model_state_dict" / "full_weights.pt"
-        if not weights_path.is_file():
-            raise FileNotFoundError(f"EMA inference weights are missing: {weights_path}")
-        self._ema_state = _initialize_ema_state(self.model)
-        if torch.distributed.get_rank() == 0:
-            full_state = torch.load(
-                weights_path,
-                map_location="cpu",
-                mmap=True,
-                weights_only=True,
-            )
-        else:
-            full_state = {}
-        from torch.distributed.checkpoint.state_dict import (
-            StateDictOptions,
-            set_model_state_dict,
-        )
+        raise ValueError("SFT resume is disabled; restart training in a new output directory")
 
-        incompatible = set_model_state_dict(
-            self.model,
-            full_state,
-            options=StateDictOptions(
-                full_state_dict=True,
-                cpu_offload=True,
-                strict=True,
-                broadcast_from_rank0=True,
-            ),
+
+def _action_offset_weights_from_config(cfg: Any) -> tuple[float, ...]:
+    """Resolve the shared Pi0.5 action-offset loss contract for RLINF."""
+
+    from omegaconf import OmegaConf
+
+    from clothdojo.training.jax_sft import (
+        _action_offset_weights,
+        _compose_action_offset_loss,
+    )
+
+    raw = OmegaConf.to_container(cfg, resolve=True)
+    if not isinstance(raw, dict):
+        raise TypeError("resolved OpenPI/RLinf config must be a mapping")
+    spec = _compose_action_offset_loss(raw)
+    return _action_offset_weights(
+        spec,
+        action_horizon=int(cfg.actor.model.num_action_chunks),
+    )
+
+
+def _action_offset_loss_manifest_from_config(cfg: Any) -> dict[str, Any]:
+    """Describe the exact reduction that will run inside the RLINF worker."""
+
+    from omegaconf import OmegaConf
+
+    from clothdojo.training.jax_sft import (
+        _action_offset_loss_manifest,
+        _compose_action_offset_loss,
+    )
+
+    raw = OmegaConf.to_container(cfg, resolve=True)
+    if not isinstance(raw, dict):
+        raise TypeError("resolved OpenPI/RLinf config must be a mapping")
+    return _action_offset_loss_manifest(
+        _compose_action_offset_loss(raw),
+        action_horizon=int(cfg.actor.model.num_action_chunks),
+    )
+
+
+def _reduce_action_offset_loss(
+    per_offset_loss: torch.Tensor,
+    weights: tuple[float, ...],
+) -> torch.Tensor:
+    """Apply the same normalized action-offset reduction as OpenPI/JAX."""
+
+    if per_offset_loss.ndim != 2:
+        raise ValueError(
+            "OpenPI/RLinf per-offset loss must have shape [batch, action_horizon], "
+            f"got {tuple(per_offset_loss.shape)}"
         )
-        if incompatible.missing_keys or incompatible.unexpected_keys:
-            raise RuntimeError(f"EMA checkpoint mismatch: {incompatible}")
-        # The model now contains EMA and the shadow contains online weights.
-        # Swapping restores the online model and retains EMA in the shadow.
-        _swap_parameter_data_with_ema(self.model, self._ema_state)
+    if per_offset_loss.shape[-1] != len(weights):
+        raise ValueError(
+            "OpenPI/RLinf action-offset weight count differs from model horizon: "
+            f"{len(weights)} != {per_offset_loss.shape[-1]}"
+        )
+    weight_tensor = per_offset_loss.new_tensor(weights)
+    return ((per_offset_loss * weight_tensor).sum(dim=-1) / weight_tensor.sum()).mean()
+
+
+def _install_action_offset_reduction(
+    fsdp_model: Any,
+    weights: tuple[float, ...],
+) -> None:
+    """Replace only OpenPI_RLinf's scalar SFT reduction on one model instance."""
+
+    if all(weight == 1.0 for weight in weights):
+        return
+    module = getattr(fsdp_model, "module", fsdp_model)
+    from rlinf.models.embodiment.openpi_rlinf.sft_action_model import (
+        OpenPiPytorchSFTActionModel,
+    )
+
+    if not isinstance(module, OpenPiPytorchSFTActionModel):
+        raise TypeError(
+            f"action-offset loss requires OpenPiPytorchSFTActionModel, got {type(module).__name__}"
+        )
+    if bool(module.rlt_cfg.use_rlt):
+        raise ValueError("action-offset loss is not defined for the legacy RLT objective")
+
+    def weighted_sft_forward(model: Any, data: Any) -> torch.Tensor:
+        observation, actions = model._unpack_sft_batch(data)
+        observation = model._observation_to_device(observation)
+        actions = model._actions_to_device(actions)
+        per_offset_loss = model.model.compute_loss(observation, actions, train=True)
+        return _reduce_action_offset_loss(per_offset_loss, weights)
+
+    module.sft_forward = MethodType(weighted_sft_forward, module)
 
 
 def _seed_rank(seed: int, rank: int) -> int:
@@ -160,9 +230,7 @@ def _seed_rank(seed: int, rank: int) -> int:
     return rank_seed
 
 
-def _adapt_official_openpi_loader(data_loader: Any, *, seed: int, rank: int) -> None:
-    """Bind actor seed and epoch advancement at OpenPI's guarded torch boundary."""
-
+def _openpi_torch_loader(data_loader: Any) -> Any:
     openpi_loader = getattr(data_loader, "_data_loader", None)
     torch_loader = getattr(openpi_loader, "_data_loader", None) or getattr(
         openpi_loader,
@@ -171,6 +239,27 @@ def _adapt_official_openpi_loader(data_loader: Any, *, seed: int, rank: int) -> 
     )
     if torch_loader is None:
         raise TypeError("OpenPI loader layout changed: inner torch DataLoader is missing")
+    return torch_loader
+
+
+def _set_training_prompt(data_loader: Any, prompt: str) -> None:
+    """Override dataset task text before the official repack/tokenize pipeline."""
+
+    from openpi import transforms
+    from openpi.training.data_loader import TransformedDataset
+
+    dataset = _openpi_torch_loader(data_loader).dataset
+    if not isinstance(dataset, TransformedDataset):
+        raise TypeError("OpenPI loader layout changed: expected TransformedDataset")
+    # The official loader has not started its workers yet. Keep its dataset,
+    # batching and transforms intact; only supply the configured task text first.
+    dataset._transform = transforms.compose([TrainingPrompt(prompt), dataset._transform])
+
+
+def _adapt_official_openpi_loader(data_loader: Any, *, seed: int, rank: int) -> None:
+    """Bind actor seed and epoch advancement at OpenPI's guarded torch boundary."""
+
+    torch_loader = _openpi_torch_loader(data_loader)
     batch_sampler = getattr(torch_loader, "batch_sampler", None)
     sampler = getattr(batch_sampler, "sampler", None)
     if not isinstance(sampler, DistributedSampler):

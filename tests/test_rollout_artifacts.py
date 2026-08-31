@@ -388,7 +388,7 @@ def test_cfg_binding_rejects_runtime_semantic_drift(tmp_path: Path) -> None:
             "num_steps": 5,
             "adapt_to_pi": False,
             "extra_delta_transform": True,
-            "train_expert_only": True,
+            "train_expert_only": False,
             "positive_only_conditional": False,
         },
     }
@@ -413,6 +413,17 @@ def test_cfg_binding_rejects_runtime_semantic_drift(tmp_path: Path) -> None:
             norm,
             openpi_config="pi05_aloha_robotwin",
             action_horizon=40,
+            action_dim=14,
+            positive_only_conditional=False,
+        )
+    manifest["inference_contract"]["train_expert_only"] = True
+    manifest_file.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="train_expert_only"):
+        validate_cfg_checkpoint_binding(
+            checkpoint,
+            norm,
+            openpi_config="pi05_aloha_robotwin",
+            action_horizon=50,
             action_dim=14,
             positive_only_conditional=False,
         )

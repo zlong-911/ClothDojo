@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Collection
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -156,6 +157,7 @@ def build_good_segment_plan(
     *,
     min_segment_frames: int = DEFAULT_MIN_SEGMENT_FRAMES,
     whole_trajectory_good_only: bool = False,
+    source_ids: Collection[str] | None = None,
 ) -> ExportPlan:
     """Build good ranges from ``trajectories`` and sparse bad annotations.
 
@@ -189,6 +191,17 @@ def build_good_segment_plan(
     )
     if not manifest_paths:
         raise RuntimeError(f"no trajectory manifests found in {trajectories_root}")
+    requested_source_ids = None if source_ids is None else frozenset(source_ids)
+    if requested_source_ids is not None:
+        available_source_ids = {path.parent.name for path in manifest_paths}
+        missing = sorted(requested_source_ids - available_source_ids)
+        if missing:
+            raise RuntimeError(f"selected trajectories are missing: {missing}")
+        manifest_paths = [
+            path for path in manifest_paths if path.parent.name in requested_source_ids
+        ]
+        if not manifest_paths:
+            raise RuntimeError("trajectory selection is empty")
 
     segments: list[GoodSegment] = []
     source_frames = 0
@@ -200,7 +213,7 @@ def build_good_segment_plan(
     dropped_bad_frames = 0
     dropped_short_ranges: list[GoodSegment] = []
     skipped_not_whole_trajectory_good = 0
-    source_ids: set[str] = set()
+    processed_source_ids: set[str] = set()
     source_action_counts: list[tuple[str, int]] = []
 
     for manifest_path in manifest_paths:
@@ -209,9 +222,9 @@ def build_good_segment_plan(
             skipped_incomplete += 1
             continue
         source_id = manifest_path.parent.name
-        if source_id in source_ids:
+        if source_id in processed_source_ids:
             raise RuntimeError(f"duplicate trajectory id: {source_id}")
-        source_ids.add(source_id)
+        processed_source_ids.add(source_id)
         action_count = _nonnegative_integer(manifest.get("action_count"), "action_count")
         state_count = _nonnegative_integer(manifest.get("state_count"), "state_count")
         if state_count != action_count + 1:
@@ -277,13 +290,16 @@ def build_good_segment_plan(
                 continue
             segments.append(segment)
 
-    orphan_annotations = sorted(
-        path.name.removesuffix(".segments.json")
-        for path in annotations_root.glob("*.segments.json")
-        if path.name.removesuffix(".segments.json") not in source_ids
-    )
-    if orphan_annotations:
-        raise RuntimeError(f"annotations do not match complete trajectories: {orphan_annotations}")
+    if requested_source_ids is None:
+        orphan_annotations = sorted(
+            path.name.removesuffix(".segments.json")
+            for path in annotations_root.glob("*.segments.json")
+            if path.name.removesuffix(".segments.json") not in processed_source_ids
+        )
+        if orphan_annotations:
+            raise RuntimeError(
+                f"annotations do not match complete trajectories: {orphan_annotations}"
+            )
     if not segments:
         raise RuntimeError(
             "bad annotations and the minimum segment length remove every training frame"
@@ -291,7 +307,7 @@ def build_good_segment_plan(
 
     return ExportPlan(
         segments=tuple(segments),
-        source_trajectories=len(source_ids),
+        source_trajectories=len(processed_source_ids),
         source_frames=source_frames,
         skipped_incomplete_trajectories=skipped_incomplete,
         annotation_files=annotation_files,

@@ -89,8 +89,11 @@ class TrajectoryCollectionSpec:
     producer: str
     training_eligible: bool
     compressed: bool = True
+    cloth_visual: str = "nocs"
 
     def __post_init__(self) -> None:
+        if self.cloth_visual not in {"nocs", "white"}:
+            raise ValueError("cloth_visual must be 'nocs' or 'white'")
         if self.execution not in {"chunk", "rtc"}:
             raise ValueError("trajectory execution must be 'chunk' or 'rtc'")
         for name, value in (
@@ -241,7 +244,7 @@ def validate_existing_trajectory(
             spec.exec_horizon,
             rtc_delay_steps=spec.rtc_delay_steps,
         ),
-        "cloth_visual": "nocs",
+        "cloth_visual": spec.cloth_visual,
         "observation": policy_observation_settings(),
         **job.metadata,
     }
@@ -364,6 +367,7 @@ def _run_asset(
     policy = RemotePolicy(
         endpoint,
         expected_checkpoint_sha256=spec.expected_checkpoint_sha256,
+        expected_image_preprocessing=spec.policy_identity.get("image_preprocessing", "none"),
         action_horizon=scenario.action_horizon,
     )
     if policy.identity != spec.policy_identity:
@@ -374,6 +378,7 @@ def _run_asset(
         spec=ShirtFlattenSpec(garment_id=job.asset_id, world_count=world_count),
         device=device,
         visuals=True,
+        cloth_visual=spec.cloth_visual,
     )
     runtime = ShirtFlattenRuntime(scene)
     validate_pool_compatibility(
@@ -435,7 +440,7 @@ def _run_asset(
                     "policy_kind": policy.identity["backend"],
                     "policy": policy.identity,
                     "policy_seed": policy_seed,
-                    "cloth_visual": "nocs",
+                    "cloth_visual": spec.cloth_visual,
                     "observation": policy_observation_settings(),
                     "execution": execution_settings(
                         spec.execution,

@@ -1,0 +1,35 @@
+{
+  "schema": "clothdojo_mount_alignment_v1",
+  "pattern_tolerance_mm": 1.0,
+  "fixed": {
+    "name": "kai0_hangcloth_left_mount",
+    "holes_mm": [
+      [-188.7588, 10.0, 22.4997],
+      [-188.7588, 10.0, 67.5003],
+      [-143.7568, 10.0, 22.4997],
+      [-143.7568, 10.0, 67.5003]
+    ],
+    "outward_normal": [0.0, 1.0, 0.0],
+    "clearance_hole_diameter_mm": 7.0,
+    "evidence": {
+      "kind": "drawing",
+      "reference": "OpenDriveLab/kai0 setup/HangCloth/left-right-base-drawing.PDF and base-integrated.STEP",
+      "uncertainty_mm": null
+    }
+  },
+  "moving": {
+    "name": "agilex_piper_base_link",
+    "holes_mm": [
+      [-40.0, -35.0, 0.0],
+      [-40.0, 35.0, 0.0],
+      [30.0, -35.0, 0.0],
+      [30.0, 35.0, 0.0]
+    ],
+    "outward_normal": [0.0, 0.0, -1.0],
+    "evidence": {
+      "kind": "mesh",
+      "reference": "OpenDriveLab/kai0 bundled piper_description/meshes/base_link.STL, section z=0.5 mm",
+      "uncertainty_mm": null
+    }
+  }
+}

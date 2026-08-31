@@ -35,24 +35,55 @@ def inspect_cfg_pipeline(
     spec = compose_steam_advantage_spec(advantage_config)
     advantage = inspect_steam_advantages(spec)
     cfg = compose_config(cfg_config, cfg_overrides)
-    _require_within(spec.checkpoint, project_root / "data", "STEAM checkpoint")
+    checkpoint_roots = (
+        project_root / "data" / "checkpoints",
+        project_root / "outputs" / "training",
+    )
+    _require_within_any(spec.checkpoint, checkpoint_roots, "STEAM checkpoint")
     _require_within(spec.work_dir, project_root / "outputs", "STEAM work directory")
-    _require_within(
+    _require_within_any(
         Path(str(cfg.actor.model.model_path)).expanduser().resolve(),
-        project_root / "data",
+        checkpoint_roots,
         "CFG initialization checkpoint",
     )
-    cfg_entries = {str(entry.type): entry for entry in cfg.data.train_data_paths}
-    if set(cfg_entries) != {"sft", "rollout"}:
-        raise ValueError("CFG pipeline requires one sft and one rollout entry")
+    cfg_entries = list(cfg.data.train_data_paths)
+    cfg_roles = [str(entry.type) for entry in cfg_entries]
+    if cfg_roles.count("sft") != 1 or cfg_roles.count("rollout") < 1:
+        raise ValueError(
+            "CFG pipeline requires exactly one sft and at least one rollout entry"
+        )
+    spec_roles = [dataset.role for dataset in spec.datasets]
+    if spec_roles.count("sft") != 1 or spec_roles.count("rollout") < 1:
+        raise ValueError(
+            "CFG pipeline requires exactly one STEAM sft and at least one rollout dataset"
+        )
+    cfg_by_identity = {
+        (
+            str(entry.type),
+            Path(str(entry.dataset_path)).expanduser().resolve(),
+        ): entry
+        for entry in cfg_entries
+    }
+    if len(cfg_by_identity) != len(cfg_entries):
+        raise ValueError("CFG pipeline dataset entries must be unique by role and path")
+    steam_by_identity = {
+        (dataset.role, dataset.dataset_path): dataset for dataset in spec.datasets
+    }
+    if len(steam_by_identity) != len(spec.datasets):
+        raise ValueError("STEAM pipeline datasets must be unique by role and path")
+    if set(cfg_by_identity) != set(steam_by_identity):
+        raise ValueError("STEAM and CFG dataset role/path identities differ")
     for dataset in spec.datasets:
-        _require_within(dataset.dataset_path, project_root / "data", "CFG dataset")
-        cfg_entry = cfg_entries[dataset.role]
-        cfg_path = Path(str(cfg_entry.dataset_path)).expanduser().resolve()
-        if cfg_path != dataset.dataset_path:
+        _require_within(
+            dataset.dataset_path,
+            project_root / "data" / "datasets",
+            "CFG dataset",
+        )
+        cfg_entry = cfg_by_identity[(dataset.role, dataset.dataset_path)]
+        if cfg_entry.get("advantage_tag") != dataset.advantage_tag:
             raise ValueError(
-                f"STEAM and CFG {dataset.role} dataset differ: "
-                f"{dataset.dataset_path} != {cfg_path}"
+                f"STEAM and CFG {dataset.role} advantage tags differ: "
+                f"{dataset.advantage_tag!r} != {cfg_entry.get('advantage_tag')!r}"
             )
         selected = resolve_cfg_episode_selection(
             episodes=cfg_entry.get("episodes"),
@@ -98,6 +129,7 @@ def _validate_existing_label_manifests(
         "checkpoint_config_sha256": advantage["checkpoint_config_sha256"],
         "checkpoint_weights_sha256": advantage["checkpoint_weights_sha256"],
         "stride": spec.stride,
+        "state_key": spec.state_key,
         "camera_keys": list(spec.camera_keys),
     }
     for dataset in spec.datasets:
@@ -206,6 +238,14 @@ def _require_within(path: Path, root: Path, context: str) -> None:
     root = root.resolve()
     if path != root and root not in path.parents:
         raise ValueError(f"{context} must live under ClothDojo {root}: {path}")
+
+
+def _require_within_any(path: Path, roots: tuple[Path, ...], context: str) -> None:
+    path = path.resolve()
+    resolved_roots = tuple(root.resolve() for root in roots)
+    if not any(path == root or root in path.parents for root in resolved_roots):
+        expected = ", ".join(str(root) for root in resolved_roots)
+        raise ValueError(f"{context} must live under one of [{expected}]: {path}")
 
 
 @contextmanager
