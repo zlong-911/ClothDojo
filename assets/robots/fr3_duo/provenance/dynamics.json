@@ -1,6 +1,6 @@
 {
   "franka_revision": "02afaae282d4a8e10d7d2f781b23b3515c303ce5",
-  "robotiq_revision": "2c047340aeb2440f7a60e429264221aab9658707",
+  "robotiq_revision": "da76818e269b82289eba39808e2fb91d679d6994",
   "restored_bodies": [
     {
       "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point",
@@ -253,294 +253,6 @@
         ]
       ],
       "geometry_identity": null
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_base_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.66320197,
-      "com": [
-        0.0,
-        2.274e-05,
-        0.03232288
-      ],
-      "tensor": [
-        [
-          0.00051617816,
-          2.936e-08,
-          0.0
-        ],
-        [
-          2.936e-08,
-          0.00058802208,
-          -3.2296e-07
-        ],
-        [
-          0.0,
-          -3.2296e-07,
-          0.00039462776
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 1200,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/robotiq_base.stl"
-      }
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_left_finger_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.04260376752,
-      "com": [
-        0.00346899,
-        -0.00079447,
-        0.01867121
-      ],
-      "tensor": [
-        [
-          1.385792e-05,
-          0.0,
-          -2.17264e-06
-        ],
-        [
-          0.0,
-          1.183208e-05,
-          0.0
-        ],
-        [
-          -2.17264e-06,
-          0.0,
-          5.19672e-06
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 1176,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/left_finger.stl"
-      }
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_left_finger_tip_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.04268588744,
-      "com": [
-        -0.01456706,
-        -0.0008,
-        0.01649701
-      ],
-      "tensor": [
-        [
-          1.048152e-05,
-          0.0,
-          3.5232e-06
-        ],
-        [
-          0.0,
-          1.197888e-05,
-          0.0
-        ],
-        [
-          3.5232e-06,
-          0.0,
-          4.22784e-06
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 672,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/left_finger_tip.stl"
-      }
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_left_inner_knuckle_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.02969376448,
-      "com": [
-        0.01897699,
-        0.00015001,
-        0.02247101
-      ],
-      "tensor": [
-        [
-          9.57136e-06,
-          0.0,
-          -3.93424e-06
-        ],
-        [
-          0.0,
-          8.69056e-06,
-          0.0
-        ],
-        [
-          -3.93424e-06,
-          0.0,
-          8.19144e-06
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 1074,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/left_inner_knuckle.stl"
-      }
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_left_knuckle_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.01384773208,
-      "com": [
-        0.01213197,
-        0.0002,
-        -0.00058647
-      ],
-      "tensor": [
-        [
-          3.5232e-07,
-          0.0,
-          1.1744e-07
-        ],
-        [
-          0.0,
-          2.31944e-06,
-          0.0
-        ],
-        [
-          1.1744e-07,
-          0.0,
-          2.23136e-06
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 258,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/left_knuckle.stl"
-      }
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_right_finger_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.04260376752,
-      "com": [
-        -0.00346899,
-        -5.53e-06,
-        0.01867121
-      ],
-      "tensor": [
-        [
-          1.385792e-05,
-          0.0,
-          2.17264e-06
-        ],
-        [
-          0.0,
-          1.183208e-05,
-          0.0
-        ],
-        [
-          2.17264e-06,
-          0.0,
-          5.19672e-06
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 1176,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/right_finger.stl"
-      }
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_right_finger_tip_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.04268588744,
-      "com": [
-        0.01456706,
-        5e-05,
-        0.01649701
-      ],
-      "tensor": [
-        [
-          1.048152e-05,
-          0.0,
-          -3.5232e-06
-        ],
-        [
-          0.0,
-          1.197888e-05,
-          0.0
-        ],
-        [
-          -3.5232e-06,
-          0.0,
-          4.22784e-06
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 672,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/right_finger_tip.stl"
-      }
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_right_inner_knuckle_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.02969376448,
-      "com": [
-        -0.01926824,
-        5.001e-05,
-        0.02222178
-      ],
-      "tensor": [
-        [
-          9.42456e-06,
-          0.0,
-          3.9636e-06
-        ],
-        [
-          0.0,
-          8.69056e-06,
-          0.0
-        ],
-        [
-          3.9636e-06,
-          0.0,
-          8.33824e-06
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 1062,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/right_inner_knuckle.stl"
-      }
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_robotiq_85_right_knuckle_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.01384773208,
-      "com": [
-        -0.01213197,
-        0.0002,
-        -0.00058647
-      ],
-      "tensor": [
-        [
-          3.5232e-07,
-          0.0,
-          -1.1744e-07
-        ],
-        [
-          0.0,
-          2.31944e-06,
-          0.0
-        ],
-        [
-          -1.1744e-07,
-          0.0,
-          2.23136e-06
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 258,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/right_knuckle.stl"
-      }
     },
     {
       "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_left/left_base/left_fr3v2_link0/left_fr3v2_link1/left_fr3v2_link2/left_fr3v2_link3/left_fr3v2_link4/left_fr3v2_link5/left_fr3v2_link6/left_fr3v2_link7/left_fr3v2_link8/VMKit/left_ur_to_robotiq_link",
@@ -799,294 +511,6 @@
       "geometry_identity": null
     },
     {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_base_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.66320197,
-      "com": [
-        0.0,
-        2.274e-05,
-        0.03232288
-      ],
-      "tensor": [
-        [
-          0.00051617816,
-          2.936e-08,
-          0.0
-        ],
-        [
-          2.936e-08,
-          0.00058802208,
-          -3.2296e-07
-        ],
-        [
-          0.0,
-          -3.2296e-07,
-          0.00039462776
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 1200,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/robotiq_base.stl"
-      }
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_left_finger_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.04260376752,
-      "com": [
-        0.00346899,
-        -0.00079447,
-        0.01867121
-      ],
-      "tensor": [
-        [
-          1.385792e-05,
-          0.0,
-          -2.17264e-06
-        ],
-        [
-          0.0,
-          1.183208e-05,
-          0.0
-        ],
-        [
-          -2.17264e-06,
-          0.0,
-          5.19672e-06
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 1176,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/left_finger.stl"
-      }
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_left_finger_tip_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.04268588744,
-      "com": [
-        -0.01456706,
-        -0.0008,
-        0.01649701
-      ],
-      "tensor": [
-        [
-          1.048152e-05,
-          0.0,
-          3.5232e-06
-        ],
-        [
-          0.0,
-          1.197888e-05,
-          0.0
-        ],
-        [
-          3.5232e-06,
-          0.0,
-          4.22784e-06
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 672,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/left_finger_tip.stl"
-      }
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_left_inner_knuckle_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.02969376448,
-      "com": [
-        0.01897699,
-        0.00015001,
-        0.02247101
-      ],
-      "tensor": [
-        [
-          9.57136e-06,
-          0.0,
-          -3.93424e-06
-        ],
-        [
-          0.0,
-          8.69056e-06,
-          0.0
-        ],
-        [
-          -3.93424e-06,
-          0.0,
-          8.19144e-06
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 1074,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/left_inner_knuckle.stl"
-      }
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_left_knuckle_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.01384773208,
-      "com": [
-        0.01213197,
-        0.0002,
-        -0.00058647
-      ],
-      "tensor": [
-        [
-          3.5232e-07,
-          0.0,
-          1.1744e-07
-        ],
-        [
-          0.0,
-          2.31944e-06,
-          0.0
-        ],
-        [
-          1.1744e-07,
-          0.0,
-          2.23136e-06
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 258,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/left_knuckle.stl"
-      }
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_right_finger_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.04260376752,
-      "com": [
-        -0.00346899,
-        -5.53e-06,
-        0.01867121
-      ],
-      "tensor": [
-        [
-          1.385792e-05,
-          0.0,
-          2.17264e-06
-        ],
-        [
-          0.0,
-          1.183208e-05,
-          0.0
-        ],
-        [
-          2.17264e-06,
-          0.0,
-          5.19672e-06
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 1176,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/right_finger.stl"
-      }
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_right_finger_tip_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.04268588744,
-      "com": [
-        0.01456706,
-        5e-05,
-        0.01649701
-      ],
-      "tensor": [
-        [
-          1.048152e-05,
-          0.0,
-          -3.5232e-06
-        ],
-        [
-          0.0,
-          1.197888e-05,
-          0.0
-        ],
-        [
-          -3.5232e-06,
-          0.0,
-          4.22784e-06
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 672,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/right_finger_tip.stl"
-      }
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_right_inner_knuckle_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.02969376448,
-      "com": [
-        -0.01926824,
-        5.001e-05,
-        0.02222178
-      ],
-      "tensor": [
-        [
-          9.42456e-06,
-          0.0,
-          3.9636e-06
-        ],
-        [
-          0.0,
-          8.69056e-06,
-          0.0
-        ],
-        [
-          3.9636e-06,
-          0.0,
-          8.33824e-06
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 1062,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/right_inner_knuckle.stl"
-      }
-    },
-    {
-      "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_robotiq_85_right_knuckle_link",
-      "source": "PickNikRobotics/ros2_robotiq_gripper/robotiq_2f_85_macro.urdf.xacro",
-      "mass": 0.01384773208,
-      "com": [
-        -0.01213197,
-        0.0002,
-        -0.00058647
-      ],
-      "tensor": [
-        [
-          3.5232e-07,
-          0.0,
-          -1.1744e-07
-        ],
-        [
-          0.0,
-          2.31944e-06,
-          0.0
-        ],
-        [
-          -1.1744e-07,
-          0.0,
-          2.23136e-06
-        ]
-      ],
-      "geometry_identity": {
-        "vertex_count": 258,
-        "max_bidirectional_vertex_error_m": 0.0,
-        "source_mesh": "https://github.com/PickNikRobotics/ros2_robotiq_gripper/blob/2c047340aeb2440f7a60e429264221aab9658707/robotiq_description/meshes/collision/2f_85/right_knuckle.stl"
-      }
-    },
-    {
       "path": "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/fr3_duo_mount_origin/fr3_duo_mount_right/right_base/right_fr3v2_link0/right_fr3v2_link1/right_fr3v2_link2/right_fr3v2_link3/right_fr3v2_link4/right_fr3v2_link5/right_fr3v2_link6/right_fr3v2_link7/right_fr3v2_link8/VMKit/right_ur_to_robotiq_link",
       "source": "PickNikRobotics/ros2_robotiq_gripper/ur_to_robotiq_adapter.urdf.xacro",
       "mass": 0.01,
@@ -1173,13 +597,741 @@
         ]
       ],
       "geometry_identity": null
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/left/Bodies/gripper_base",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.7774410247802734,
+      "com": [
+        0.0,
+        -2.7039399355999194e-05,
+        0.03546750172972679
+      ],
+      "tensor": [
+        [
+          0.00026028504244538344,
+          2.715535804158193e-14,
+          2.4023910789543413e-11
+        ],
+        [
+          2.715535804158193e-14,
+          0.00022538033556068158,
+          -2.221585490505258e-07
+        ],
+        [
+          2.4023910789543413e-11,
+          -2.221585490505258e-07,
+          0.00015270870715944107
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/left/Bodies/gripper_right_driver",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.008995629847049713,
+      "com": [
+        2.9693099107969134e-12,
+        0.017754700034856796,
+        0.0010731399524956942
+      ],
+      "tensor": [
+        [
+          1.7235208539159317e-06,
+          -8.016189172372617e-15,
+          -4.359271922883922e-14
+        ],
+        [
+          -8.016189172372617e-15,
+          3.286148021857872e-07,
+          -9.198975184316301e-08
+        ],
+        [
+          -4.359271922883922e-14,
+          -9.198975184316301e-08,
+          1.6024515366568665e-06
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/left/Bodies/gripper_right_coupler",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.01409740000963211,
+      "com": [
+        0.0,
+        0.003012089990079403,
+        0.023217499256134033
+      ],
+      "tensor": [
+        [
+          3.522160269846589e-06,
+          1.8549486998343753e-13,
+          -4.794017168323289e-14
+        ],
+        [
+          1.8549486998343753e-13,
+          4.107848895756759e-06,
+          -4.177889211197217e-07
+        ],
+        [
+          -4.794017168323288e-14,
+          -4.177889211197217e-07,
+          9.423432419208289e-07
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/left/Bodies/gripper_right_spring_link",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.022164199501276016,
+      "com": [
+        -8.650049565517293e-09,
+        0.018162399530410767,
+        0.021265799179673195
+      ],
+      "tensor": [
+        [
+          6.717331113246337e-06,
+          -4.536319395878697e-13,
+          -9.851230485222292e-13
+        ],
+        [
+          -4.5363193958786926e-13,
+          6.299063329633317e-06,
+          -3.125634332128912e-06
+        ],
+        [
+          -9.851230485222292e-13,
+          -3.125634332128912e-06,
+          5.308778974980035e-06
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/left/Bodies/gripper_right_follower",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.012522200122475624,
+      "com": [
+        0.0,
+        -0.011045999825000763,
+        0.012478600256145
+      ],
+      "tensor": [
+        [
+          2.674149004105795e-06,
+          -1.0793999886174166e-14,
+          1.7959252467006155e-13
+        ],
+        [
+          -1.0793999886174166e-14,
+          2.2614873553012314e-06,
+          5.679939944053552e-07
+        ],
+        [
+          1.7959252467006155e-13,
+          5.679939944053553e-07,
+          7.964420788781044e-07
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/left/Bodies/gripper_right_pad",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.0035000001080334187,
+      "com": [
+        0.0,
+        -0.0024999999441206455,
+        0.01850000023841858
+      ],
+      "tensor": [
+        [
+          3.645830438139177e-07,
+          -1.5211583818845715e-14,
+          -7.38847377800161e-15
+        ],
+        [
+          -1.5211583818845715e-14,
+          4.7395806780274897e-07,
+          2.8250103111731753e-14
+        ],
+        [
+          -7.388473778001608e-15,
+          2.8250103111731753e-14,
+          1.2395804503973705e-07
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/left/Bodies/gripper_right_silicone_pad",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.001302812248468399,
+      "com": [
+        -7.584350036893284e-09,
+        -0.005800000391900539,
+        0.018517373129725456
+      ],
+      "tensor": [
+        [
+          1.4953629620319835e-07,
+          1.8207709435429518e-14,
+          1.0620129259093286e-13
+        ],
+        [
+          1.8207709435429518e-14,
+          2.008046373841371e-07,
+          7.33550781035482e-15
+        ],
+        [
+          1.0620129259093285e-13,
+          7.335507810354821e-15,
+          5.182419873000714e-08
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/left/Bodies/gripper_left_driver",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.008995629847049713,
+      "com": [
+        0.0,
+        0.017754700034856796,
+        0.0010731399524956942
+      ],
+      "tensor": [
+        [
+          1.7235208539159317e-06,
+          -8.016189172372617e-15,
+          -4.359271922883922e-14
+        ],
+        [
+          -8.016189172372617e-15,
+          3.286148021857872e-07,
+          -9.198975184316301e-08
+        ],
+        [
+          -4.359271922883922e-14,
+          -9.198975184316301e-08,
+          1.6024515366568665e-06
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/left/Bodies/gripper_left_coupler",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.01409740000963211,
+      "com": [
+        0.0,
+        0.003012089990079403,
+        0.023217499256134033
+      ],
+      "tensor": [
+        [
+          3.522160269846589e-06,
+          1.8549486998343753e-13,
+          -4.794017168323289e-14
+        ],
+        [
+          1.8549486998343753e-13,
+          4.107848895756759e-06,
+          -4.177889211197217e-07
+        ],
+        [
+          -4.794017168323288e-14,
+          -4.177889211197217e-07,
+          9.423432419208289e-07
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/left/Bodies/gripper_left_spring_link",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.022164199501276016,
+      "com": [
+        -8.650049565517293e-09,
+        0.018162399530410767,
+        0.021265799179673195
+      ],
+      "tensor": [
+        [
+          6.717331113246337e-06,
+          -4.536319395878697e-13,
+          -9.851230485222292e-13
+        ],
+        [
+          -4.5363193958786926e-13,
+          6.299063329633317e-06,
+          -3.125634332128912e-06
+        ],
+        [
+          -9.851230485222292e-13,
+          -3.125634332128912e-06,
+          5.308778974980035e-06
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/left/Bodies/gripper_left_follower",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.012522200122475624,
+      "com": [
+        0.0,
+        -0.011045999825000763,
+        0.012478600256145
+      ],
+      "tensor": [
+        [
+          2.674149004105795e-06,
+          -1.0793999886174166e-14,
+          1.7959252467006155e-13
+        ],
+        [
+          -1.0793999886174166e-14,
+          2.2614873553012314e-06,
+          5.679939944053552e-07
+        ],
+        [
+          1.7959252467006155e-13,
+          5.679939944053553e-07,
+          7.964420788781044e-07
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/left/Bodies/gripper_left_pad",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.0035000001080334187,
+      "com": [
+        0.0,
+        -0.0024999999441206455,
+        0.01850000023841858
+      ],
+      "tensor": [
+        [
+          3.645830438139177e-07,
+          -1.5211583818845715e-14,
+          -7.38847377800161e-15
+        ],
+        [
+          -1.5211583818845715e-14,
+          4.7395806780274897e-07,
+          2.8250103111731753e-14
+        ],
+        [
+          -7.388473778001608e-15,
+          2.8250103111731753e-14,
+          1.2395804503973705e-07
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/left/Bodies/gripper_left_silicone_pad",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.001302812248468399,
+      "com": [
+        -7.584350036893284e-09,
+        -0.005800000391900539,
+        0.018517373129725456
+      ],
+      "tensor": [
+        [
+          1.4953629620319835e-07,
+          1.8207709435429518e-14,
+          1.0620129259093286e-13
+        ],
+        [
+          1.8207709435429518e-14,
+          2.008046373841371e-07,
+          7.33550781035482e-15
+        ],
+        [
+          1.0620129259093285e-13,
+          7.335507810354821e-15,
+          5.182419873000714e-08
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/right/Bodies/gripper_base",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.7774410247802734,
+      "com": [
+        0.0,
+        -2.7039399355999194e-05,
+        0.03546750172972679
+      ],
+      "tensor": [
+        [
+          0.00026028504244538344,
+          2.715535804158193e-14,
+          2.4023910789543413e-11
+        ],
+        [
+          2.715535804158193e-14,
+          0.00022538033556068158,
+          -2.221585490505258e-07
+        ],
+        [
+          2.4023910789543413e-11,
+          -2.221585490505258e-07,
+          0.00015270870715944107
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/right/Bodies/gripper_right_driver",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.008995629847049713,
+      "com": [
+        2.9693099107969134e-12,
+        0.017754700034856796,
+        0.0010731399524956942
+      ],
+      "tensor": [
+        [
+          1.7235208539159317e-06,
+          -8.016189172372617e-15,
+          -4.359271922883922e-14
+        ],
+        [
+          -8.016189172372617e-15,
+          3.286148021857872e-07,
+          -9.198975184316301e-08
+        ],
+        [
+          -4.359271922883922e-14,
+          -9.198975184316301e-08,
+          1.6024515366568665e-06
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/right/Bodies/gripper_right_coupler",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.01409740000963211,
+      "com": [
+        0.0,
+        0.003012089990079403,
+        0.023217499256134033
+      ],
+      "tensor": [
+        [
+          3.522160269846589e-06,
+          1.8549486998343753e-13,
+          -4.794017168323289e-14
+        ],
+        [
+          1.8549486998343753e-13,
+          4.107848895756759e-06,
+          -4.177889211197217e-07
+        ],
+        [
+          -4.794017168323288e-14,
+          -4.177889211197217e-07,
+          9.423432419208289e-07
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/right/Bodies/gripper_right_spring_link",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.022164199501276016,
+      "com": [
+        -8.650049565517293e-09,
+        0.018162399530410767,
+        0.021265799179673195
+      ],
+      "tensor": [
+        [
+          6.717331113246337e-06,
+          -4.536319395878697e-13,
+          -9.851230485222292e-13
+        ],
+        [
+          -4.5363193958786926e-13,
+          6.299063329633317e-06,
+          -3.125634332128912e-06
+        ],
+        [
+          -9.851230485222292e-13,
+          -3.125634332128912e-06,
+          5.308778974980035e-06
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/right/Bodies/gripper_right_follower",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.012522200122475624,
+      "com": [
+        0.0,
+        -0.011045999825000763,
+        0.012478600256145
+      ],
+      "tensor": [
+        [
+          2.674149004105795e-06,
+          -1.0793999886174166e-14,
+          1.7959252467006155e-13
+        ],
+        [
+          -1.0793999886174166e-14,
+          2.2614873553012314e-06,
+          5.679939944053552e-07
+        ],
+        [
+          1.7959252467006155e-13,
+          5.679939944053553e-07,
+          7.964420788781044e-07
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/right/Bodies/gripper_right_pad",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.0035000001080334187,
+      "com": [
+        0.0,
+        -0.0024999999441206455,
+        0.01850000023841858
+      ],
+      "tensor": [
+        [
+          3.645830438139177e-07,
+          -1.5211583818845715e-14,
+          -7.38847377800161e-15
+        ],
+        [
+          -1.5211583818845715e-14,
+          4.7395806780274897e-07,
+          2.8250103111731753e-14
+        ],
+        [
+          -7.388473778001608e-15,
+          2.8250103111731753e-14,
+          1.2395804503973705e-07
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/right/Bodies/gripper_right_silicone_pad",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.001302812248468399,
+      "com": [
+        -7.584350036893284e-09,
+        -0.005800000391900539,
+        0.018517373129725456
+      ],
+      "tensor": [
+        [
+          1.4953629620319835e-07,
+          1.8207709435429518e-14,
+          1.0620129259093286e-13
+        ],
+        [
+          1.8207709435429518e-14,
+          2.008046373841371e-07,
+          7.33550781035482e-15
+        ],
+        [
+          1.0620129259093285e-13,
+          7.335507810354821e-15,
+          5.182419873000714e-08
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/right/Bodies/gripper_left_driver",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.008995629847049713,
+      "com": [
+        0.0,
+        0.017754700034856796,
+        0.0010731399524956942
+      ],
+      "tensor": [
+        [
+          1.7235208539159317e-06,
+          -8.016189172372617e-15,
+          -4.359271922883922e-14
+        ],
+        [
+          -8.016189172372617e-15,
+          3.286148021857872e-07,
+          -9.198975184316301e-08
+        ],
+        [
+          -4.359271922883922e-14,
+          -9.198975184316301e-08,
+          1.6024515366568665e-06
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/right/Bodies/gripper_left_coupler",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.01409740000963211,
+      "com": [
+        0.0,
+        0.003012089990079403,
+        0.023217499256134033
+      ],
+      "tensor": [
+        [
+          3.522160269846589e-06,
+          1.8549486998343753e-13,
+          -4.794017168323289e-14
+        ],
+        [
+          1.8549486998343753e-13,
+          4.107848895756759e-06,
+          -4.177889211197217e-07
+        ],
+        [
+          -4.794017168323288e-14,
+          -4.177889211197217e-07,
+          9.423432419208289e-07
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/right/Bodies/gripper_left_spring_link",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.022164199501276016,
+      "com": [
+        -8.650049565517293e-09,
+        0.018162399530410767,
+        0.021265799179673195
+      ],
+      "tensor": [
+        [
+          6.717331113246337e-06,
+          -4.536319395878697e-13,
+          -9.851230485222292e-13
+        ],
+        [
+          -4.5363193958786926e-13,
+          6.299063329633317e-06,
+          -3.125634332128912e-06
+        ],
+        [
+          -9.851230485222292e-13,
+          -3.125634332128912e-06,
+          5.308778974980035e-06
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/right/Bodies/gripper_left_follower",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.012522200122475624,
+      "com": [
+        0.0,
+        -0.011045999825000763,
+        0.012478600256145
+      ],
+      "tensor": [
+        [
+          2.674149004105795e-06,
+          -1.0793999886174166e-14,
+          1.7959252467006155e-13
+        ],
+        [
+          -1.0793999886174166e-14,
+          2.2614873553012314e-06,
+          5.679939944053552e-07
+        ],
+        [
+          1.7959252467006155e-13,
+          5.679939944053553e-07,
+          7.964420788781044e-07
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/right/Bodies/gripper_left_pad",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.0035000001080334187,
+      "com": [
+        0.0,
+        -0.0024999999441206455,
+        0.01850000023841858
+      ],
+      "tensor": [
+        [
+          3.645830438139177e-07,
+          -1.5211583818845715e-14,
+          -7.38847377800161e-15
+        ],
+        [
+          -1.5211583818845715e-14,
+          4.7395806780274897e-07,
+          2.8250103111731753e-14
+        ],
+        [
+          -7.388473778001608e-15,
+          2.8250103111731753e-14,
+          1.2395804503973705e-07
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
+    },
+    {
+      "path": "/Robot/Duo/Robotiq/right/Bodies/gripper_left_silicone_pad",
+      "source": "Menagerie robotiq_2f85 via accepted UR5e USD",
+      "mass": 0.001302812248468399,
+      "com": [
+        -7.584350036893284e-09,
+        -0.005800000391900539,
+        0.018517373129725456
+      ],
+      "tensor": [
+        [
+          1.4953629620319835e-07,
+          1.8207709435429518e-14,
+          1.0620129259093286e-13
+        ],
+        [
+          1.8207709435429518e-14,
+          2.008046373841371e-07,
+          7.33550781035482e-15
+        ],
+        [
+          1.0620129259093285e-13,
+          7.335507810354821e-15,
+          5.182419873000714e-08
+        ]
+      ],
+      "geometry_identity": "Exact copy of UR5e body-local geometry"
     }
   ],
   "arm_joints": [
     {
       "path": "/Robot/Duo/Physics/left_fr3v2_joint1",
       "kp_Nm_per_rad": 4500.0,
-      "kd_Nm_s_per_rad": 450.0,
+      "kd_Nm_s_per_rad": 180.0,
       "limits": {
         "lower": -2.9007400166666666,
         "upper": 2.9007400166666666,
@@ -1192,7 +1344,7 @@
     {
       "path": "/Robot/Duo/Physics/left_fr3v2_joint2",
       "kp_Nm_per_rad": 4500.0,
-      "kd_Nm_s_per_rad": 450.0,
+      "kd_Nm_s_per_rad": 170.0,
       "limits": {
         "lower": -1.8360900166666667,
         "upper": 1.8360900166666667,
@@ -1205,7 +1357,7 @@
     {
       "path": "/Robot/Duo/Physics/left_fr3v2_joint3",
       "kp_Nm_per_rad": 3500.0,
-      "kd_Nm_s_per_rad": 350.0,
+      "kd_Nm_s_per_rad": 145.0,
       "limits": {
         "lower": -2.9007400166666666,
         "upper": 2.9007400166666666,
@@ -1218,7 +1370,7 @@
     {
       "path": "/Robot/Duo/Physics/left_fr3v2_joint4",
       "kp_Nm_per_rad": 3500.0,
-      "kd_Nm_s_per_rad": 350.0,
+      "kd_Nm_s_per_rad": 130.0,
       "limits": {
         "lower": -3.077020016666667,
         "upper": -0.11693708333333333,
@@ -1231,7 +1383,7 @@
     {
       "path": "/Robot/Duo/Physics/left_fr3v2_joint5",
       "kp_Nm_per_rad": 2000.0,
-      "kd_Nm_s_per_rad": 200.0,
+      "kd_Nm_s_per_rad": 20.0,
       "limits": {
         "lower": -2.87630335,
         "upper": 2.87630335,
@@ -1244,7 +1396,7 @@
     {
       "path": "/Robot/Duo/Physics/left_fr3v2_joint6",
       "kp_Nm_per_rad": 2000.0,
-      "kd_Nm_s_per_rad": 200.0,
+      "kd_Nm_s_per_rad": 23.0,
       "limits": {
         "lower": 0.43982265,
         "upper": 4.62163335,
@@ -1257,7 +1409,7 @@
     {
       "path": "/Robot/Duo/Physics/left_fr3v2_joint7",
       "kp_Nm_per_rad": 2000.0,
-      "kd_Nm_s_per_rad": 200.0,
+      "kd_Nm_s_per_rad": 5.0,
       "limits": {
         "lower": -3.05083335,
         "upper": 3.05083335,
@@ -1270,7 +1422,7 @@
     {
       "path": "/Robot/Duo/Physics/right_fr3v2_joint1",
       "kp_Nm_per_rad": 4500.0,
-      "kd_Nm_s_per_rad": 450.0,
+      "kd_Nm_s_per_rad": 180.0,
       "limits": {
         "lower": -2.9007400166666666,
         "upper": 2.9007400166666666,
@@ -1283,7 +1435,7 @@
     {
       "path": "/Robot/Duo/Physics/right_fr3v2_joint2",
       "kp_Nm_per_rad": 4500.0,
-      "kd_Nm_s_per_rad": 450.0,
+      "kd_Nm_s_per_rad": 170.0,
       "limits": {
         "lower": -1.8360900166666667,
         "upper": 1.8360900166666667,
@@ -1296,7 +1448,7 @@
     {
       "path": "/Robot/Duo/Physics/right_fr3v2_joint3",
       "kp_Nm_per_rad": 3500.0,
-      "kd_Nm_s_per_rad": 350.0,
+      "kd_Nm_s_per_rad": 145.0,
       "limits": {
         "lower": -2.9007400166666666,
         "upper": 2.9007400166666666,
@@ -1309,7 +1461,7 @@
     {
       "path": "/Robot/Duo/Physics/right_fr3v2_joint4",
       "kp_Nm_per_rad": 3500.0,
-      "kd_Nm_s_per_rad": 350.0,
+      "kd_Nm_s_per_rad": 130.0,
       "limits": {
         "lower": -3.077020016666667,
         "upper": -0.11693708333333333,
@@ -1322,7 +1474,7 @@
     {
       "path": "/Robot/Duo/Physics/right_fr3v2_joint5",
       "kp_Nm_per_rad": 2000.0,
-      "kd_Nm_s_per_rad": 200.0,
+      "kd_Nm_s_per_rad": 20.0,
       "limits": {
         "lower": -2.87630335,
         "upper": 2.87630335,
@@ -1335,7 +1487,7 @@
     {
       "path": "/Robot/Duo/Physics/right_fr3v2_joint6",
       "kp_Nm_per_rad": 2000.0,
-      "kd_Nm_s_per_rad": 200.0,
+      "kd_Nm_s_per_rad": 23.0,
       "limits": {
         "lower": 0.43982265,
         "upper": 4.62163335,
@@ -1348,7 +1500,7 @@
     {
       "path": "/Robot/Duo/Physics/right_fr3v2_joint7",
       "kp_Nm_per_rad": 2000.0,
-      "kd_Nm_s_per_rad": 200.0,
+      "kd_Nm_s_per_rad": 5.0,
       "limits": {
         "lower": -3.05083335,
         "upper": 3.05083335,
@@ -1359,7 +1511,7 @@
       "friction_Nm": 0.2
     }
   ],
-  "debug_drive_note": "arm gains from old franka_fr3_duo.yaml SI control; gripper 500/50 and 100 Nm limit remain prototype assumptions, not vendor-certified",
+  "debug_drive_note": "arm stiffness retained from old franka_fr3_duo.yaml; arm drive damping retuned in ClothDojo to [180,170,145,130,20,23,5] Nm*s/rad per side using sampled inertia and 1x-effort response comparisons. Full task retarget still requires its own validation. Gripper uses the accepted UR5e two-driver adaptation: kp=50, kd=5, effort=2.5 Nm each, driver armature=0.005 and passive armature=0.001; not vendor-certified.",
   "deferred": [
     "unverified accessory/frame inertias",
     "motor inertia/gear ratio model and armature",
@@ -1431,5 +1583,6 @@
     "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/head_link/zed_mini_camera_link/zed_mini_right_camera_frame",
     "/Robot/Duo/Geometry/base/fr3_duo_mount_mounting_point/head_link/zed_mini_camera_link/zed_mini_right_camera_optical_frame"
   ],
-  "packaging": "Fully composed accepted tabletop USD frozen into the external payload; home/attach/geometry unchanged"
+  "packaging": "Original workstation payload and arm/floor-mount/camera/TCP overrides preserved; components/robotiq_2f85.usdc replaces the gripper via components/robotiq_installation.usdc.",
+  "adapter_revision": "2c047340aeb2440f7a60e429264221aab9658707"
 }

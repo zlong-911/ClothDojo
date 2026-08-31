@@ -78,6 +78,9 @@ def test_fr3_native_three_cameras_keep_payload_geometry_and_optics(camera_stages
     for source in native:
         current = stage.GetPrimAtPath(source.GetPath())
         _assert_same_camera_parameters(current, source)
+        expected = np.array(cache.GetLocalToWorldTransform(source))
+        np.testing.assert_allclose(cache.GetLocalToWorldTransform(current), expected, atol=1e-12)
         np.testing.assert_array_equal(
-            cache.GetLocalToWorldTransform(current), cache.GetLocalToWorldTransform(source)
+            UsdGeom.Xformable(current).GetLocalTransformation(),
+            UsdGeom.Xformable(source).GetLocalTransformation(),
         )

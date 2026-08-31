@@ -59,7 +59,10 @@ def test_proxy_remains_hidden_even_with_authored_color():
     from newton import ShapeFlags
 
     stage, mesh, _, builder = _scene()
+    physics = int(ShapeFlags.COLLIDE_SHAPES | ShapeFlags.COLLIDE_PARTICLES)
+    builder.shape_flags[0] |= physics
     mesh.CreatePurposeAttr("proxy")
     report = _apply_authored_appearance(builder, stage)
     assert not builder.shape_flags[0] & int(ShapeFlags.VISIBLE)
+    assert builder.shape_flags[0] & physics == physics
     assert report["hidden_authored_proxy_shapes"] == ["/Mesh"]

@@ -1,8 +1,9 @@
 #usda 1.0
 (
     customLayerData = {
+        string driveTuning = "ClothDojo 1x-effort simulation damping: arm kd=[120,125,95,18,16,15] Nm*s/rad per side. Inertia-based response tuning, not manufacturer calibration; source kp/effort/passive dynamics preserved."
         string dynamicsUnits = "Newton USD revolute coefficients use degrees; source payload is legacy SI. 1e6 rad/s is an effectively unlimited fallback, not a hardware rating. Robotiq spring values come from fixed Menagerie 2f85.xml."
-        string installation = "Dual UR5e plus Robotiq 2F-85 workstation at x=0.25, y=+-0.55, with the complete legacy RoboDojo D455 stand on the X5 column axis"
+        string installation = "Dual UR5e plus Robotiq 2F-85 at x=0.15, y=+-0.55, z=0.8; arms and complete D455 stand shifted -0.10 m in X. Virtual cam_low stays world-fixed."
         string wristCameraSource = "provenance/wrist_camera/README.md"
     }
     defaultPrim = "Robot"
@@ -16,12 +17,43 @@
 
 over "Robot"
 {
+    matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (-0.1, 0, 0, 1) )
+    uniform token[] xformOpOrder = ["xformOp:transform"]
+    custom double[] clothdojo:rootBodyFrames = [0.15, 0.550000011920929, 0.800000011920929, 0, 0, -1, 0, 0.15, -0.550000011920929, 0.800000011920929, 0, 0, -1, 0]
+
+    over "Installation"
+    {
+        over "CameraStand"
+        {
+            custom double2 clothdojo:columnAxisWorld = (0.161, 0)
+        }
+    }
+
+    over "Semantics"
+    {
+        over "cam_low"
+        {
+            uniform token[] xformOpOrder = ["!resetXformStack!", "xformOp:transform"]
+        }
+    }
+
     custom double[] clothdojo:homeJointQ = [2.533765, -1.489121, 2.102872, -2.184395, -1.571103, -0.6072806535897932, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 3.176974, -1.489208, 2.102969, -2.184404, -1.570822, 0.03534934641020682, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1]
 
     over "Joints"
     {
+        over "joint_000"
+        {
+            point3f physics:localPos0 = (0.15, 0.55, 0.8)
+        }
+
+        over "joint_023"
+        {
+            point3f physics:localPos0 = (0.15, -0.55, 0.8)
+        }
+
         over "joint_001"
         {
+            float drive:angular:physics:damping = 2.09439510
             float newton:damping = 0
             float newton:limitDamping = 1.7453293
             float newton:limitStiffness = 43.633232
@@ -30,6 +62,7 @@ over "Robot"
 
         over "joint_002"
         {
+            float drive:angular:physics:damping = 2.18166156
             float newton:damping = 0
             float newton:limitDamping = 1.7453293
             float newton:limitStiffness = 43.633232
@@ -38,6 +71,7 @@ over "Robot"
 
         over "joint_003"
         {
+            float drive:angular:physics:damping = 1.65806279
             float newton:damping = 0
             float newton:limitDamping = 1.7453293
             float newton:limitStiffness = 43.633232
@@ -46,6 +80,7 @@ over "Robot"
 
         over "joint_004"
         {
+            float drive:angular:physics:damping = 0.314159265
             float newton:damping = 0
             float newton:limitDamping = 1.7453293
             float newton:limitStiffness = 43.633232
@@ -54,6 +89,7 @@ over "Robot"
 
         over "joint_005"
         {
+            float drive:angular:physics:damping = 0.279252680
             float newton:damping = 0
             float newton:limitDamping = 1.7453293
             float newton:limitStiffness = 43.633232
@@ -62,6 +98,7 @@ over "Robot"
 
         over "joint_006"
         {
+            float drive:angular:physics:damping = 0.261799388
             float drive:angular:physics:targetPosition = -34.794617
             float newton:damping = 0
             float newton:limitDamping = 1.7453293
@@ -140,6 +177,7 @@ over "Robot"
 
         over "joint_024"
         {
+            float drive:angular:physics:damping = 2.09439510
             float newton:damping = 0
             float newton:limitDamping = 1.7453293
             float newton:limitStiffness = 43.633232
@@ -148,6 +186,7 @@ over "Robot"
 
         over "joint_025"
         {
+            float drive:angular:physics:damping = 2.18166156
             float newton:damping = 0
             float newton:limitDamping = 1.7453293
             float newton:limitStiffness = 43.633232
@@ -156,6 +195,7 @@ over "Robot"
 
         over "joint_026"
         {
+            float drive:angular:physics:damping = 1.65806279
             float newton:damping = 0
             float newton:limitDamping = 1.7453293
             float newton:limitStiffness = 43.633232
@@ -164,6 +204,7 @@ over "Robot"
 
         over "joint_027"
         {
+            float drive:angular:physics:damping = 0.314159265
             float newton:damping = 0
             float newton:limitDamping = 1.7453293
             float newton:limitStiffness = 43.633232
@@ -172,6 +213,7 @@ over "Robot"
 
         over "joint_028"
         {
+            float drive:angular:physics:damping = 0.279252680
             float newton:damping = 0
             float newton:limitDamping = 1.7453293
             float newton:limitStiffness = 43.633232
@@ -180,6 +222,7 @@ over "Robot"
 
         over "joint_029"
         {
+            float drive:angular:physics:damping = 0.261799388
             float drive:angular:physics:targetPosition = 2.0253685
             float newton:damping = 0
             float newton:limitDamping = 1.7453293

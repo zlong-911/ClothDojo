@@ -143,12 +143,13 @@ def test_fr3_duo_profile_uses_one_shared_articulation_and_accepted_home() -> Non
     assert profile.asset == "robots/fr3_duo/fr3_duo.usda"
     assert profile.arm_dofs_per_side == 7
     assert len(profile.arm_coord_indices) == 14
-    assert len(profile.home_joint_q) == profile.joint_dof_count == 26
-    assert profile.arm_coord_indices == tuple(range(7)) + tuple(range(13, 20))
-    assert profile.gripper_coord_indices == profile.gripper_dof_indices == (7, 20)
-    assert profile.gripper_coords_per_side == 1
-    assert profile.gripper_open_positions == (0.0,)
-    assert profile.gripper_closed_positions == pytest.approx((0.8000066006619417,))
+    assert len(profile.home_joint_q) == 46
+    assert profile.joint_dof_count == 42
+    assert profile.arm_coord_indices == tuple(range(7)) + tuple(range(15, 22))
+    assert profile.gripper_coord_indices == profile.gripper_dof_indices == (7, 11, 22, 26)
+    assert profile.gripper_coords_per_side == 2
+    assert profile.gripper_open_positions == (0.0, 0.0)
+    assert profile.gripper_closed_positions == pytest.approx((0.8, 0.8))
     assert profile.body_parents.count(-1) == 1
     assert profile.body_names[0] == "fr3_duo_mount_mounting_point"
     np.testing.assert_allclose(
@@ -210,7 +211,7 @@ def test_fr3_duo_attach_matches_ur5_robotiq_base_local_grasp_depth() -> None:
     bases = {
         str(prim.GetAttribute("clothdojo:bodyLabel").Get()): prim
         for prim in stage.Traverse()
-        if str(prim.GetAttribute("clothdojo:bodyLabel").Get()).endswith("/robotiq_85_base_link")
+        if str(prim.GetAttribute("clothdojo:bodyLabel").Get()).endswith("/gripper_base")
     }
     checked = set()
     for prim in stage.Traverse():
@@ -218,10 +219,15 @@ def test_fr3_duo_attach_matches_ur5_robotiq_base_local_grasp_depth() -> None:
             continue
         side = str(prim.GetAttribute("clothdojo:parentBody").Get()).split("/")[0]
         relative = cache.GetLocalToWorldTransform(prim) * cache.GetLocalToWorldTransform(
-            bases[f"{side}/robotiq_85_base_link"]
+            bases[f"{side}/gripper_base"]
         ).GetInverse()
-        np.testing.assert_allclose(relative.ExtractTranslation(), (0, 0, 0.157719), atol=5e-7)
-        np.testing.assert_allclose(np.asarray(relative)[:3, :3], np.eye(3), atol=1e-6)
+        # The new base default is baked from float32 FK; the retained TCP
+        # keeps its original USD transform, so allow sub-micron round-off.
+        np.testing.assert_allclose(relative.ExtractTranslation(), (0, 0, 0.157719), atol=1e-6)
+        # Menagerie closes along Y; the retained FR3 attach closes along X.
+        np.testing.assert_allclose(
+            np.asarray(relative)[:3, :3], ((0, 1, 0), (-1, 0, 0), (0, 0, 1)), atol=2e-6,
+        )
         checked.add(side)
     assert checked == {"left", "right"}
 
@@ -279,8 +285,8 @@ def test_ur5_usd_home_keeps_grasp_positions_and_synchronized_drive_targets() -> 
         UR5E_2F85: {
             # PickNik's flush camera adapter adds 7 mm along the tool axis;
             # the wrist half-turn keeps the grasp positions and original coupling.
-            "left/gripper_base": (0.7001029, 0.4000614, 1.0430008),
-            "right/gripper_base": (0.7000490, -0.3999888, 1.0430002),
+                "left/gripper_base": (0.6001029, 0.4000614, 1.0430008),
+                "right/gripper_base": (0.6000490, -0.3999888, 1.0430002),
         },
     }
     for robot_id, positions in expected_positions.items():
@@ -310,7 +316,7 @@ def test_ur5_usd_home_keeps_grasp_positions_and_synchronized_drive_targets() -> 
 
 def test_ur5_has_stable_bases_and_the_complete_legacy_camera_stand() -> None:
     project = Path(__file__).parents[1]
-    camera_position = (0.3179578738615954, -0.0225080347427568, 1.34981)
+    camera_position = (0.2179578738615954, -0.0225080347427568, 1.34981)
 
     for robot_id, base_labels in (
         (UR5E_2F85, ("left/base", "right/base")),
@@ -332,14 +338,14 @@ def test_ur5_has_stable_bases_and_the_complete_legacy_camera_stand() -> None:
         for side, label in zip((1.0, -1.0), base_labels, strict=True):
             prim = body_prims[label]
             origin = UsdGeom.XformCache().GetLocalToWorldTransform(prim).ExtractTranslation()
-            np.testing.assert_allclose(origin, (0.25, side * 0.55, 0.8), atol=2.0e-6)
+            np.testing.assert_allclose(origin, (0.15, side * 0.55, 0.8), atol=2.0e-6)
             bounds = bbox_cache.ComputeWorldBound(prim).ComputeAlignedRange()
             outer_edge = bounds.GetMax()[1] if side > 0 else bounds.GetMin()[1]
             assert 0.7 - abs(outer_edge) >= 0.05
 
         stand = stage.GetPrimAtPath("/Robot/Installation/CameraStand")
         assert stand
-        assert stand.GetAttribute("clothdojo:columnAxisWorld").Get() == (0.261, 0.0)
+        assert stand.GetAttribute("clothdojo:columnAxisWorld").Get() == (0.161, 0.0)
         assert stage.GetPrimAtPath(
             "/Robot/Installation/CameraStand/base_br/Camera_stand/base/Mesh_1"
         )
@@ -363,7 +369,7 @@ def test_ur5_has_stable_bases_and_the_complete_legacy_camera_stand() -> None:
         cam_high = stage.GetPrimAtPath("/Robot/Semantics/cam_high")
         assert cam_high.GetAttribute("clothdojo:cameraModel").Get() == "RealSense D455"
         np.testing.assert_allclose(
-            UsdGeom.Xformable(cam_high).GetLocalTransformation().ExtractTranslation(),
+            UsdGeom.XformCache().GetLocalToWorldTransform(cam_high).ExtractTranslation(),
             camera_position,
         )
 

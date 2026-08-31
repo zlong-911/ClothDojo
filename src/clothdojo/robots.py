@@ -135,6 +135,7 @@ def _load_workstation(robot_id: str, asset: str, assets_root: Path) -> RobotProf
 
     cameras = {}
     attach_frames = {}
+    xform_cache = UsdGeom.XformCache()
     for prim in stage.Traverse():
         role = prim.GetAttribute("clothdojo:cameraName")
         camera_name = str(role.Get()) if role and role.HasAuthoredValue() else prim.GetName()
@@ -155,10 +156,13 @@ def _load_workstation(robot_id: str, asset: str, assets_root: Path) -> RobotProf
                 parent_body=parent_body,
                 parent_from_camera=_matrix_tuple(
                     UsdGeom.Xformable(prim).GetLocalTransformation()
+                    if parent_body is not None
+                    else xform_cache.GetLocalToWorldTransform(prim)
                 ),
                 focal_length=round(float(camera.GetFocalLengthAttr().Get()), 6),
                 horizontal_aperture=horizontal_aperture,
                 vertical_aperture=vertical_aperture,
+                near_clip=float(camera.GetClippingRangeAttr().Get()[0]),
             )
         role = prim.GetAttribute("clothdojo:role")
         if not role or role.Get() != "end_effector_attach":

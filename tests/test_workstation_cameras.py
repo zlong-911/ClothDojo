@@ -1,4 +1,5 @@
 import math
+from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -6,7 +7,7 @@ import pytest
 import warp as wp
 
 from clothdojo.rendering import CAMERA_NAMES, DATASET_CAMERA_NAMES, CameraSpec
-from clothdojo.rollout.render import ShirtFlattenCameraObservation, _camera_rays
+from clothdojo.rollout.render import ShirtFlattenCameraObservation, _camera_rays, _clip_camera_rays
 
 
 def _camera(name="cam_high", parent=None, *, vertical_aperture=16.875):
@@ -46,6 +47,49 @@ def test_legacy_four_by_three_rays_keep_existing_benchmark_pixels():
         4, 3, camera_fovs=(2 * math.atan(30 / (2 * 20)),)
     ).numpy()
     np.testing.assert_array_equal(actual, original)
+
+
+def test_near_clip_preserves_projection_and_uses_an_optical_axis_plane():
+    from newton._src.sensors.warp_raytrace.utils import Utils
+
+    cameras = tuple(replace(_camera(), near_clip=near) for near in (0.0, 0.01, 0.04))
+    rays = _camera_rays(Utils(SimpleNamespace(device="cpu")), cameras, 8, 6)
+    before = rays.numpy()
+    _clip_camera_rays(rays, cameras)
+    after = rays.numpy()
+    np.testing.assert_array_equal(after[..., 1, :], before[..., 1, :])
+    for index, camera in enumerate(cameras):
+        origins, directions = after[index, ..., 0, :], after[index, ..., 1, :]
+        np.testing.assert_allclose(origins[..., 2], -camera.near_clip, atol=1e-8)
+        np.testing.assert_allclose(np.cross(origins, directions), 0, atol=1e-8)
+    # An oblique ray must start farther than near in Euclidean distance.
+    assert np.linalg.norm(after[1, 0, 0, 0]) > cameras[1].near_clip
+
+
+@pytest.mark.parametrize("near", [-1, float("nan"), float("inf")])
+def test_invalid_near_clip_is_rejected(near):
+    with pytest.raises(ValueError, match="near clipping"):
+        _clip_camera_rays(None, (replace(_camera(), near_clip=near),))
+
+
+@pytest.mark.parametrize("robot_id", ["piper", "aloha2", "x5", "ur5e_2f85", "fr3_duo"])
+def test_runtime_camera_near_clip_matches_usd(robot_id):
+    from pathlib import Path
+
+    from pxr import Usd, UsdGeom
+
+    from clothdojo.robots import robot_profile
+
+    profile = robot_profile(robot_id)
+    stage = Usd.Stage.Open(str(Path(__file__).resolve().parents[1] / "assets" / profile.asset))
+    authored = {}
+    for prim in stage.Traverse():
+        if prim.IsA(UsdGeom.Camera):
+            role = prim.GetAttribute("clothdojo:cameraName")
+            name = role.Get() if role and role.Get() else prim.GetName()
+            authored[name] = float(UsdGeom.Camera(prim).GetClippingRangeAttr().Get()[0])
+    for camera in profile.cameras:
+        assert camera.near_clip == authored[camera.name]
 
 
 @pytest.fixture

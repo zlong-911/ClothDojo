@@ -16,7 +16,8 @@
 | `assets/` | 项目资产 |
 | `assets/robots/` | Piper、ALOHA2、X5、UR5e_2F85、FR3 Duo 的固定源资产、许可证与完整工作站 USD；Panda 停用 |
 | `assets/robots/<robot>/<robot>.usda` | 每种机器人唯一的双臂工作站入口；固定安装、物理、home/attach、拓扑和原生相机 |
-| `assets/robots/fr3_duo/fr3_duo.usda` | 已接受 FR3 Duo 桌面装配、原生三相机加独立虚拟 cam_low 和动力学快照，正式 profile 为 fr3_duo |
+| `assets/robots/fr3_duo/fr3_duo.usda` | FR3 Duo 桌边安装、原生三相机加独立虚拟 cam_low、同源 Robotiq 和动力学快照，正式 profile 为 fr3_duo |
+| `assets/robots/fr3_duo/build_robotiq.py` | 离线复制 UR5e 同源 Robotiq 组件及 FR3 安装/拓扑覆盖，保留原 payload、相机和 TCP |
 | `scripts/robots/check_dynamics.py` | 只读机器人 USD 的空载/接触动态复验；结果写入 outputs |
 | `scripts/robots/check_cameras.py` | 五套本体的原生 USD 相机 home 出图检查，保留双轴视场、roll 与 clipping |
 | `configs/rendering/materials.json` | 高质量视觉材质与 HDRI 的固定选择清单 |
@@ -36,7 +37,7 @@
 | `src/clothdojo/assets/materials.py` | Poly Haven 固定清单、下载校验与物理纹理尺度 |
 | `src/clothdojo/sim/` | 仿真场景与运行时 |
 | `src/clothdojo/sim/workstation_review.py` | sim render-workstations 的统一 Newton 整体/home/attach 审查渲染 |
-| `src/clothdojo/rendering.py` | 渲染视角接口与策略观测尺寸 |
+| `src/clothdojo/rendering.py` | 渲染视角、策略观测尺寸与审查/策略共用的 USD 外观读取补齐 |
 | `src/clothdojo/robots.py` | 从五套工作站 USD 读取控制布局、安装根、attach、相机与回放拓扑 |
 | `src/clothdojo/tasks.py` | 与机器人独立的任务身份及场景可用性 |
 | `src/clothdojo/trajectory/` | 遥操、rollout 与评测共用的轨迹格式、读写和 Newton capture |

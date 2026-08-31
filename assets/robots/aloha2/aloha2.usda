@@ -35,6 +35,24 @@ over "Robot"
 
     over "Joints"
     {
+        # ClothDojo 1x-effort simulation response tuning, not source calibration.
+        # Exported newton:damping is restored as SI by the scene importer.
+        over "joint_003"
+        {
+            float newton:damping = 10
+        }
+        over "joint_004"
+        {
+            float newton:damping = 2
+        }
+        over "joint_013"
+        {
+            float newton:damping = 10
+        }
+        over "joint_014"
+        {
+            float newton:damping = 2
+        }
         over "joint_008"
         {
             float state:linear:physics:position = 0.037

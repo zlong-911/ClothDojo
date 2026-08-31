@@ -158,6 +158,9 @@ def test_ur5_tool_half_turn_preserves_attach_world_frame_and_seven_mm_offset(sta
                 continue
             old = np.asarray(cache.GetLocalToWorldTransform(prim)).T
             new = np.asarray(cache.GetLocalToWorldTransform(stage.GetPrimAtPath(prim.GetPath()))).T
+            # Compare the tool change in the original installation frame.
+            new = new.copy()
+            new[0, 3] += 0.1
             expected = old.copy()
             if label.startswith(side + "/gripper_"):
                 expected[:3, 3] += expected_shift
@@ -172,7 +175,7 @@ def test_ur5_tool_half_turn_preserves_attach_world_frame_and_seven_mm_offset(sta
             if label.startswith(side + "/gripper_") or label == side + "/wrist_3_link":
                 assert relative.magnitude() == pytest.approx(math.pi, abs=1e-5)
             else:
-                np.testing.assert_array_equal(new, old)
+                np.testing.assert_allclose(new, old, atol=1e-12, rtol=0)
             count += label.startswith(side + "/gripper_")
         assert count == 14
         base = 8 if side == "left" else 29
@@ -180,7 +183,8 @@ def test_ur5_tool_half_turn_preserves_attach_world_frame_and_seven_mm_offset(sta
         old_attach = np.asarray(cache.GetLocalToWorldTransform(before.GetPrimAtPath(attach_path))).T
         new_attach = np.asarray(cache.GetLocalToWorldTransform(stage.GetPrimAtPath(attach_path))).T
         np.testing.assert_allclose(
-            new_attach[:3, 3] - old_attach[:3, 3], expected_shift, atol=2e-6, rtol=0
+            new_attach[:3, 3] - old_attach[:3, 3], expected_shift + np.array((-0.1, 0, 0)),
+            atol=2e-6, rtol=0
         )
         # Both half-turns cancel in world space, but the physical tool/camera turns.
         relative = Rotation.from_matrix(old_attach[:3, :3]).inv() * Rotation.from_matrix(
@@ -198,9 +202,12 @@ def test_ur5_tool_half_turn_preserves_attach_world_frame_and_seven_mm_offset(sta
         )
     for name in ("cam_high", "cam_low"):
         path = "/Robot/Semantics/" + name
-        np.testing.assert_array_equal(
-            cache.GetLocalToWorldTransform(stage.GetPrimAtPath(path)),
-            cache.GetLocalToWorldTransform(before.GetPrimAtPath(path)),
+        expected = np.array(cache.GetLocalToWorldTransform(before.GetPrimAtPath(path)))
+        if name == "cam_high":
+            expected[3, 0] -= .1
+        np.testing.assert_allclose(
+            cache.GetLocalToWorldTransform(stage.GetPrimAtPath(path)), expected,
+            atol=1e-12, rtol=0,
         )
 
 
@@ -250,6 +257,19 @@ def test_ur5_workstation_rebuild_does_not_accumulate_rotations_or_offsets(stage,
     ).GetLocalTransformation()).T
     module.assemble_workstation(scratch, baseline, optical)
     once = layer.ExportToString()
+    # Regeneration must not bake the workstation translation into body-local poses.
+    cache = UsdGeom.XformCache()
+    for prim in stage.GetPrimAtPath("/Robot/Bodies").GetChildren():
+        np.testing.assert_allclose(
+            cache.GetLocalToWorldTransform(scratch.GetPrimAtPath(prim.GetPath())),
+            cache.GetLocalToWorldTransform(prim), atol=5e-6, rtol=0,
+        )
+    for name in ("cam_left_wrist", "cam_right_wrist"):
+        original = next(prim for prim in stage.Traverse() if prim.GetName() == name)
+        np.testing.assert_allclose(
+            cache.GetLocalToWorldTransform(scratch.GetPrimAtPath(original.GetPath())),
+            cache.GetLocalToWorldTransform(original), atol=5e-6, rtol=0,
+        )
     module.assemble_workstation(scratch, baseline, optical)
     assert layer.ExportToString() == once
 

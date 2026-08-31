@@ -146,6 +146,7 @@ class ShirtFlattenCameraObservation:
         self._smooth_cloth = _SmoothClothVisual(self._sensor, scene)
 
         self._rays = _camera_rays(self._sensor.utils, cameras, self.width, self.height)
+        _clip_camera_rays(self._rays, cameras)
         world_offsets = np.asarray(scene.world_offsets, dtype=np.float32)
         if world_offsets.shape != (self.world_count, 3):
             raise RuntimeError("camera world offsets do not match the Newton world count")
@@ -443,6 +444,37 @@ def _refit_deforming_mesh_bounds(
         inputs=[bounds, shape_index, shape_bounds],
         device=device,
     )
+
+
+@wp.kernel
+def _move_ray_origins_to_near_plane(
+    rays: wp.array4d(dtype=wp.vec3f),
+    near: wp.array(dtype=wp.float32),
+):
+    camera, row, column = wp.tid()
+    direction = rays[camera, row, column, 1]
+    # USD cameras look along -Z. Clipping is an optical-axis plane, not
+    # a sphere of constant Euclidean ray distance.
+    rays[camera, row, column, 0] = direction * (near[camera] / -direction[2])
+
+
+def _clip_camera_rays(rays, cameras) -> None:
+    """Apply USD near clipping without moving the camera or changing its FOV.
+
+    SensorTiledCamera accepts explicit per-pixel ray origins but has no near
+    plane argument. This RGB provider traces from the near plane; raw sensor
+    depth, if requested separately, is consequently relative to that plane.
+    """
+    near = np.asarray([camera.near_clip for camera in cameras], dtype=np.float32)
+    if not np.isfinite(near).all() or np.any(near < 0):
+        raise ValueError("camera near clipping must be finite and nonnegative")
+    if np.any(near > 0):
+        wp.launch(
+            _move_ray_origins_to_near_plane,
+            dim=rays.shape[:3],
+            inputs=[rays, wp.array(near, dtype=wp.float32, device=rays.device)],
+            device=rays.device,
+        )
 
 
 def _camera_rays(utils, cameras, width: int, height: int):

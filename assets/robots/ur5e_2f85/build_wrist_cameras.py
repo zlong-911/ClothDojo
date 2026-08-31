@@ -316,6 +316,7 @@ def bake_tool_home(stage):
     model = builder.finalize("cpu")
     state = model.state()
     newton.eval_fk(model, model.joint_q, model.joint_qd, state)
+    cache = UsdGeom.XformCache()
     for path, pose in zip(builder.body_label, state.body_q.numpy(), strict=True):
         prim = stage.GetPrimAtPath(path)
         label = str(prim.GetAttribute("clothdojo:bodyLabel").Get())
@@ -323,12 +324,12 @@ def bake_tool_home(stage):
             continue
         matrix = Gf.Matrix4d().SetRotate(Gf.Quatd(float(pose[6]), *map(float, pose[3:6])))
         matrix.SetTranslateOnly(Gf.Vec3d(*map(float, pose[:3])))
-        author_transform(prim, np.asarray(matrix).T)
+        parent_world = cache.GetLocalToWorldTransform(prim.GetParent())
+        author_transform(prim, np.asarray(matrix * parent_world.GetInverse()).T)
 
 
 def assemble_workstation(stage, baseline, usd_camera):
     """Author the fixed assembly and home, always relative to the source payload."""
-    cache = UsdGeom.XformCache()
     flange = transform((0, 0.1, 0), (-math.pi / 2, 0, 0))
     home = list(baseline.GetDefaultPrim().GetAttribute("clothdojo:homeJointQ").Get())
     # -pi is the requested half-turn, without taking the right wrist past +2pi.
@@ -340,7 +341,7 @@ def assemble_workstation(stage, baseline, usd_camera):
     for side, wrist_id, base_id, joint_id in (("left", 6, 8, 7), ("right", 27, 29, 30)):
         wrist_path = f"/Robot/Bodies/body_{wrist_id:03}"
         original_wrist = np.asarray(
-            cache.GetLocalToWorldTransform(baseline.GetPrimAtPath(wrist_path))
+            UsdGeom.Xformable(baseline.GetPrimAtPath(wrist_path)).GetLocalTransformation()
         ).T
         shift = (original_wrist @ flange)[:3, 2] * 0.007
         # Reset to the payload before recomputing camera calibration and home.
@@ -348,7 +349,7 @@ def assemble_workstation(stage, baseline, usd_camera):
         for prim in baseline.GetPrimAtPath("/Robot/Bodies").GetChildren():
             label = prim.GetAttribute("clothdojo:bodyLabel").Get()
             if label and label.startswith(f"{side}/gripper_"):
-                matrix = np.asarray(cache.GetLocalToWorldTransform(prim)).T
+                matrix = np.asarray(UsdGeom.Xformable(prim).GetLocalTransformation()).T
                 matrix[:3, 3] += shift
                 author_transform(stage.GetPrimAtPath(prim.GetPath()), matrix)
         wrist_joint = stage.GetPrimAtPath(f"/Robot/Joints/joint_{joint_id - 1:03}")
@@ -373,12 +374,12 @@ def assemble_workstation(stage, baseline, usd_camera):
         author_transform(
             stage.GetPrimAtPath(attach_path), attach_local @ transform(rpy=(0, 0, math.pi))
         )
-        parent_world = np.asarray(
-            UsdGeom.XformCache().GetLocalToWorldTransform(stage.GetPrimAtPath(parent_path))
+        parent_local = np.asarray(
+            UsdGeom.Xformable(stage.GetPrimAtPath(parent_path)).GetLocalTransformation()
         ).T
         camera = UsdGeom.Camera(stage.GetPrimAtPath(f"{parent_path}/cam_{side}_wrist"))
         author_transform(
-            camera.GetPrim(), np.linalg.inv(parent_world) @ original_wrist @ flange @ usd_camera
+            camera.GetPrim(), np.linalg.inv(parent_local) @ original_wrist @ flange @ usd_camera
         )
         # PickNik's authored horizontal FOV is 1.047 radians at 640x480. Retain
         # the existing 13-unit focal scale; the ratio is the published truth.

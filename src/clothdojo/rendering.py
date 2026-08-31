@@ -1,4 +1,4 @@
-"""Renderer-independent dataset camera calibration."""
+"""Shared camera calibration and authored robot appearance."""
 
 from __future__ import annotations
 
@@ -22,6 +22,43 @@ class CameraSpec:
     focal_length: float
     horizontal_aperture: float
     vertical_aperture: float
+    near_clip: float = 0.0
+
+
+def _apply_authored_appearance(builder, stage) -> dict:
+    """Bridge Newton USD appearance omissions for both review and policy RGB."""
+    from newton import ShapeFlags
+    from newton._src.usd.utils import (
+        _color_to_display_space,
+        resolve_material_properties_for_prim,
+    )
+    from pxr import UsdGeom
+
+    display_colors, hidden_proxies = [], []
+    for index, path in enumerate(builder.shape_label):
+        prim = stage.GetPrimAtPath(path)
+        if not prim:
+            continue
+        if UsdGeom.Imageable(prim).ComputePurpose() == UsdGeom.Tokens.proxy:
+            if builder.shape_flags[index] & int(ShapeFlags.VISIBLE):
+                hidden_proxies.append(path)
+            builder.shape_flags[index] &= ~int(ShapeFlags.VISIBLE)
+        # Newton 1.5 resolves bound materials but omits uniform displayColor.
+        # Only bridge this omission in memory; never replace a bound material.
+        properties = resolve_material_properties_for_prim(prim)
+        if properties.get("color") is not None or properties.get("texture") is not None:
+            continue
+        attribute = prim.GetAttribute("primvars:displayColor")
+        values = attribute.Get() if attribute and attribute.HasAuthoredValue() else None
+        if values is not None and len(values) == 1:
+            builder.shape_color[index] = _color_to_display_space(
+                tuple(map(float, values[0])), attribute
+            )
+            display_colors.append(path)
+    return {
+        "authored_display_color_fallbacks": display_colors,
+        "hidden_authored_proxy_shapes": hidden_proxies,
+    }
 
 
 def policy_observation_settings() -> dict[str, object]:

@@ -1,4 +1,4 @@
-# FR3 Duo review tabletop
+# Historical FR3 Duo review tabletop
 
 `tabletop_context_mm.stl` is the unchanged accepted tabletop mesh with six support
 holes, promoted from the FR3 installation review. Coordinates are in millimetres;
@@ -10,6 +10,8 @@ body or production collision shape. It preserves the accepted through-table
 support appearance; it does not certify a manufactured installation. It belongs
 to the external workstation asset package alongside `fr3_duo.usda` and its payload.
 
-`clothdojo.sim.workstation_review` loads it directly from this asset directory;
-no historical `outputs/` scene or helper is needed. The context never changes
-robot home, attach, cameras, materials, or dynamics.
+The current FR3 installation is back at the accepted table-edge position, with
+the 150 mm extrusion and original through-table fasteners. The review still uses
+the same simplified, unperforated `ShirtFlattenSpec` table as other robots; this
+STL is retained as installation geometry reference and is not loaded by the
+renderer. The task table collision shape is unchanged.

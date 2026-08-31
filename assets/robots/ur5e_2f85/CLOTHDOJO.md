@@ -28,6 +28,11 @@ body、joint、geom、tendon 与 actuator 定义均来自上述两个标准模�
 来源及求解器限制见 `docs/robot_dynamics.md`，复现校对见
 `outputs/robot_dynamics_audit/others_audit.py`。
 
+臂的 position-drive 阻尼另采用项目 1× effort 仿真调参值：每侧
+`[120, 125, 95, 18, 16, 15] Nm·s/rad`，固定在顶层 USD，retarget 与普通 runtime
+共用。它以采样姿态下的有效惯量估计响应阻尼，再经空载和整条 action rollout 检查，
+不是 Menagerie 原始增益或厂家标定。原 stiffness、effort、被动项、夹爪参数和惯性不变。
+
 ## 固定腕部相机装配
 
 两侧末端现采用 PickNik 公布的贴合法兰安装方式：7 mm 相机转接件、保留的
@@ -40,7 +45,7 @@ D415 源 STL 没有贴图；经用户同意，按原 CAD 前盖的 308 面遮罩
 内部组件为 `components/wrist_camera.usdc`，唯一工作站入口仍是
 `ur5e_2f85.usda`。详见 [完整来源、装配链及边界](provenance/wrist_camera/README.md)。
 
-底座、桌面安装和第三人称相机不变；相机板位于原 coupling
+相机板位于原 coupling
 之前，所以夹爪及 attach 随末端轴向外移 7 mm。两侧 home 的最后一个腕关节
 相对 payload 各减去 π，令工具绕自身 Z 转 180°；attach 局部定义再绕自身 Z
 转 180°，因此 home 下 attach 世界位置和方向不因这两次旋转改变。
@@ -53,5 +58,14 @@ D415 源 STL 没有贴图；经用户同意，按原 CAD 前盖的 308 面遮罩
 **相机和支架的附加载荷尚未计入动力学**：PickNik 未给支架惯性，RealSense
 明确警告其示例 COM/tensor 不可靠。本次不猜质量或密度；原 42 个 body
 mass/COM/inertia 保持不变，因此不能称末端完整动力学校准已经完成。
+
+## 当前安装
+
+双臂和完整 D455 头部相机支架整体沿世界 X 后移 0.10 m。左右底座原点为
+`(0.15, ±0.55, 0.80)` m，仍安装在桌面；底座后缘距桌后沿约 54.5 mm。
+相机立柱轴线 X=0.161 m，实体支架、光心及世界位置元数据同步移动，
+局部标定和相机朝向不变；独立虚拟 `cam_low` 保持世界位置不变。
+该间距是仿真几何余量，不是动态避碰或真机安全认证。关节 home、局部 attach、
+质量、惯量及控制参数不变。腕部装配脚本在本体局部坐标下工作，重新生成不会累加安装平移。
 
 复验：`PXR_WORK_THREAD_LIMIT=1 CUDA_VISIBLE_DEVICES='' .venv/bin/pytest tests/test_ur5_wrist_camera.py tests/test_robot_dynamics.py -q`。

@@ -2,12 +2,14 @@
 (
     customLayerData = {
         string dynamicsSources = "provenance/dynamics.json"
+        string installation = "Table-edge installation at the accepted payload position; 120x80x150 mm extrusion on the 0.8 m tabletop, arm bases at 1.0 m. Original through-table fasteners restored. Fixed simulation mount, not an engineered hardware certification."
         string status = "Fixed workstation; native FR3 Duo cameras plus independent Piper cam_low observer"
     }
     defaultPrim = "Robot"
     kilogramsPerUnit = 1
     metersPerUnit = 1
     subLayers = [
+        @./components/robotiq_installation.usdc@,
         @./payloads/workstation.usdc@
     ]
     upAxis = "Z"
@@ -15,17 +17,7 @@
 
 over "Robot"
 {
-    custom int[] clothdojo:armCoordIndices = [0, 1, 2, 3, 4, 5, 6, 13, 14, 15, 16, 17, 18, 19]
-    custom int[] clothdojo:armDofIndices = [0, 1, 2, 3, 4, 5, 6, 13, 14, 15, 16, 17, 18, 19]
     custom string[] clothdojo:armJointNames = ["left/fr3v2_joint1", "left/fr3v2_joint2", "left/fr3v2_joint3", "left/fr3v2_joint4", "left/fr3v2_joint5", "left/fr3v2_joint6", "left/fr3v2_joint7", "right/fr3v2_joint1", "right/fr3v2_joint2", "right/fr3v2_joint3", "right/fr3v2_joint4", "right/fr3v2_joint5", "right/fr3v2_joint6", "right/fr3v2_joint7"]
-    custom string[] clothdojo:bodyNames = ["fr3_duo_mount_mounting_point", "fr3_duo_mount_origin", "fr3_duo_mount_left", "left/base", "left/fr3v2_link0", "left/fr3v2_link1", "left/fr3v2_link2", "left/fr3v2_link3", "left/fr3v2_link4", "left/fr3v2_link5", "left/fr3v2_link6", "left/fr3v2_link7", "left/fr3v2_link8", "left/ur_to_robotiq_link", "left/robotiq_85_base_adapter_link", "left/robotiq_85_base_link", "left/robotiq_85_left_knuckle_link", "left/robotiq_85_left_finger_link", "left/robotiq_85_left_finger_tip_link", "left/robotiq_85_left_inner_knuckle_link", "left/robotiq_85_right_knuckle_link", "left/robotiq_85_right_finger_link", "left/robotiq_85_right_finger_tip_link", "left/robotiq_85_right_inner_knuckle_link", "left/wrist_cam_mount_link", "left/d405_camera_link", "left/d405_color_frame", "left/d405_color_optical_frame", "left/d405_depth_frame", "left/d405_depth_optical_frame", "left/d405_imu_link", "left/d405_infra1_frame", "left/d405_infra1_optical_frame", "left/d405_infra2_frame", "left/d405_infra2_optical_frame", "left/tcp", "left/fr3v2_link5_accelerometer_bottom", "left/fr3v2_link5_accelerometer_top", "left/fr3v2_link4_accelerometer_bottom", "left/fr3v2_link4_accelerometer_top", "left/fr3v2_link3_accelerometer_bottom", "left/fr3v2_link3_accelerometer_top", "left/fr3v2_link2_accelerometer_bottom", "left/fr3v2_link2_accelerometer_top", "left/fr3v2_link1_accelerometer_bottom", "left/fr3v2_link1_accelerometer_top", "left/fr3v2_link0_accelerometer_bottom", "left/fr3v2_link0_accelerometer_top", "fr3_duo_mount_right", "right/base", "right/fr3v2_link0", "right/fr3v2_link1", "right/fr3v2_link2", "right/fr3v2_link3", "right/fr3v2_link4", "right/fr3v2_link5", "right/fr3v2_link6", "right/fr3v2_link7", "right/fr3v2_link8", "right/ur_to_robotiq_link", "right/robotiq_85_base_adapter_link", "right/robotiq_85_base_link", "right/robotiq_85_left_knuckle_link", "right/robotiq_85_left_finger_link", "right/robotiq_85_left_finger_tip_link", "right/robotiq_85_left_inner_knuckle_link", "right/robotiq_85_right_knuckle_link", "right/robotiq_85_right_finger_link", "right/robotiq_85_right_finger_tip_link", "right/robotiq_85_right_inner_knuckle_link", "right/wrist_cam_mount_link", "right/d405_camera_link", "right/d405_color_frame", "right/d405_color_optical_frame", "right/d405_depth_frame", "right/d405_depth_optical_frame", "right/d405_imu_link", "right/d405_infra1_frame", "right/d405_infra1_optical_frame", "right/d405_infra2_frame", "right/d405_infra2_optical_frame", "right/tcp", "right/fr3v2_link5_accelerometer_bottom", "right/fr3v2_link5_accelerometer_top", "right/fr3v2_link4_accelerometer_bottom", "right/fr3v2_link4_accelerometer_top", "right/fr3v2_link3_accelerometer_bottom", "right/fr3v2_link3_accelerometer_top", "right/fr3v2_link2_accelerometer_bottom", "right/fr3v2_link2_accelerometer_top", "right/fr3v2_link1_accelerometer_bottom", "right/fr3v2_link1_accelerometer_top", "right/fr3v2_link0_accelerometer_bottom", "right/fr3v2_link0_accelerometer_top", "head_link", "zed_mini_camera_link", "zed_mini_imu_link", "zed_mini_left_camera_frame", "zed_mini_left_camera_optical_frame", "zed_mini_right_camera_frame", "zed_mini_right_camera_optical_frame", "head_camera_mounting_point"]
-    custom int[] clothdojo:bodyParents = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 15, 15, 20, 21, 15, 15, 24, 25, 26, 25, 28, 25, 25, 31, 25, 33, 15, 9, 9, 8, 8, 7, 7, 6, 6, 5, 5, 4, 4, 1, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 61, 61, 66, 67, 61, 61, 70, 71, 72, 71, 74, 71, 71, 77, 71, 79, 61, 55, 55, 54, 54, 53, 53, 52, 52, 51, 51, 50, 50, 0, 94, 95, 95, 97, 95, 99, 94]
-    custom double[] clothdojo:gripperClosedPositions = [0.8000066006619417]
-    custom int[] clothdojo:gripperCoordIndices = [7, 20]
-    custom int[] clothdojo:gripperDofIndices = [7, 20]
-    custom double[] clothdojo:gripperOpenPositions = [0]
-    custom double[] clothdojo:homeJointQ = [0.18974100647287132, -0.49410499889497106, -0.29285001518622394, -2.623324993861615, 0.7409709771976102, 1.7712500652001797, 0.06504200047359854, 0, 0, 0, 0, 0, 0, -0.020019999324885827, -0.4740829876351055, 0.1399369979007041, -2.615130979819659, -0.7920550008582103, 1.7192180227705387, -0.018384086046277403, 0, 0, 0, 0, 0, 0]
-    custom int clothdojo:jointDofCount = 26
     custom string clothdojo:robotId = "fr3_duo"
     custom double[] clothdojo:rootBodyFrames = [0.12999999523162842, 0, 0.949999988079071, 0, 0, 0, 1]
     custom int clothdojo:workstationSchema = 1
@@ -50,10 +42,15 @@ over "Robot"
     {
         over "Physics"
         {
+            over "mount_joint"
+            {
+                point3f physics:localPos0 = (0.13, 0, 0.95)
+            }
+
             over "left_fr3v2_joint1"
             {
                 custom string clothdojo:jointLabel = "left/fr3v2_joint1"
-                float drive:angular:physics:damping = 7.8539815
+                float drive:angular:physics:damping = 3.14159265
                 float drive:angular:physics:maxForce = 87
                 float drive:angular:physics:stiffness = 78.53982
                 float drive:angular:physics:targetPosition = 10.871359
@@ -72,7 +69,7 @@ over "Robot"
             over "left_fr3v2_joint2"
             {
                 custom string clothdojo:jointLabel = "left/fr3v2_joint2"
-                float drive:angular:physics:damping = 7.8539815
+                float drive:angular:physics:damping = 2.96705973
                 float drive:angular:physics:maxForce = 87
                 float drive:angular:physics:stiffness = 78.53982
                 float drive:angular:physics:targetPosition = -28.310131
@@ -91,7 +88,7 @@ over "Robot"
             over "left_fr3v2_joint3"
             {
                 custom string clothdojo:jointLabel = "left/fr3v2_joint3"
-                float drive:angular:physics:damping = 6.1086526
+                float drive:angular:physics:damping = 2.53072742
                 float drive:angular:physics:maxForce = 87
                 float drive:angular:physics:stiffness = 61.086525
                 float drive:angular:physics:targetPosition = -16.77907
@@ -110,7 +107,7 @@ over "Robot"
             over "left_fr3v2_joint4"
             {
                 custom string clothdojo:jointLabel = "left/fr3v2_joint4"
-                float drive:angular:physics:damping = 6.1086526
+                float drive:angular:physics:damping = 2.26892803
                 float drive:angular:physics:maxForce = 87
                 float drive:angular:physics:stiffness = 61.086525
                 float drive:angular:physics:targetPosition = -150.30545
@@ -129,7 +126,7 @@ over "Robot"
             over "left_fr3v2_joint5"
             {
                 custom string clothdojo:jointLabel = "left/fr3v2_joint5"
-                float drive:angular:physics:damping = 3.4906585
+                float drive:angular:physics:damping = 0.349065850
                 float drive:angular:physics:maxForce = 12
                 float drive:angular:physics:stiffness = 34.906586
                 float drive:angular:physics:targetPosition = 42.45451
@@ -148,7 +145,7 @@ over "Robot"
             over "left_fr3v2_joint6"
             {
                 custom string clothdojo:jointLabel = "left/fr3v2_joint6"
-                float drive:angular:physics:damping = 3.4906585
+                float drive:angular:physics:damping = 0.401425728
                 float drive:angular:physics:maxForce = 12
                 float drive:angular:physics:stiffness = 34.906586
                 float drive:angular:physics:targetPosition = 101.48515
@@ -167,7 +164,7 @@ over "Robot"
             over "left_fr3v2_joint7"
             {
                 custom string clothdojo:jointLabel = "left/fr3v2_joint7"
-                float drive:angular:physics:damping = 3.4906585
+                float drive:angular:physics:damping = 0.0872664626
                 float drive:angular:physics:maxForce = 12
                 float drive:angular:physics:stiffness = 34.906586
                 float drive:angular:physics:targetPosition = 3.726632
@@ -186,7 +183,7 @@ over "Robot"
             over "right_fr3v2_joint1"
             {
                 custom string clothdojo:jointLabel = "right/fr3v2_joint1"
-                float drive:angular:physics:damping = 7.8539815
+                float drive:angular:physics:damping = 3.14159265
                 float drive:angular:physics:maxForce = 87
                 float drive:angular:physics:stiffness = 78.53982
                 float drive:angular:physics:targetPosition = -1.1470615
@@ -205,7 +202,7 @@ over "Robot"
             over "right_fr3v2_joint2"
             {
                 custom string clothdojo:jointLabel = "right/fr3v2_joint2"
-                float drive:angular:physics:damping = 7.8539815
+                float drive:angular:physics:damping = 2.96705973
                 float drive:angular:physics:maxForce = 87
                 float drive:angular:physics:stiffness = 78.53982
                 float drive:angular:physics:targetPosition = -27.162954
@@ -224,7 +221,7 @@ over "Robot"
             over "right_fr3v2_joint3"
             {
                 custom string clothdojo:jointLabel = "right/fr3v2_joint3"
-                float drive:angular:physics:damping = 6.1086526
+                float drive:angular:physics:damping = 2.53072742
                 float drive:angular:physics:maxForce = 87
                 float drive:angular:physics:stiffness = 61.086525
                 float drive:angular:physics:targetPosition = 8.017799
@@ -243,7 +240,7 @@ over "Robot"
             over "right_fr3v2_joint4"
             {
                 custom string clothdojo:jointLabel = "right/fr3v2_joint4"
-                float drive:angular:physics:damping = 6.1086526
+                float drive:angular:physics:damping = 2.26892803
                 float drive:angular:physics:maxForce = 87
                 float drive:angular:physics:stiffness = 61.086525
                 float drive:angular:physics:targetPosition = -149.83597
@@ -262,7 +259,7 @@ over "Robot"
             over "right_fr3v2_joint5"
             {
                 custom string clothdojo:jointLabel = "right/fr3v2_joint5"
-                float drive:angular:physics:damping = 3.4906585
+                float drive:angular:physics:damping = 0.349065850
                 float drive:angular:physics:maxForce = 12
                 float drive:angular:physics:stiffness = 34.906586
                 float drive:angular:physics:targetPosition = -45.38141
@@ -281,7 +278,7 @@ over "Robot"
             over "right_fr3v2_joint6"
             {
                 custom string clothdojo:jointLabel = "right/fr3v2_joint6"
-                float drive:angular:physics:damping = 3.4906585
+                float drive:angular:physics:damping = 0.401425728
                 float drive:angular:physics:maxForce = 12
                 float drive:angular:physics:stiffness = 34.906586
                 float drive:angular:physics:targetPosition = 98.50394
@@ -300,7 +297,7 @@ over "Robot"
             over "right_fr3v2_joint7"
             {
                 custom string clothdojo:jointLabel = "right/fr3v2_joint7"
-                float drive:angular:physics:damping = 3.4906585
+                float drive:angular:physics:damping = 0.0872664626
                 float drive:angular:physics:maxForce = 12
                 float drive:angular:physics:stiffness = 34.906586
                 float drive:angular:physics:targetPosition = -1.0533305

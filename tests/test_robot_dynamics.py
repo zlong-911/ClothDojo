@@ -50,6 +50,17 @@ def test_exported_usd_joint_dynamics_remain_in_si_units() -> None:
                 checked += 1
     assert checked == 64
 
+    profile = robot_profile(ALOHA2)
+    arm = np.asarray(profile.arm_dof_indices)
+    # Only the two load-limited passive terms are tuned; no effort is added.
+    np.testing.assert_allclose(
+        np.asarray(builder.joint_damping)[arm], [5.76, 20, 10, 2, 6.28, 1.2] * 2,
+        rtol=1e-6,
+    )
+    np.testing.assert_array_equal(
+        np.asarray(builder.joint_effort_limit)[arm], [35, 144, 59, 22, 35, 35] * 2,
+    )
+
 
 def test_aloha_usd_preserves_passive_finger_equalities() -> None:
     import newton
@@ -104,7 +115,7 @@ def test_x5_import_preserves_same_usd_upstream_actuator_baseline() -> None:
         np.testing.assert_allclose(np.asarray(getattr(builder, field))[dofs], value, rtol=1e-6)
 
 
-def test_ur5_import_preserves_robotiq_passive_dynamics_and_mount_inertia() -> None:
+def test_ur5_import_uses_tuned_drives_and_preserves_passive_dynamics_and_inertia() -> None:
     import newton
     import warp as wp
 
@@ -129,6 +140,19 @@ def test_ur5_import_preserves_robotiq_passive_dynamics_and_mount_inertia() -> No
     ]
     assert len(mounts) == 2
     np.testing.assert_allclose(np.asarray(builder.body_mass)[mounts], 0.150002855, rtol=1e-6)
+    arm = np.asarray(profile.arm_dof_indices)
+    # USD owns this simulation response tuning; retarget applies no multiplier.
+    np.testing.assert_allclose(
+        np.asarray(builder.joint_target_kd)[arm], [120, 125, 95, 18, 16, 15] * 2,
+        rtol=1e-6,
+    )
+    np.testing.assert_allclose(
+        np.asarray(builder.joint_target_ke)[arm], [2000, 2000, 2000, 500, 500, 500] * 2,
+        rtol=1e-6,
+    )
+    np.testing.assert_array_equal(
+        np.asarray(builder.joint_effort_limit)[arm], [150, 150, 150, 28, 28, 28] * 2,
+    )
 
 
 def test_piper_import_restores_legacy_velocity_baseline() -> None:
@@ -168,8 +192,8 @@ def fr3_import():
 
 def test_fr3_full_body_local_inertias_match_verified_sources(fr3_import) -> None:
     builder, imported, source = fr3_import
-    assert builder.body_count == 102
-    assert len(source["restored_bodies"]) == 39
+    assert builder.body_count == 110
+    assert len(source["restored_bodies"]) == 47
     for expected in source["restored_bodies"]:
         body = imported["path_body_map"][expected["path"]]
         assert builder.body_mass[body] == pytest.approx(expected["mass"], abs=3e-7)

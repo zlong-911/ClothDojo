@@ -149,6 +149,12 @@ def _build_shirt_flatten(
         robot_cloth_collision=robot_cloth_collision,
         robot_rigid_collision=robot_rigid_collision,
     )
+    if visuals:
+        from pxr import Usd
+
+        from clothdojo.rendering import _apply_authored_appearance
+
+        _apply_authored_appearance(template, Usd.Stage.Open(str(robot_path)))
     _add_table(newton, wp, template, spec)
     particle_range = (0, 0)
     if include_cloth:

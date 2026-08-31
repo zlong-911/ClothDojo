@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 
+from clothdojo.rendering import _apply_authored_appearance
 from clothdojo.robots import robot_profile
 from clothdojo.sim.scene import ShirtFlattenSpec, _add_robot
 
@@ -33,44 +34,7 @@ def _pose_matrix(position, rotation_xyzw):
     return matrix
 
 
-def _apply_authored_appearance(builder, stage) -> dict:
-    from newton import ShapeFlags
-    from newton._src.usd.utils import (
-        _color_to_display_space,
-        resolve_material_properties_for_prim,
-    )
-    from pxr import UsdGeom
-
-    display_colors, hidden_proxies = [], []
-    for index, path in enumerate(builder.shape_label):
-        prim = stage.GetPrimAtPath(path)
-        if not prim:
-            continue
-        if UsdGeom.Imageable(prim).ComputePurpose() == UsdGeom.Tokens.proxy:
-            if builder.shape_flags[index] & int(ShapeFlags.VISIBLE):
-                hidden_proxies.append(path)
-            builder.shape_flags[index] &= ~int(ShapeFlags.VISIBLE)
-        # Newton 1.5 resolves bound materials but omits uniform displayColor.
-        # Only bridge this omission in memory; never replace a bound material.
-        properties = resolve_material_properties_for_prim(prim)
-        if properties.get("color") is not None or properties.get("texture") is not None:
-            continue
-        attribute = prim.GetAttribute("primvars:displayColor")
-        values = attribute.Get() if attribute and attribute.HasAuthoredValue() else None
-        if values is not None and len(values) == 1:
-            # Match Newton's bound-material conversion, including USD color-space
-            # metadata. shape_color is display/sRGB, not USD's default linear RGB.
-            builder.shape_color[index] = _color_to_display_space(
-                tuple(map(float, values[0])), attribute
-            )
-            display_colors.append(path)
-    return {
-        "authored_display_color_fallbacks": display_colors,
-        "hidden_authored_proxy_shapes": hidden_proxies,
-    }
-
-
-def _add_context(newton, wp, builder, robot_id, assets_root, spec):
+def _add_context(newton, wp, builder, spec):
     """Keep the accepted review backdrop separate from robot/physics truth."""
     cfg = newton.ModelBuilder.ShapeConfig(
         has_shape_collision=False, has_particle_collision=False, density=0.0
@@ -88,32 +52,8 @@ def _add_context(newton, wp, builder, robot_id, assets_root, spec):
             label=label,
         )
 
-    if robot_id == "fr3_duo":
-        import trimesh
-
-        path = assets_root / "robots/fr3_duo/tabletop_context_mm.stl"
-        mesh = trimesh.load(str(path), force="mesh", process=False)
-        vertices = np.asarray(mesh.vertices, dtype=np.float32) * 0.001
-        bounds = np.array((vertices.min(axis=0), vertices.max(axis=0)))
-        expected = np.asarray(spec.table_position) + np.asarray(
-            (
-                -np.asarray(spec.table_half_extents),
-                spec.table_half_extents,
-            )
-        )
-        if not np.allclose(bounds, expected, atol=2.0e-6, rtol=0):
-            raise ValueError("FR3 review hole plate does not match the scene table dimensions")
-        builder.add_shape_mesh(
-            body=-1,
-            mesh=newton.Mesh(vertices, np.asarray(mesh.faces).reshape(-1)),
-            cfg=cfg,
-            color=(0.65, 0.68, 0.73),
-            label="review/table",
-        )
-        table_source = str(path)
-    else:
-        box("review/table", spec.table_position, spec.table_half_extents, (0.65, 0.68, 0.73))
-        table_source = "ShirtFlattenSpec"
+    box("review/table", spec.table_position, spec.table_half_extents, (0.65, 0.68, 0.73))
+    table_source = "ShirtFlattenSpec"
     box("review/ground", (0.65, 0, -0.02), (3, 3, 0.02), (0.12, 0.14, 0.17))
     for index, (x, y) in enumerate(((0.1, -0.62), (0.1, 0.62), (1.2, -0.62), (1.2, 0.62))):
         box(f"review/leg_{index}", (x, y, 0.375), (0.025, 0.025, 0.375), (0.25, 0.28, 0.32))
@@ -143,7 +83,7 @@ def prepare_workstation_review(
         robot_body_count, robot_shape_count = builder.body_count, builder.shape_count
         home_q = list(map(float, builder.joint_q))
         appearance = _apply_authored_appearance(builder, stage)
-        context = _add_context(newton, wp, builder, robot_id, assets_root, ShirtFlattenSpec())
+        context = _add_context(newton, wp, builder, ShirtFlattenSpec())
         if builder.body_count != robot_body_count or list(map(float, builder.joint_q)) != home_q:
             raise RuntimeError("review context changed robot state")
         model = builder.finalize(device=device)
