@@ -35,6 +35,7 @@ from clothdojo.rollout.guided_rtc import (
     sample_guided_openpi_rlinf_actions,
 )
 from clothdojo.rollout.newton import POLICY_ACTION_DIM
+from clothdojo.runtime_identity import runtime_source_sha256
 
 POLICY_PROTOCOL_VERSION = 2
 IMAGE_PREPROCESSING_POLICIES = ("none", "training_fixed_crop")
@@ -793,6 +794,7 @@ def serve_sft_policy(
     )
     identity = {
         "protocol_version": POLICY_PROTOCOL_VERSION,
+        "clothdojo_runtime_sha256": runtime_source_sha256(),
         "backend": "rlinf-sft",
         "checkpoint_sha256": checkpoint_manifest["weights_sha256"],
         "checkpoint_validation": {
@@ -888,6 +890,7 @@ def serve_jax_policy(
     )
     identity = {
         "protocol_version": POLICY_PROTOCOL_VERSION,
+        "clothdojo_runtime_sha256": runtime_source_sha256(),
         "backend": "openpi",
         "checkpoint_sha256": checkpoint_identity,
         **artifact_identity,
@@ -994,6 +997,7 @@ def serve_cfg_policy(
     )
     identity = {
         "protocol_version": POLICY_PROTOCOL_VERSION,
+        "clothdojo_runtime_sha256": runtime_source_sha256(),
         "backend": "rlinf-cfg",
         "checkpoint_sha256": weights_sha256,
         "checkpoint_validation": {
@@ -1091,6 +1095,9 @@ def _validate_server_metadata(
     if mismatches:
         raise ValueError(f"policy server identity mismatch: {mismatches}")
     _require_sha256(identity.get("checkpoint_sha256"), "server checkpoint")
+    runtime_sha256 = identity.get("clothdojo_runtime_sha256")
+    if runtime_sha256 is not None:
+        _require_sha256(runtime_sha256, "server ClothDojo runtime")
     _require_sha256(identity.get("norm_stats_sha256"), "server norm stats")
     if not isinstance(identity.get("openpi_config"), str) or not identity["openpi_config"]:
         raise ValueError("policy server is missing openpi_config")

@@ -1,0 +1,18 @@
+schema: clothdojo_benchmark_run
+condition_id: cfg_expert822_balanced200
+benchmark: configs/evaluation/balanced200_20260901.yaml
+deployment: configs/evaluation/deployments/local_gpu0.yaml
+policy:
+  kind: cfg
+  checkpoint: data/checkpoints/downloaded/cfg_expert822_from1838_b256_s43_12k_20260901
+  norm_stats: data/checkpoints/downloaded/cfg_expert822_from1838_b256_s43_12k_20260901/norm_stats
+  expected_checkpoint_sha256: ac10b45d6862bc869cee5ab712871ac3be0a321be314c0012df79accffad2183
+  num_steps: 10
+  guidance_scale: 2.5
+  guidance_type: positive
+  positive_only_conditional: true
+execution:
+  mode: chunk
+  exec_horizon: 10
+  cloth_visual: nocs
+  image_preprocessing: none

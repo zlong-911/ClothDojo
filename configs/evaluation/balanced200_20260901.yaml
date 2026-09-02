@@ -1,0 +1,7 @@
+schema: clothdojo_frozen_benchmark
+panel_id: balanced200_20260901
+scenario: configs/rollout/shirt_flatten.yaml
+protocol: configs/evaluation/shirt_flatten.yaml
+states: data/benchmarks/balanced200_20260901/states
+templates: data/benchmarks/balanced200_20260901/templates
+assets: assets

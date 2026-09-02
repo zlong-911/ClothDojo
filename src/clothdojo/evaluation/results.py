@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import uuid
@@ -14,13 +15,20 @@ import numpy as np
 
 EVALUATION_RESULT_SCHEMA = "clothdojo_evaluation_condition"
 SUCCESS_CHECKPOINT_SECONDS = (30, 45, 60, 75, 90)
-FORMAL_BENCHMARK_ASSET_COUNT = 24
-FORMAL_BENCHMARK_SEEN_ASSETS = 12
-FORMAL_BENCHMARK_UNSEEN_ASSETS = 12
+FORMAL_BENCHMARK_PANEL_ID = "balanced200_20260901"
+FORMAL_BENCHMARK_ASSET_COUNT = 200
+FORMAL_BENCHMARK_SEEN_ASSETS = 100
+FORMAL_BENCHMARK_UNSEEN_ASSETS = 100
 FORMAL_BENCHMARK_STATES_PER_ASSET = 4
-FORMAL_BENCHMARK_CASE_COUNT = 96
+FORMAL_BENCHMARK_CASE_COUNT = 800
 FORMAL_BENCHMARK_INITIAL_STATES_SHA256 = (
-    "04e887b1bf2334a4c61c3978b04084457ace409a6b242a51ffcd964868e56775"
+    "5f2ad355ccdded1301ce774c487cf5b590c3b810a00d24f46c9e63780cd23361"
+)
+FORMAL_BENCHMARK_SELECTION_SHA256 = (
+    "205813ee1f8c7aacc99f6eea61aeb3d48e03dcdd1da8200cc5363550b45822b1"
+)
+FORMAL_BENCHMARK_ASSET_SPLITS_SHA256 = (
+    "3b18d289327d2da58030d517197744b8f5cacc1c4299a597c81bb25c772012cf"
 )
 FORMAL_BENCHMARK_PROTOCOL_FINGERPRINT = (
     "ce1bd2b5c15a42a4130b07c14ca24e179d8acdc8a12c4463dd39f2afc945ea6e"
@@ -243,6 +251,7 @@ def summarize_paired_conditions(
         reference.meta["scenario"],
         reference.meta["initial_state_pools"],
         reference.meta["templates"],
+        reference.meta.get("benchmark"),
         reference.horizon_steps,
         reference.control_fps,
     )
@@ -255,6 +264,7 @@ def summarize_paired_conditions(
             condition.meta["scenario"],
             condition.meta["initial_state_pools"],
             condition.meta["templates"],
+            condition.meta.get("benchmark"),
             condition.horizon_steps,
             condition.control_fps,
         )
@@ -282,16 +292,35 @@ def summarize_paired_conditions(
     comparisons = []
     for condition, mapping in zip(conditions[1:], maps[1:], strict=True):
         wins = losses = ties = 0
+        terminal_wins = terminal_losses = terminal_ties = 0
         for key in ordered_keys:
             left = baseline[key].success
             right = mapping[key].success
             wins += int(right and not left)
             losses += int(left and not right)
             ties += int(left == right)
+            left_terminal = baseline[key].success_at_end
+            right_terminal = mapping[key].success_at_end
+            terminal_wins += int(right_terminal and not left_terminal)
+            terminal_losses += int(left_terminal and not right_terminal)
+            terminal_ties += int(left_terminal == right_terminal)
         comparisons.append(
             {
                 "baseline": reference.condition_id,
                 "condition": condition.condition_id,
+                "success_at_end_wins": terminal_wins,
+                "success_at_end_losses": terminal_losses,
+                "success_at_end_ties": terminal_ties,
+                "paired_success_at_end_rate_delta": (
+                    summaries[len(comparisons) + 1].get(
+                        "success_at_end_rate_balanced",
+                        summaries[len(comparisons) + 1]["success_at_end_rate_micro"],
+                    )
+                    - summaries[0].get(
+                        "success_at_end_rate_balanced",
+                        summaries[0]["success_at_end_rate_micro"],
+                    )
+                ),
                 "success_wins": wins,
                 "success_losses": losses,
                 "success_ties": ties,
@@ -301,7 +330,7 @@ def summarize_paired_conditions(
                 ),
             }
         )
-    return {
+    summary = {
         "schema": "clothdojo_evaluation_summary",
         "protocol": reference.meta["protocol"],
         "initial_states_sha256": reference.meta["initial_states_sha256"],
@@ -311,10 +340,67 @@ def summarize_paired_conditions(
         "conditions": summaries,
         "paired_comparisons": comparisons,
     }
+    benchmark = reference.meta.get("benchmark")
+    if isinstance(benchmark, dict):
+        summary["benchmark"] = {
+            key: benchmark.get(key)
+            for key in (
+                "panel_id",
+                "selection_sha256",
+                "asset_splits_sha256",
+                "seen_assets",
+                "unseen_assets",
+                "states_per_asset",
+            )
+        }
+    return summary
+
+
+def benchmark_asset_splits_sha256(asset_splits: dict[str, str]) -> str:
+    """Fingerprint the frozen asset-to-split assignment independent of JSON layout."""
+
+    payload = json.dumps(asset_splits, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _validate_formal_benchmark_identity(
+    benchmark: Any,
+    *,
+    require_asset_splits: bool,
+) -> dict[str, str] | None:
+    if not isinstance(benchmark, dict):
+        raise ValueError("condition does not identify the formal benchmark panel")
+    expected = {
+        "panel_id": FORMAL_BENCHMARK_PANEL_ID,
+        "selection_sha256": FORMAL_BENCHMARK_SELECTION_SHA256,
+        "asset_splits_sha256": FORMAL_BENCHMARK_ASSET_SPLITS_SHA256,
+        "seen_assets": FORMAL_BENCHMARK_SEEN_ASSETS,
+        "unseen_assets": FORMAL_BENCHMARK_UNSEEN_ASSETS,
+        "states_per_asset": FORMAL_BENCHMARK_STATES_PER_ASSET,
+    }
+    if {key: benchmark.get(key) for key in expected} != expected:
+        raise ValueError("condition does not use the frozen balanced-200 benchmark panel")
+    asset_splits = benchmark.get("asset_splits")
+    if asset_splits is None and not require_asset_splits:
+        return None
+    if not isinstance(asset_splits, dict) or any(
+        not isinstance(asset_id, str) or split not in {"seen", "unseen"}
+        for asset_id, split in asset_splits.items()
+    ):
+        raise ValueError("formal benchmark asset split mapping is invalid")
+    if (
+        len(asset_splits) != FORMAL_BENCHMARK_ASSET_COUNT
+        or sum(split == "seen" for split in asset_splits.values()) != FORMAL_BENCHMARK_SEEN_ASSETS
+        or sum(split == "unseen" for split in asset_splits.values())
+        != FORMAL_BENCHMARK_UNSEEN_ASSETS
+        or benchmark_asset_splits_sha256(asset_splits) != FORMAL_BENCHMARK_ASSET_SPLITS_SHA256
+    ):
+        raise ValueError("formal benchmark asset split mapping changed")
+    return asset_splits
 
 
 def validate_formal_evaluation_metadata(meta: dict[str, Any]) -> None:
-    """Reject conditions outside the frozen 24-asset benchmark panel."""
+    """Reject conditions outside the frozen balanced-200 benchmark panel."""
 
     expected = {
         "case_count": FORMAL_BENCHMARK_CASE_COUNT,
@@ -337,10 +423,13 @@ def validate_formal_evaluation_metadata(meta: dict[str, Any]) -> None:
         raise ValueError("condition does not use the formal benchmark scenario")
 
     trajectories = meta.get("trajectories")
+    asset_splits = _validate_formal_benchmark_identity(
+        meta.get("benchmark"), require_asset_splits=trajectories is not None
+    )
     if trajectories is None:
         return
     if not isinstance(trajectories, list) or len(trajectories) != FORMAL_BENCHMARK_CASE_COUNT:
-        raise ValueError("formal benchmark requires exactly 96 indexed trajectories")
+        raise ValueError("formal benchmark requires exactly 800 indexed trajectories")
     per_asset: dict[str, set[tuple[int, int]]] = {}
     for item in trajectories:
         if not isinstance(item, dict):
@@ -360,17 +449,19 @@ def validate_formal_evaluation_metadata(meta: dict[str, Any]) -> None:
         cases != expected_cases for cases in per_asset.values()
     ):
         raise ValueError(
-            "formal benchmark requires 24 assets with state indices 0..3 and replicate 0"
+            "formal benchmark requires 200 assets with state indices 0..3 and replicate 0"
         )
+    if asset_splits is None or set(per_asset) != set(asset_splits):
+        raise ValueError("formal benchmark trajectories differ from the frozen asset panel")
 
 
 def validate_formal_evaluation_summary(summary: dict[str, Any]) -> None:
     """Validate a published comparison before it is reported as benchmark evidence."""
 
     if summary.get("case_count") != FORMAL_BENCHMARK_CASE_COUNT:
-        raise ValueError("formal benchmark summary requires exactly 96 paired cases")
+        raise ValueError("formal benchmark summary requires exactly 800 paired cases")
     if summary.get("asset_count") != FORMAL_BENCHMARK_ASSET_COUNT:
-        raise ValueError("formal benchmark summary requires exactly 24 assets")
+        raise ValueError("formal benchmark summary requires exactly 200 assets")
     if summary.get("initial_states_sha256") != FORMAL_BENCHMARK_INITIAL_STATES_SHA256:
         raise ValueError("formal benchmark summary does not use the frozen state panel")
     protocol = summary.get("protocol")
@@ -378,6 +469,7 @@ def validate_formal_evaluation_summary(summary: dict[str, Any]) -> None:
         protocol.get("fingerprint") != FORMAL_BENCHMARK_PROTOCOL_FINGERPRINT
     ):
         raise ValueError("formal benchmark summary does not use the frozen protocol")
+    _validate_formal_benchmark_identity(summary.get("benchmark"), require_asset_splits=False)
     conditions = summary.get("conditions")
     if (
         not isinstance(conditions, list)
@@ -385,6 +477,7 @@ def validate_formal_evaluation_summary(summary: dict[str, Any]) -> None:
         or any(
             not isinstance(item, dict)
             or item.get("case_count") != FORMAL_BENCHMARK_CASE_COUNT
+            or not isinstance(item.get("success_at_end_rate_balanced"), float)
             for item in conditions
         )
     ):
@@ -415,6 +508,14 @@ def _condition_summary(condition, mapping, ordered_keys):
         )
         for asset in assets
     }
+    asset_terminal_rates = {
+        asset: float(
+            np.mean(
+                [mapping[key].success_at_end for key in ordered_keys if key.asset_id == asset]
+            )
+        )
+        for asset in assets
+    }
     successful_times = completion[successes]
     time_averages = [
         mapping[key].time_average_combined_distance for key in ordered_keys
@@ -434,7 +535,7 @@ def _condition_summary(condition, mapping, ordered_keys):
         for seconds in SUCCESS_CHECKPOINT_SECONDS
         if seconds <= horizon_seconds
     }
-    return {
+    summary = {
         "condition_id": condition.condition_id,
         "case_count": len(ordered_keys),
         "airborne_metric": condition.meta.get("airborne_metric"),
@@ -442,9 +543,12 @@ def _condition_summary(condition, mapping, ordered_keys):
             None if any(value is None for value in airborne_times)
             else float(np.mean(airborne_times))
         ),
+        "success_at_end_count": int(successes_at_end.sum()),
+        "success_at_end_rate_micro": float(successes_at_end.mean()),
+        "success_at_end_rate_asset_macro": float(np.mean(list(asset_terminal_rates.values()))),
+        "asset_success_at_end_rates": asset_terminal_rates,
         "success_count": int(successes.sum()),
         "success_rate_micro": float(successes.mean()),
-        "success_at_end_rate_micro": float(successes_at_end.mean()),
         "success_rate_asset_macro": float(np.mean(list(asset_rates.values()))),
         "success_rate_by_seconds": success_rates_by_seconds,
         "asset_success_rates": asset_rates,
@@ -452,8 +556,21 @@ def _condition_summary(condition, mapping, ordered_keys):
         "median_success_time_seconds": (
             None if not len(successful_times) else float(np.median(successful_times))
         ),
+        "terminal_deformable_distance_mean": float(
+            np.mean([mapping[key].terminal_deformable_distance for key in ordered_keys])
+        ),
+        "terminal_rigid_distance_mean": float(
+            np.mean([mapping[key].terminal_rigid_distance for key in ordered_keys])
+        ),
         "terminal_combined_distance_mean": float(
             np.mean([mapping[key].terminal_combined_distance for key in ordered_keys])
+        ),
+        # All best-observed components refer to the same minimum-combined frame.
+        "best_observed_deformable_distance_mean": float(
+            np.mean([mapping[key].best_observed_deformable_distance for key in ordered_keys])
+        ),
+        "best_observed_rigid_distance_mean": float(
+            np.mean([mapping[key].best_observed_rigid_distance for key in ordered_keys])
         ),
         "best_observed_combined_distance_mean": float(
             np.mean([mapping[key].best_observed_combined_distance for key in ordered_keys])
@@ -476,6 +593,25 @@ def _condition_summary(condition, mapping, ordered_keys):
             np.mean([mapping[key].terminal_speed_rms_m_s for key in ordered_keys])
         ),
     }
+    benchmark = condition.meta.get("benchmark")
+    asset_splits = benchmark.get("asset_splits") if isinstance(benchmark, dict) else None
+    if isinstance(asset_splits, dict):
+        split_rates = {}
+        for split in ("seen", "unseen"):
+            split_assets = [asset for asset in assets if asset_splits.get(asset) == split]
+            split_keys = [key for key in ordered_keys if key.asset_id in split_assets]
+            split_rates[split] = float(
+                np.mean([asset_terminal_rates[asset] for asset in split_assets])
+            )
+            summary[f"success_at_end_{split}_count"] = int(
+                sum(mapping[key].success_at_end for key in split_keys)
+            )
+            summary[f"success_at_end_{split}_case_count"] = len(split_keys)
+            summary[f"success_at_end_rate_{split}_asset_macro"] = split_rates[split]
+        summary["success_at_end_rate_balanced"] = float(
+            0.5 * split_rates["seen"] + 0.5 * split_rates["unseen"]
+        )
+    return summary
 
 
 def _case_from_json(value: Any) -> EvaluationCaseResult:

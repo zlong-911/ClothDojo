@@ -81,9 +81,16 @@
 | `src/clothdojo/data/mirror.py` | Piper canonical collection 的双臂中轴镜像增强与完整独立发布 |
 | `src/clothdojo/data/isaac_render.py` | 同一导出入口的 Isaac RTX 与逐 episode 外观随机化后端 |
 | `src/clothdojo/training/cfg_pipeline.py` | STEAM advantage、数据 gate 与 CFG launch |
-| `src/clothdojo/evaluation/collection.py` | 评测 condition 规划、离线 scoring 与发布 |
+| `src/clothdojo/evaluation/collection.py` | 冻结 balanced-200 / 800-case 正式评测 condition 规划、离线 scoring 与发布 |
+| `src/clothdojo/evaluation/managed.py` | 单一正式入口的策略服务、多机仿真、恢复、评分与进程清理 Coordinator |
+| `src/clothdojo/evaluation/run_config.py` | 正式 run、冻结 benchmark 和 deployment 的严格配置边界 |
+| `src/clothdojo/evaluation/worker.py` | 只写互斥 trajectory shard 的内部节点 Worker |
+| `src/clothdojo/runtime_identity.py` | 多机推理与仿真节点共用的项目 Python 源码指纹 |
 | `src/clothdojo/evaluation/scoring.py` | canonical trajectory 的离线指标计算 |
 | `src/clothdojo/evaluation/results.py` | condition 读取与配对汇总 |
+| `configs/evaluation/balanced200_20260901.yaml` | 正式800-case面板的稳定输入入口 |
+| `configs/evaluation/runs/` | 模型、执行条件与输出身份的正式 run config |
+| `configs/evaluation/deployments/` | 可替换的本机或SSH计算资源配置 |
 
 新增代码前先检查现有目录是否已经拥有对应职责。具体命令和参数使用：
 

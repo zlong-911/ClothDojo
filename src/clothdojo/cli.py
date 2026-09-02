@@ -436,28 +436,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.command == "benchmark" and args.benchmark_command == "run":
         if passthrough:
             parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
-        from clothdojo.evaluation.collection import run_evaluation_condition
+        from clothdojo.evaluation.managed import run_managed_evaluation
 
-        result = run_evaluation_condition(
-            args.scenario,
-            args.protocol,
-            args.states,
-            args.templates,
-            _comma_separated(args.policy, "policy"),
-            args.output,
-            condition_id=args.condition_id,
-            cloth_visual=args.cloth_visual,
-            image_preprocessing=args.image_preprocessing,
-            expected_checkpoint_sha256=args.expected_checkpoint_sha256,
-            assets_root=args.assets,
-            gpus=_comma_separated(args.gpus, "gpus"),
-            execution=args.execution,
-            exec_horizon=args.exec_horizon,
-            rtc_delay_steps=args.rtc_delay_steps,
-            batch_size=args.batch_size,
-            defer_scoring=args.defer_scoring,
-            score_workers=args.score_workers,
-        )
+        result = run_managed_evaluation(args.config)
         print(json.dumps(result, indent=2, sort_keys=True))
         return
     if args.command == "benchmark" and args.benchmark_command == "make-templates":
@@ -785,7 +766,7 @@ def _parser() -> argparse.ArgumentParser:
     serve_cfg.add_argument("--port", type=int, default=8080)
 
     benchmark = commands.add_parser(
-        "benchmark", help="validate protocols and summarize paired evaluations"
+        "benchmark", help="run, score and summarize the frozen balanced-200 benchmark"
     )
     benchmark_commands = benchmark.add_subparsers(dest="benchmark_command")
     benchmark_check = benchmark_commands.add_parser(
@@ -802,42 +783,13 @@ def _parser() -> argparse.ArgumentParser:
     benchmark_template.add_argument("--assets", default="assets")
     benchmark_template.add_argument("--gpus", default="0")
     benchmark_run = benchmark_commands.add_parser(
-        "run", help="evaluate one checkpoint/execution condition"
-    )
-    benchmark_run.add_argument("--condition-id", required=True)
-    benchmark_run.add_argument("--scenario", required=True)
-    benchmark_run.add_argument("--protocol", required=True)
-    benchmark_run.add_argument("--states", required=True)
-    benchmark_run.add_argument("--templates", required=True)
-    benchmark_run.add_argument(
-        "--policy",
-        default="ws://127.0.0.1:8080",
-        help="one endpoint or a comma-separated endpoint pool",
-    )
-    benchmark_run.add_argument("--expected-checkpoint-sha256")
-    benchmark_run.add_argument("--cloth-visual", choices=("nocs", "white"), default="nocs")
-    benchmark_run.add_argument(
-        "--image-preprocessing", choices=("none", "training_fixed_crop"), default="none",
-        help="required policy-server image preprocessing (recorded in condition identity)",
-    )
-    benchmark_run.add_argument("--output", required=True)
-    benchmark_run.add_argument("--assets", default="assets")
-    benchmark_run.add_argument("--gpus", default="0")
-    benchmark_run.add_argument("--batch-size", type=int, default=4)
-    benchmark_run.add_argument(
-        "--defer-scoring",
-        action="store_true",
-        help="publish trajectories and leave offline scoring for benchmark score",
+        "run", help="evaluate one condition over the frozen 800-case panel"
     )
     benchmark_run.add_argument(
-        "--score-workers",
-        type=int,
-        default=1,
-        help="offline scoring processes when scoring is not deferred (default: 1)",
+        "--config",
+        required=True,
+        help="managed policy, execution and deployment YAML for one formal condition",
     )
-    benchmark_run.add_argument("--execution", choices=("chunk", "rtc"), default="chunk")
-    benchmark_run.add_argument("--exec-horizon", type=int, default=10)
-    benchmark_run.add_argument("--rtc-delay-steps", type=int, default=0)
     benchmark_summary = benchmark_commands.add_parser(
         "summarize", help="compare completed conditions over identical cases"
     )

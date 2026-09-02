@@ -362,61 +362,23 @@ def test_rollout_run_calls_collection_workflow(monkeypatch, capsys) -> None:
     assert json.loads(capsys.readouterr().out) == {"compatible": True}
 
 
-@pytest.mark.parametrize("cloth_visual", [None, "white"])
-def test_benchmark_run_has_one_fixed_panel_contract(monkeypatch, capsys, cloth_visual) -> None:
+def test_benchmark_run_has_one_managed_config_contract(monkeypatch, capsys) -> None:
     call = {}
     monkeypatch.setattr(
-        "clothdojo.evaluation.collection.run_evaluation_condition",
-        lambda *args, **kwargs: call.update(args=args, kwargs=kwargs)
-        or {"compatible": True},
+        "clothdojo.evaluation.managed.run_managed_evaluation",
+        lambda *args, **kwargs: call.update(args=args, kwargs=kwargs) or {"compatible": True},
     )
 
     cli.main(
         [
             "benchmark",
             "run",
-            "--condition-id",
-            "formal",
-            "--scenario",
-            "scenario.yaml",
-            "--protocol",
-            "protocol.yaml",
-            "--states",
-            "states",
-            "--templates",
-            "templates",
-            "--policy",
-            "ws://policy:8080",
-            "--output",
-            "evaluation",
-            *(["--cloth-visual", cloth_visual] if cloth_visual else []),
+            "--config",
+            "formal.yaml",
         ]
     )
 
-    assert call == {
-        "args": (
-            "scenario.yaml",
-            "protocol.yaml",
-            "states",
-            "templates",
-            ("ws://policy:8080",),
-            "evaluation",
-        ),
-        "kwargs": {
-            "condition_id": "formal",
-            "cloth_visual": cloth_visual or "nocs",
-            "expected_checkpoint_sha256": None,
-            "image_preprocessing": "none",
-            "assets_root": "assets",
-            "gpus": ("0",),
-            "execution": "chunk",
-            "exec_horizon": 10,
-            "rtc_delay_steps": 0,
-            "batch_size": 4,
-            "defer_scoring": False,
-            "score_workers": 1,
-        },
-    }
+    assert call == {"args": ("formal.yaml",), "kwargs": {}}
     assert json.loads(capsys.readouterr().out) == {"compatible": True}
 
 
@@ -448,18 +410,8 @@ def test_benchmark_run_rejects_asset_count_overrides() -> None:
             [
                 "benchmark",
                 "run",
-                "--condition-id",
-                "invalid",
-                "--scenario",
-                "scenario.yaml",
-                "--protocol",
-                "protocol.yaml",
-                "--states",
-                "states",
-                "--templates",
-                "templates",
-                "--output",
-                "evaluation",
+                "--config",
+                "formal.yaml",
                 "--seen-assets",
                 "4",
                 "--unseen-assets",

@@ -20,14 +20,27 @@ ClothDojo 将公开基于 Style3D 的动态布料交互环境。它在单张 RTX
 
 ## 任务怎么评测
 
-- 正式面板固定为 12 个 seen 与 12 个 unseen 资产，每资产 4 个固定初态，
-  共 96 个配对 case。所有模型和部署参数必须使用同一批初态与 policy seed。
+- 正式面板固定为 `balanced200_20260901`：200件衣服，100件seen与100件unseen；
+  每件4个冻结初态，共800个固定case，推理重复另计。`benchmark run`、`score` 和
+  `summarize` 均校验同一面板、初态、模板、协议与划分身份。现有24资产、每资产
+  4初态的96-case面板只用于快速开发、诊断和历史比较，不再形成正式评测结论。
+  不同模型使用同一批配对初态与预定policy seeds；不能以反复运行旧面板代替资产扩充。
+- 正式执行只有 `benchmark run --config <run.yaml>` 一个入口。run config 绑定模型、
+  执行方式和 deployment；Coordinator 统一启动独占策略服务、分配互斥多机 trajectory
+  shard、补齐缺失case、离线评分和清理进程。节点Worker不写condition元数据，部署变化
+  不改变冻结case、policy seed或评分身份。
+- seen/unseen 按各checkpoint的实际训练数据溯源，不沿用历史面板的12/12标签；
+  当前1838 episode模型在旧面板实际覆盖13个资产，另11个未见。比较泛化时使用
+  对待比较模型均未见且未用于调参的确认集合，镜像或其他派生副本不算独立新衣服。
+  seen组也使用未参与训练的全新初态；两组各100件的分组依据随面板冻结，不按模型
+  重新抽衣服。训练覆盖不同的模型另外报告实际覆盖，不能将已训练资产仍解释为未见。
+  unseen资产及其派生轨迹不得进入被报告为未见的模型的SFT、CFG或其他训练阶段。
 - 推理文本按模型的实际训练文本对齐：优先看 launch manifest 的 `training_prompt`，
   历史模型参考 `tasks.jsonl`。当前面板接受 `flatten the shirt`
   和 `Flatten the shirt.` 两种已使用的文本，原样记录各自 scenario fingerprint。
   文本不同的结果不能冒充严格同 scenario 的单变量对照。
-- 少于 96 case 或改变资产组成的运行只用于 smoke，不形成模型、RTC 参数或
-  seen/unseen 结论。
+- 每次正式比较在运行前冻结面板与样本量，按预定预算完成；缺少case、事后改变
+  资产组成或仅运行smoke时，不冒充完整面板结论。新旧面板的分数不直接作严格配对比较。
 - 初态由衣服随机 `SO(3)` 旋转、随机固定一点、自然垂落和释放产生。
 - 只剔除未落桌、未稳定或异常接触等无效状态，不筛背面朝上、局部翻面和严重自遮挡。
 - canonical target 使用默认自由沉降状态；rigid 取绕工作台 z 轴
@@ -97,10 +110,37 @@ NOCS 数据量实验用于区分样本效率和最终能力。比较 NOCS 与纯
 
 ## 结果怎么报告
 
-主结果使用 success，以及 terminal、best 和 time-average deformable/rigid/combined distance。初始 distance 用于画难度曲线。
+主指标使用 **90 秒结束时的成功率**（`success_at_end`），按现有 deformable 和 rigid
+双阈值判断，不要求每一步模拟逐位一致。AUC、最佳状态、终态距离和曾成功率用于辅助诊断，
+不以 AUC 作为主要模型选择依据。初始 distance 用于画难度曲线。
 
-默认评测结果表和对用户的实验汇报固定包含六项：Peak、终态、AUC combined distance，
-曾成功率、终态成功率，以及抬起时间（秒）。抬起时间不是可省略的附加列；
+新200衣服面板分别报告seen和unseen的资产等权终态成功率及区间；综合成功率为
+`0.5 × seen成功率 + 0.5 × unseen成功率`，代表预定的均衡测试分布，
+不以重复次数或训练数据中的衣服频率改变两组权重。组内区间与综合区间分别计算，
+不能将综合分的精度视为每个100衣服分组的精度。
+
+`benchmark summarize` 的 `success_at_end_count`、`success_at_end_rate_micro` 和
+`success_at_end_rate_asset_macro` 分别表示终态成功数、逐 case 成功率和资产等权成功率；
+当前每件衣服均有4个初态，后两者相同。配对字段 `paired_success_at_end_rate_delta`
+及 `success_at_end_wins/losses/ties` 使用终态判定。旧 `success_*` 字段继续表示过程中曾成功，
+含义不变，不能与终态成功混用。
+
+最优状态和90秒终态均报告 deformable、rigid、combined distance；当前
+`combined = 0.65 × deformable + 0.35 × rigid`，按模板尺度归一化，越低越好，
+不是百分制得分。`best_observed_*_distance_mean` 先对每条轨迹取评分采样点中
+combined 最小的同一个时刻（包含初态，不限定成功帧），再对所有 case 求均值；不把 deformable 与 rigid
+各自的独立最小值拼成同一状态，也不在重复轮次中挑最好一轮。
+`terminal_*_distance_mean` 为90秒末帧的对应均值。连续距离补充成功率的诊断信息，
+不意味着其跨轮波动天然更小。
+
+检查分数可靠性时，固定模型、初态、policy seed、批次与部署，重复完整面板并保留全部轮次，
+报告平均分和实际轮次波动，不择优挑选单轮。重复运行误差与资产抽样不确定性分别报告；
+同一衣服的多个初态和重复运行不能当作同等数量的独立衣服。重复次数与可区分的分数差距
+需要由实测波动决定，不能预设96 case足以稳定区分小幅提升。
+
+默认评测结果表和对用户的实验汇报包含最优与终态的 deformable、rigid、combined
+六项距离，并保留 AUC combined distance、曾成功率、终态成功率及抬起时间（秒）。
+抬起时间不是可省略的附加列；
 复用旧冻结运行时或历史评分时，也要从完整轨迹离线补算后一起报告。
 确实缺少可用轨迹时应明确标为未计算，不省略该列、不把缺失当作0。
 

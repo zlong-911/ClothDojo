@@ -50,7 +50,7 @@ ClothDojo 是基于 Newton 1.5 的布料操作研究项目，统一管理仿真�
   --gpus 0,1 --output data/initial_states
 ```
 
-策略服务启动后，同一入口可运行 chunk 或 RTC：
+普通 rollout 在策略服务启动后运行；它保留 endpoint、GPU 和采样范围等开发参数：
 
 ```bash
 .venv/bin/clothdojo rollout run \
@@ -59,25 +59,23 @@ ClothDojo 是基于 Newton 1.5 的布料操作研究项目，统一管理仿真�
   --execution rtc --exec-horizon 10 --rtc-delay-steps 0 \
   --gpus 0 --batch-size 4 --output data/rollouts/example
 
-.venv/bin/clothdojo benchmark run --condition-id example_chunk \
-  --scenario configs/rollout/shirt_flatten.yaml \
-  --protocol configs/evaluation/shirt_flatten.yaml \
-  --states data/state_panels/rapid_iteration \
-  --templates data/benchmarks/shirt_flatten_v1 \
-  --policy ws://127.0.0.1:8080 --gpus 0 --batch-size 4 \
-  --output data/evaluations/example_chunk
+.venv/bin/clothdojo benchmark run \
+  --config configs/evaluation/runs/cfg_expert822_balanced200.yaml
 ```
 
-`benchmark run` 固定使用 12 个 seen、12 个 unseen 资产及每资产前 4 个初态，
-共 96 个配对 case；不提供资产数、初态数或 replicate 覆盖参数。小规模链路检查
-使用 `rollout run`，不能进入正式评测汇总。
+`benchmark run` 固定使用 `balanced200_20260901` 的 100 个 seen、100 个 unseen
+资产及每资产 4 个初态，共 800 个配对 case；资产、初态、模板、协议和划分均由
+冻结 hash 约束。正式入口只接受一份严格 run config，由它引用模型和 deployment；
+Coordinator 自动启动独占策略服务、本机或远端仿真 worker、补齐缺失轨迹、离线评分并
+清理所属进程。固定面板路径和 endpoint 不再由用户传入。旧 96-case 面板和小规模
+链路检查使用 `rollout run` 或读取已有历史结果，不能进入正式评测汇总。
 
 轨迹保存完整的 50 Hz 状态与动作；评测指标随后从轨迹离线计算，不依赖策略服务或 GPU。默认结果表包含 Peak、终态、AUC distance、曾成功率、终态成功率和抬起时间（`airborne_seconds_mean`，每条轨迹平均累计秒数）。抬起时间不参与成功判据，定义见 [`docs/benchmark.md`](docs/benchmark.md)。重新打分与配对汇总分别使用：
 
 ```bash
 .venv/bin/clothdojo benchmark score --condition <condition> \
   --protocol configs/evaluation/shirt_flatten.yaml \
-  --templates data/benchmarks/shirt_flatten_v1
+  --templates data/benchmarks/balanced200_20260901/templates
 .venv/bin/clothdojo benchmark summarize --condition <condition-a> --condition <condition-b>
 ```
 

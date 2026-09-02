@@ -1,0 +1,12 @@
+schema: clothdojo_evaluation_deployment
+policy:
+  nodes:
+    - host: local
+      gpus: [0]
+      port_start: 8080
+simulation:
+  nodes:
+    - host: local
+      gpus: [0]
+score_workers: 4
+startup_timeout_seconds: 1200

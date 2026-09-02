@@ -23,8 +23,15 @@ from clothdojo.evaluation.protocol import (
 )
 from clothdojo.evaluation.results import (
     EVALUATION_RESULT_SCHEMA,
+    FORMAL_BENCHMARK_ASSET_SPLITS_SHA256,
+    FORMAL_BENCHMARK_CASE_COUNT,
     FORMAL_BENCHMARK_INITIAL_STATES_SHA256,
+    FORMAL_BENCHMARK_PANEL_ID,
     FORMAL_BENCHMARK_PROTOCOL_FINGERPRINT,
+    FORMAL_BENCHMARK_SEEN_ASSETS,
+    FORMAL_BENCHMARK_SELECTION_SHA256,
+    FORMAL_BENCHMARK_STATES_PER_ASSET,
+    FORMAL_BENCHMARK_UNSEEN_ASSETS,
     EvaluationCaseKey,
     EvaluationCaseResult,
     load_evaluation_condition,
@@ -609,7 +616,10 @@ def test_formal_panel_checks_pool_payload_against_frozen_metadata(tmp_path, monk
             }
         )
     meta = {
-        "selection_provenance": {"panel_id": "rapid_iteration"},
+        "selection_provenance": {
+            "panel_id": "test_panel",
+            "selection_sha256": "test_selection",
+        },
         "seen_assets": 12,
         "unseen_assets": 12,
         "assets": assets,
@@ -618,6 +628,17 @@ def test_formal_panel_checks_pool_payload_against_frozen_metadata(tmp_path, monk
     (templates / "meta.json").write_text("{}")
     frozen_meta_hash = file_sha256(states / "meta.json")
     monkeypatch.setattr(collection, "FORMAL_BENCHMARK_INITIAL_STATES_SHA256", frozen_meta_hash)
+    monkeypatch.setattr(collection, "FORMAL_BENCHMARK_PANEL_ID", "test_panel")
+    monkeypatch.setattr(collection, "FORMAL_BENCHMARK_SELECTION_SHA256", "test_selection")
+    monkeypatch.setattr(collection, "FORMAL_BENCHMARK_SEEN_ASSETS", 12)
+    monkeypatch.setattr(collection, "FORMAL_BENCHMARK_UNSEEN_ASSETS", 12)
+    monkeypatch.setattr(
+        collection,
+        "FORMAL_BENCHMARK_ASSET_SPLITS_SHA256",
+        collection.benchmark_asset_splits_sha256(
+            {asset["asset_id"]: asset["split"] for asset in assets}
+        ),
+    )
     monkeypatch.setattr(
         collection, "_FORMAL_TEMPLATES_META_SHA256", file_sha256(templates / "meta.json")
     )
@@ -822,19 +843,67 @@ def test_paired_summary_uses_macro_assets_and_failure_censoring(tmp_path: Path) 
         )
 
 
-def test_formal_summary_requires_the_frozen_96_case_panel() -> None:
+def test_terminal_summary_distinguishes_lost_success_and_weights_assets(tmp_path: Path) -> None:
+    # Every case reaches success at some point. Only persistence to the end
+    # differs, and the assets have unequal case counts.
+    reached = [_case("a", 0, success=True), _case("a", 1, success=True),
+               _case("b", 0, success=True)]
+    for name, terminal in (("base", (True, False, True)), ("other", (False, True, False))):
+        _publish(tmp_path / name, name, [
+            replace(case, success_at_end=at_end)
+            for case, at_end in zip(reached, terminal, strict=True)
+        ])
+        meta_path = tmp_path / name / "meta.json"
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        meta["benchmark"] = {"asset_splits": {"a": "seen", "b": "unseen"}}
+        meta_path.write_text(json.dumps(meta), encoding="utf-8")
+
+    summary = summarize_paired_conditions([tmp_path / "base", tmp_path / "other"])
+    other = summary["conditions"][1]
+    assert other["success_count"] == 3
+    assert other["success_at_end_count"] == 1
+    assert other["success_at_end_rate_micro"] == pytest.approx(1 / 3)
+    assert other["success_at_end_rate_asset_macro"] == pytest.approx(0.25)
+    assert other["success_at_end_rate_seen_asset_macro"] == pytest.approx(0.5)
+    assert other["success_at_end_rate_unseen_asset_macro"] == 0.0
+    assert other["success_at_end_rate_balanced"] == pytest.approx(0.25)
+    assert other["asset_success_at_end_rates"] == {"a": 0.5, "b": 0.0}
+    paired = summary["paired_comparisons"][0]
+    assert paired["paired_success_rate_delta"] == 0
+    assert paired["success_ties"] == 3
+    assert paired["success_at_end_wins"] == 1
+    assert paired["success_at_end_losses"] == 2
+    assert paired["success_at_end_ties"] == 0
+    assert paired["paired_success_at_end_rate_delta"] == pytest.approx(-0.5)
+
+
+def test_formal_summary_requires_the_frozen_800_case_panel() -> None:
     summary = {
-        "case_count": 96,
-        "asset_count": 24,
+        "case_count": FORMAL_BENCHMARK_CASE_COUNT,
+        "asset_count": FORMAL_BENCHMARK_SEEN_ASSETS + FORMAL_BENCHMARK_UNSEEN_ASSETS,
         "initial_states_sha256": FORMAL_BENCHMARK_INITIAL_STATES_SHA256,
         "protocol": {"fingerprint": FORMAL_BENCHMARK_PROTOCOL_FINGERPRINT},
-        "conditions": [{"condition_id": "formal", "case_count": 96}],
+        "benchmark": {
+            "panel_id": FORMAL_BENCHMARK_PANEL_ID,
+            "selection_sha256": FORMAL_BENCHMARK_SELECTION_SHA256,
+            "asset_splits_sha256": FORMAL_BENCHMARK_ASSET_SPLITS_SHA256,
+            "seen_assets": FORMAL_BENCHMARK_SEEN_ASSETS,
+            "unseen_assets": FORMAL_BENCHMARK_UNSEEN_ASSETS,
+            "states_per_asset": FORMAL_BENCHMARK_STATES_PER_ASSET,
+        },
+        "conditions": [
+            {
+                "condition_id": "formal",
+                "case_count": FORMAL_BENCHMARK_CASE_COUNT,
+                "success_at_end_rate_balanced": 0.5,
+            }
+        ],
     }
 
     validate_formal_evaluation_summary(summary)
 
     summary["case_count"] = 32
-    with pytest.raises(ValueError, match="96 paired cases"):
+    with pytest.raises(ValueError, match="800 paired cases"):
         validate_formal_evaluation_summary(summary)
 
 

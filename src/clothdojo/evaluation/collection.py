@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -12,13 +13,17 @@ from clothdojo.assets import GarmentLibrary
 from clothdojo.evaluation.metric import AIRBORNE_METRIC, file_sha256, load_canonical_template
 from clothdojo.evaluation.protocol import EvaluationProtocol, load_evaluation_protocol
 from clothdojo.evaluation.results import (
+    FORMAL_BENCHMARK_ASSET_SPLITS_SHA256,
     FORMAL_BENCHMARK_CASE_COUNT,
     FORMAL_BENCHMARK_INITIAL_STATES_SHA256,
+    FORMAL_BENCHMARK_PANEL_ID,
     FORMAL_BENCHMARK_PROTOCOL_FINGERPRINT,
     FORMAL_BENCHMARK_SCENARIO_FINGERPRINTS,
     FORMAL_BENCHMARK_SEEN_ASSETS,
+    FORMAL_BENCHMARK_SELECTION_SHA256,
     FORMAL_BENCHMARK_STATES_PER_ASSET,
     FORMAL_BENCHMARK_UNSEEN_ASSETS,
+    benchmark_asset_splits_sha256,
     load_evaluation_condition,
     validate_formal_evaluation_metadata,
     write_evaluation_cases,
@@ -53,9 +58,7 @@ from clothdojo.trajectory import TrajectoryReader
 
 EVALUATION_CONDITION_SCHEMA = "clothdojo_evaluation_condition"
 _SCORING_TEMPLATE_CACHE: dict[tuple[str, str], Any] = {}
-_FORMAL_TEMPLATES_META_SHA256 = (
-    "cc317115126c391c4e928dca7f1bc749754c34930ee1d20d16e8c6f3d82764fe"
-)
+_FORMAL_TEMPLATES_META_SHA256 = "7a1411365c0a50013558613b438367e0604b31945f0d3e791743ec075e649c39"
 
 
 def _validate_formal_inputs(
@@ -64,22 +67,25 @@ def _validate_formal_inputs(
     templates_root: Path,
 ) -> dict[str, str]:
     if file_sha256(states_root / "meta.json") != FORMAL_BENCHMARK_INITIAL_STATES_SHA256:
-        raise ValueError("benchmark run requires data/state_panels/rapid_iteration")
+        raise ValueError("benchmark run requires the frozen balanced-200 state panel")
     if file_sha256(templates_root / "meta.json") != _FORMAL_TEMPLATES_META_SHA256:
-        raise ValueError("benchmark run requires data/benchmarks/shirt_flatten_v1")
+        raise ValueError("benchmark run requires the frozen balanced-200 templates")
     provenance = states_meta.get("selection_provenance")
-    if not isinstance(provenance, dict) or provenance.get("panel_id") != "rapid_iteration":
-        raise ValueError("benchmark state collection is not the frozen rapid_iteration panel")
+    if not isinstance(provenance, dict) or provenance != {
+        "panel_id": FORMAL_BENCHMARK_PANEL_ID,
+        "selection_sha256": FORMAL_BENCHMARK_SELECTION_SHA256,
+    }:
+        raise ValueError("benchmark state collection is not the frozen balanced-200 panel")
     if (
         states_meta.get("seen_assets") != FORMAL_BENCHMARK_SEEN_ASSETS
         or states_meta.get("unseen_assets") != FORMAL_BENCHMARK_UNSEEN_ASSETS
     ):
-        raise ValueError("benchmark panel must contain 12 seen and 12 unseen assets")
+        raise ValueError("benchmark panel must contain 100 seen and 100 unseen assets")
     assets = states_meta.get("assets")
     if not isinstance(assets, list) or len(assets) != (
         FORMAL_BENCHMARK_SEEN_ASSETS + FORMAL_BENCHMARK_UNSEEN_ASSETS
     ):
-        raise ValueError("benchmark panel must contain exactly 24 assets")
+        raise ValueError("benchmark panel must contain exactly 200 assets")
     split_counts = {
         split: sum(item.get("split") == split for item in assets if isinstance(item, dict))
         for split in ("seen", "unseen")
@@ -90,11 +96,13 @@ def _validate_formal_inputs(
     }:
         raise ValueError("benchmark panel split metadata is invalid")
     if any(
-        not isinstance(item, dict)
-        or item.get("state_count", 0) < FORMAL_BENCHMARK_STATES_PER_ASSET
+        not isinstance(item, dict) or item.get("state_count") != FORMAL_BENCHMARK_STATES_PER_ASSET
         for item in assets
     ):
-        raise ValueError("every benchmark asset requires at least four initial states")
+        raise ValueError("every benchmark asset requires exactly four initial states")
+    asset_splits = {item["asset_id"]: item["split"] for item in assets}
+    if benchmark_asset_splits_sha256(asset_splits) != FORMAL_BENCHMARK_ASSET_SPLITS_SHA256:
+        raise ValueError("benchmark asset split mapping changed")
     pool_hashes = {}
     for item in assets:
         asset_id = item["asset_id"]
@@ -214,7 +222,16 @@ def _score_evaluation_condition_locked(
             raise ValueError("evaluation trajectory path is not flat")
         reader = TrajectoryReader(root / relative)
         metadata = reader.manifest.metadata
-        for field in ("condition_id", "policy", "execution", "cloth_visual", "observation"):
+        identity_fields = [
+            "condition_id",
+            "policy",
+            "execution",
+            "cloth_visual",
+            "observation",
+        ]
+        if "runtime" in meta:
+            identity_fields.append("runtime")
+        for field in identity_fields:
             if field not in meta or metadata.get(field) != meta[field]:
                 raise ValueError(f"evaluation trajectory {field} differs from condition")
         initial_state = metadata.get("initial_state", {})
@@ -300,6 +317,12 @@ def run_evaluation_condition(
     batch_size: int = 4,
     defer_scoring: bool = False,
     score_workers: int = 1,
+    trajectory_collector: Callable[
+        [list[TrajectoryAssetJob], TrajectoryCollectionSpec, tuple[str, ...]], None
+    ]
+    | None = None,
+    expected_policy_runtime_sha256: str | None = None,
+    runtime_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Collect canonical trajectories, then score one immutable condition offline."""
 
@@ -315,6 +338,16 @@ def run_evaluation_condition(
         raise ValueError("at least one simulation GPU is required")
     if execution not in {"chunk", "rtc"}:
         raise ValueError("execution must be 'chunk' or 'rtc'")
+    for name, digest in (
+        ("expected_policy_runtime_sha256", expected_policy_runtime_sha256),
+        ("runtime_sha256", runtime_sha256),
+    ):
+        if digest is not None and (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+        ):
+            raise ValueError(f"{name} must be a lowercase SHA-256 digest")
     for name, value in (
         ("batch_size", batch_size),
         ("score_workers", score_workers),
@@ -393,6 +426,15 @@ def run_evaluation_condition(
                     "condition_id": condition_id,
                     "protocol_fingerprint": protocol.fingerprint,
                     "template_sha256": template_sha256,
+                    **(
+                        {
+                            "runtime": {
+                                "clothdojo_source_sha256": runtime_sha256,
+                            }
+                        }
+                        if runtime_sha256 is not None
+                        else {}
+                    ),
                 },
             )
         )
@@ -413,6 +455,12 @@ def run_evaluation_condition(
         execution=execution,
         worlds_per_batch=batch_size,
     )
+    if (
+        expected_policy_runtime_sha256 is not None
+        and policy_identity.get("clothdojo_runtime_sha256")
+        != expected_policy_runtime_sha256
+    ):
+        raise ValueError("policy service ClothDojo runtime differs from the coordinator")
     requested = {
         "condition_id": condition_id,
         "protocol": _protocol_summary(protocol),
@@ -425,16 +473,26 @@ def run_evaluation_condition(
             job.asset_id: job.metadata["template_sha256"] for job in jobs
         },
         "policy": policy_identity,
+        **(
+            {"runtime": {"clothdojo_source_sha256": runtime_sha256}}
+            if runtime_sha256 is not None
+            else {}
+        ),
         "execution": execution_settings(
             execution,
             exec_horizon,
             rtc_delay_steps=logical_delay,
         ),
         "benchmark": {
-            "panel_id": "rapid_iteration",
+            "panel_id": FORMAL_BENCHMARK_PANEL_ID,
+            "selection_sha256": FORMAL_BENCHMARK_SELECTION_SHA256,
+            "asset_splits_sha256": FORMAL_BENCHMARK_ASSET_SPLITS_SHA256,
             "seen_assets": FORMAL_BENCHMARK_SEEN_ASSETS,
             "unseen_assets": FORMAL_BENCHMARK_UNSEEN_ASSETS,
             "states_per_asset": FORMAL_BENCHMARK_STATES_PER_ASSET,
+            "asset_splits": {
+                item["asset_id"]: item["split"] for item in states_meta["assets"]
+            },
         },
         "replicates": 1,
         "parallelism": {
@@ -481,8 +539,12 @@ def run_evaluation_condition(
             else:
                 return _summary(destination, meta, gpus)
     else:
-        if destination.exists() and (not destination.is_dir() or any(destination.iterdir())):
-            raise FileExistsError(f"evaluation output is not empty: {destination}")
+        if destination.exists():
+            if not destination.is_dir():
+                raise FileExistsError(f"evaluation output is not a directory: {destination}")
+            unexpected = [path for path in destination.iterdir() if path.name != "runtime"]
+            if unexpected:
+                raise FileExistsError(f"evaluation output is not empty: {destination}")
         destination.mkdir(parents=True, exist_ok=True)
         (destination / "trajectories").mkdir()
         meta = {
@@ -505,12 +567,15 @@ def run_evaluation_condition(
         meta["phase"] = "trajectories"
         meta.pop("error", None)
         atomic_write_json(meta_path, meta)
-        collect_trajectories(
-            jobs,
-            gpus=gpus,
-            policy_endpoints=active_endpoints,
-            spec=collection_spec,
-        )
+        if trajectory_collector is None:
+            collect_trajectories(
+                jobs,
+                gpus=gpus,
+                policy_endpoints=active_endpoints,
+                spec=collection_spec,
+            )
+        else:
+            trajectory_collector(jobs, collection_spec, active_endpoints)
         trajectories = collect_trajectory_index(jobs, spec=collection_spec)
         meta["trajectories"] = trajectories
         meta["phase"] = "scoring"

@@ -219,17 +219,15 @@ def test_serve_cli_passes_explicit_training_crop(monkeypatch, backend):
     assert recorded["image_preprocessing"] == "training_fixed_crop"
 
 
-def test_benchmark_cli_passes_explicit_training_crop(monkeypatch):
+def test_benchmark_cli_uses_one_managed_config(monkeypatch):
     from clothdojo import cli
-    from clothdojo.evaluation import collection
+    from clothdojo.evaluation import managed
 
     recorded = {}
     monkeypatch.setattr(
-        collection, "run_evaluation_condition", lambda *a, **kw: recorded.update(kw)
+        managed,
+        "run_managed_evaluation",
+        lambda path: recorded.update(config=path) or {"compatible": True},
     )
-    cli.main([
-        "benchmark", "run", "--condition-id", "training_crop", "--scenario", "scenario",
-        "--protocol", "protocol", "--states", "states", "--templates", "templates",
-        "--output", "output", "--image-preprocessing", "training_fixed_crop",
-    ])
-    assert recorded["image_preprocessing"] == "training_fixed_crop"
+    cli.main(["benchmark", "run", "--config", "training_crop.yaml"])
+    assert recorded["config"] == "training_crop.yaml"

@@ -90,11 +90,51 @@ Ubuntu 的可执行文件名通常是 `fdfind`；如需 `fd`，可在用户自�
 
 ## Rollout 部署
 
-`benchmark run --cloth-visual white` 使用与 white 训练数据相同的纯白布料外观；默认仍为 `nocs`。外观同时写入 condition 与 trajectory 身份，续跑拒绝混用，不改变固定初态、物理或评分。
+正式评测只从 `benchmark run --config <run.yaml>` 进入。run config 记录策略及执行条件，
+deployment config 只记录可替换的主机、GPU、端口与节点路径；冻结面板、协议、初态和
+模板由 `configs/evaluation/balanced200_20260901.yaml` 统一持有，实际冻结数据位于
+`data/benchmarks/balanced200_20260901/`，不依赖可删除的实验输出。`cloth_visual: white`
+使用与 white 训练数据相同的纯白布料外观；默认仍为 `nocs`。外观同时写入 condition
+与 trajectory 身份，续跑拒绝混用，不改变固定初态、物理或评分。
 
-chunk 在每个 worker 内依次执行观测、推理和仿真，不重叠计算。显存足够时，优先将该 worker 的专属策略服务与仿真绑定到同一张 GPU；`CUDA_VISIBLE_DEVICES` 控制策略服务，`benchmark run --gpus` 控制仿真。仍需每个 worker 一个独立 endpoint，不能为省卡共享策略随机数状态。RTC 的异步执行应另行测量，不能直接沿用 chunk 的部署结论。
+Coordinator 为每个仿真 worker 启动一个独占策略服务；节点可以是 `local` 或 SSH host。
+远端节点必须给出绝对项目路径和 GPU，policy 节点另外给出仿真可访问的 `connect_host`。
+每个节点 worker 只写计划分配给自己的
+trajectory，只有 Coordinator 写 condition `meta.json`、建立完整 index 和评分。多机不依赖
+Ray、NCCL 或跨机任务队列，只依赖互斥分片和各节点可见的共享项目路径。Coordinator
+对同一输出持有排他锁，策略服务和仿真节点必须匹配同一项目源码指纹；任一节点退出时
+终止其余所属进程，已经原子发布的轨迹可在下次运行中复用。
 
-同一 `benchmark run --output` 自动校验配置并补跑缺失轨迹；迁移时先确认旧 collector 及其 worker 全部退出，再启动新 collector。保持 batch size、初态、policy seed 和模型身份不变，GPU 数量与主机位置可以调整。隐藏的 `.tmp` 轨迹尚未发布，不计入完成数。
+deployment 中 policy 与 simulation 的 GPU 总数必须相同。`host` 使用已有 SSH alias，
+`connect_host` 是仿真节点访问 WebSocket 服务的地址；本机节点只写 `host: local`：
+
+```yaml
+schema: clothdojo_evaluation_deployment
+policy:
+  nodes:
+    - host: h100-policy-a
+      connect_host: 10.0.0.10
+      project_root: /shared/ClothDojo
+      python: /shared/env/bin/python
+      gpus: [0, 1]
+      port_start: 28000
+simulation:
+  nodes:
+    - host: rtx-sim-a
+      project_root: /shared/ClothDojo
+      python: /shared/ClothDojo/.venv/bin/python
+      gpus: [0, 1]
+score_workers: 4
+```
+
+chunk 在每个 worker 内依次执行观测、推理和仿真，不重叠计算。显存足够时，可以在
+deployment 中将策略服务与仿真绑定到同一张 GPU；否则将 policy 和 simulation nodes 分开。
+仍需每个 worker 一个独立 endpoint，不能为省卡共享策略随机数状态。RTC 的异步执行应
+另行测量，不能直接沿用 chunk 的部署结论。
+
+重复执行同一 run config 会校验 condition 身份并补跑缺失轨迹；迁移时先确认旧 Coordinator
+及其 worker 全部退出，再更换 deployment。保持 batch size、初态、policy seed 和模型身份
+不变，GPU 数量与主机位置可以调整。隐藏的 `.tmp` 轨迹尚未发布，不计入完成数。
 
 ## OpenPI_RLinf 训练边界
 
@@ -108,8 +148,9 @@ checkpoint 继续保留 EMA 推理权重及 online/optimizer 状态用于分析�
 
 SFT/CFG 默认不做图像随机增强，也绕过上游 `train=True, rng=None` 的错误固定左上裁剪；flow noise/time、数据 shuffle 和模型训练模式不变。SFT 的 `clothdojo.image_augmentation` 缺省为 `false`，显式设为 `true` 才复用固定版 RLinf 的随机裁剪、旋转和颜色扰动，使用已播种、可保存的 CPU RNG。修正只作用于模型实例，不修改安装包或 checkpoint 布局。新模型部署使用相同文本与 `--image-preprocessing none`；模型数值精度及 resize 逻辑不变。
 
-对确认使用上游 `train=True, rng=None` 训练的历史原生 RLinf 权重，`policy serve-sft` / `serve-cfg`
-与 `benchmark run` 两端均显式传 `--image-preprocessing training_fixed_crop`，在 CUDA 上先将图像
+对确认使用上游 `train=True, rng=None` 训练的历史原生 RLinf 权重，开发用
+`policy serve-sft` / `serve-cfg` 显式传 `--image-preprocessing training_fixed_crop`；正式评测在
+run config 的 `execution.image_preprocessing` 中记录同一值。推理会在 CUDA 上先将图像
 转为训练 FSDP 使用的 BF16，再复用固定版上游 `preprocess_observation(train=True, rng=None)`。
 它包含主相机左上 212×212 裁剪、resize、零角度旋转及所有相机的数值范围往返；wrist 不做几何裁剪，
 但保留 BF16 舍入。chunk/RTC/CFG 共用一次预处理，模型保持 eval，不启用随机增强。
