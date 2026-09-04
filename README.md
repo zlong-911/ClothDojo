@@ -149,26 +149,6 @@ canonical collection。转换完整复制原轨迹和 annotation，并对状态�
   --output data/collections/shirt_flatten_mirrored
 ```
 
-`shirt_fold` 的前后镜像使用更严格的四变体入口：每条源轨迹生成原轨迹、前后镜像、
-左右镜像，以及“前后镜像后再左右镜像”。前后镜像以初始布料 XY 包围盒中心反射 world X，
-再按 seed 在默认 X ±15 cm、Y ±5 cm 的窗口内搜索整条轨迹都可达且布料留在桌内的固定 XY
-微调，并要求初态布料距离左右底座至少 10 cm；机器人用 position-only IK 和 action-only
-刚体动力学重放，松手区间通过局部换抓、侧向让行和交错时序避让，并在释放边界保持速度连续；
-动力学实际轨迹受源 episode 的速度/加速度包络约束，左右臂实体间隙不得小于 3 cm；布料状态
-通过空间 overlay 直接回放。不可达、关节跳变、碰撞或动力学
-重放失败的源轨迹不会进入四变体输出：
-
-```bash
-.venv/bin/clothdojo data augment-front-back \
-  --source data/collections/shirt_fold \
-  --output data/collections/shirt_fold_front_back_seed17 \
-  --seed 17 --device cuda:0
-```
-
-输出是依赖源轨迹绝对路径和 manifest hash 的轻量 overlay，不会复制四份布料状态；归档时需
-同时保留源 collection。完整语义和验收边界见
-[`docs/front_back_augmentation.md`](docs/front_back_augmentation.md)。
-
 历史 collection 中裁剪前的 action 可以复制成一套完整的新 collection，并把 action
 替换为 runtime 实际采用的关节限位 target。源轨迹始终只读；新 collection 独立复制
 `states.npz`，轨迹格式不变，只在 manifest 中标记 `action_semantics=runtime_target`。

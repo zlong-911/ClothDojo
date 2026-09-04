@@ -48,7 +48,6 @@
 | `src/clothdojo/data/` | 数据转换与导出 |
 | `src/clothdojo/data/retarget.py` | Piper 到目标 robot profile 的几何参考、门禁与多 GPU／同卡常驻 worker 调度 |
 | `src/clothdojo/data/retarget_dynamics.py` | 共用 RobotDynamicsRetargeter：刚体逆动力学、一步 shooting、夹爪事件前馈与 action-only replay |
-| `src/clothdojo/data/front_back.py` | shirt_fold 的前后可达性搜索、Piper action-only 重放、刚体碰撞门禁及四变体 overlay 发布 |
 | `src/clothdojo/data/action_canonicalization.py` | 完整复制历史 Piper collection，并将 action 替换为 runtime joint-limit target |
 | `src/clothdojo/data/rollout_review.py` | canonical trajectory 的增量无 solver 轻量审查视频 |
 | `src/clothdojo/collection/` | 采集控制面与 HIL 审查视频切换 |
@@ -112,7 +111,6 @@
 - [`steam.md`](steam.md)：STEAM 的 state/geometry 输入、NOCS 数据准备和 checkpoint 合同。
 - [`retargeting.md`](retargeting.md)：机械臂 retarget 的使用入口、产物语义与验证边界。
 - [`mirroring.md`](mirroring.md)：Piper 原始轨迹镜像增强的数据变换、产物和验证边界。
-- [`front_back_augmentation.md`](front_back_augmentation.md)：shirt_fold 前后镜像的坐标语义、可达性搜索、四变体产物和严格门禁。
 - [`mount_alignment.md`](mount_alignment.md)：机械臂底座孔型配准的证据等级、计算入口与验收关系。
 - [`robot_dynamics.md`](robot_dynamics.md)：机器人 USD 动力学来源、单位与运行时适用边界。
 - [`robot_workstations.md`](robot_workstations.md)：五套固定工作站、外部 payload 部署与统一渲染入口。

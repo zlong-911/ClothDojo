@@ -89,8 +89,6 @@ class TrajectoryReader:
         self._action_arrays: dict[str, np.ndarray] | None = None
         self._base_reader: TrajectoryReader | None = None
         self._base_sample_indices: np.ndarray | None = None
-        self._base_spatial_linear: np.ndarray | None = None
-        self._base_spatial_translation: np.ndarray | None = None
         storage = self.manifest.metadata.get("storage")
         if isinstance(storage, dict) and storage.get("kind") in {
             "derived_overlay",
@@ -255,14 +253,6 @@ class TrajectoryReader:
                     selected = values[self._base_sample_indices]
                     selected.setflags(write=False)
                     result[field] = selected
-            if self._base_spatial_linear is not None:
-                for field in base_fields:
-                    transformed = np.asarray(result[field]) @ self._base_spatial_linear.T
-                    if field == "particle_q":
-                        transformed = transformed + self._base_spatial_translation
-                    transformed = np.asarray(transformed, dtype=np.float32)
-                    transformed.setflags(write=False)
-                    result[field] = transformed
         if override_fields:
             overrides = self._load_arrays(
                 self.trajectory_dir / "states.npz",
@@ -333,27 +323,7 @@ class TrajectoryReader:
         for field in _DERIVED_BASE_FIELDS:
             if base.manifest.state_shapes.get(field) != self.manifest.state_shapes.get(field):
                 raise RuntimeError(f"derived trajectory base {field} shape differs")
-        transform = storage.get("base_spatial_transform")
-        if transform is not None:
-            self._set_base_spatial_transform(transform)
         return base
-
-    def _set_base_spatial_transform(self, transform: object) -> None:
-        if not isinstance(transform, dict) or set(transform) != {"linear", "translation"}:
-            raise RuntimeError("derived trajectory base spatial transform is invalid")
-        linear = np.asarray(transform["linear"], dtype=np.float64)
-        translation = np.asarray(transform["translation"], dtype=np.float64)
-        if linear.shape != (3, 3) or translation.shape != (3,):
-            raise RuntimeError("derived trajectory base spatial transform shape differs")
-        if not np.isfinite(linear).all() or not np.isfinite(translation).all():
-            raise RuntimeError("derived trajectory base spatial transform is non-finite")
-        if not np.allclose(linear @ linear.T, np.eye(3), atol=1.0e-7, rtol=0.0):
-            raise RuntimeError("derived trajectory base spatial transform is not orthogonal")
-        determinant = float(np.linalg.det(linear))
-        if not np.isclose(abs(determinant), 1.0, atol=1.0e-7, rtol=0.0):
-            raise RuntimeError("derived trajectory base spatial transform determinant differs")
-        self._base_spatial_linear = linear.astype(np.float32)
-        self._base_spatial_translation = translation.astype(np.float32)
 
     def _actions(self) -> dict[str, np.ndarray]:
         if self._action_arrays is None:

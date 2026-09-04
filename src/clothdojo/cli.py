@@ -225,26 +225,6 @@ def main(argv: Sequence[str] | None = None) -> None:
         result = augment_mirror(args.source, args.output)
         print(json.dumps(result, indent=2, sort_keys=True))
         return
-    if args.command == "data" and args.data_command == "augment-front-back":
-        if passthrough:
-            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
-        from clothdojo.data.front_back import augment_front_back
-
-        result = augment_front_back(
-            args.source,
-            args.output,
-            seed=args.seed,
-            assets=args.assets,
-            device=args.device,
-            placement_candidates=args.placement_candidates,
-            table_margin_m=args.table_margin_m,
-            max_placement_shift_x_m=args.max_placement_shift_x_m,
-            max_placement_shift_y_m=args.max_placement_shift_y_m,
-            min_base_clearance_m=args.min_base_clearance_m,
-            min_inter_arm_clearance_m=args.min_inter_arm_clearance_m,
-        )
-        print(json.dumps(result, indent=2, sort_keys=True))
-        return
     if args.command == "data" and args.data_command == "canonicalize-actions":
         if passthrough:
             parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
@@ -998,51 +978,6 @@ def _parser() -> argparse.ArgumentParser:
     )
     mirror.add_argument("--source", required=True, help="canonical Piper collection root")
     mirror.add_argument("--output", required=True, help="new independent collection root")
-    front_back = data_commands.add_parser(
-        "augment-front-back",
-        help="build reachable front/back and bilateral Piper trajectory overlays",
-    )
-    front_back.add_argument("--source", required=True, help="canonical shirt_fold collection")
-    front_back.add_argument("--output", required=True, help="new four-variant overlay collection")
-    front_back.add_argument("--seed", required=True, type=int, help="deterministic placement seed")
-    front_back.add_argument("--assets", default="assets", help="project asset directory")
-    front_back.add_argument("--device", default="cuda:0", help="Newton IK/dynamics device")
-    front_back.add_argument(
-        "--placement-candidates",
-        type=int,
-        default=64,
-        help="seeded stratified XY placements per source trajectory",
-    )
-    front_back.add_argument(
-        "--table-margin-m",
-        type=float,
-        default=0.01,
-        help="minimum transformed-cloth XY margin inside the table",
-    )
-    front_back.add_argument(
-        "--max-placement-shift-x-m",
-        type=float,
-        default=0.15,
-        help="maximum front/back placement adjustment along world X",
-    )
-    front_back.add_argument(
-        "--max-placement-shift-y-m",
-        type=float,
-        default=0.05,
-        help="maximum front/back placement adjustment along world Y",
-    )
-    front_back.add_argument(
-        "--min-base-clearance-m",
-        type=float,
-        default=0.10,
-        help="minimum initial cloth-particle clearance from either robot base",
-    )
-    front_back.add_argument(
-        "--min-inter-arm-clearance-m",
-        type=float,
-        default=0.03,
-        help="minimum physical surface clearance between the two robot arms",
-    )
     canonicalize = data_commands.add_parser(
         "canonicalize-actions",
         help="copy a collection and replace actions with runtime targets",
