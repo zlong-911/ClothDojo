@@ -16,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
+from clothdojo.assets import GarmentLibrary
 from clothdojo.teleop.session import AssetSwitchRequest, SessionPlan, SessionStatusWriter
 
 
@@ -280,6 +281,7 @@ def _run(
     current_origin = None
     completed_attempt = None
     advance_after_finalize = False
+    pending_restore_asset_id = None
 
     def asset_status() -> dict[str, object]:
         return {
@@ -327,13 +329,24 @@ def _run(
         return True
 
     def restore_next(*, requeue_current: bool = False) -> bool:
+        nonlocal pending_restore_asset_id, restoration_phase
+        nonlocal asset_switch_phase, asset_switch_error
         if restore_queue is None:
             return False
-        return prepare_restored_point(
-            restore_queue.restore_next(
-                runtime,
-                requeue_current=requeue_current,
+        next_asset_id = restore_queue.prepare_next(requeue_current=requeue_current)
+        if next_asset_id is not None and next_asset_id != plan.asset_id:
+            pending_restore_asset_id = next_asset_id
+            restoration_phase = "switching"
+            asset_switch_phase = "queued"
+            asset_switch_error = None
+            backend.set_grasp_haptics(False, False)
+            print(
+                f"  [HIL] next scene needs {next_asset_id}; scheduling asset switch",
+                flush=True,
             )
+            return True
+        return prepare_restored_point(
+            restore_queue.restore_next(runtime)
         )
 
     def restore_current(*, preserve_completed: bool = False) -> bool:
@@ -382,14 +395,38 @@ def _run(
         while app.is_running() and not stop.is_set():
             frame_started = time.perf_counter()
             now = time.monotonic()
-            try:
-                switch_request = _read_asset_switch(plan)
-            except (OSError, ValueError) as exc:
-                asset_switch_phase = "failed"
-                asset_switch_error = f"{type(exc).__name__}: {exc}"
-                plan.switch_request_path.unlink(missing_ok=True)
-                print(f"  [ASSET] rejected switch request: {asset_switch_error}", flush=True)
-                switch_request = None
+            automatic_switch = pending_restore_asset_id is not None
+            if automatic_switch:
+                try:
+                    next_asset_path = GarmentLibrary(plan.assets_root).converted(
+                        pending_restore_asset_id
+                    )
+                    switch_request = AssetSwitchRequest(
+                        request_id="automatic_hil_next_scene",
+                        session_id=plan.session_id,
+                        asset_id=pending_restore_asset_id,
+                        asset_path=next_asset_path,
+                        requested_at="",
+                    )
+                except (OSError, RuntimeError, ValueError) as exc:
+                    asset_switch_phase = "failed"
+                    asset_switch_error = f"{type(exc).__name__}: {exc}"
+                    restoration_phase = "switch_failed"
+                    pending_restore_asset_id = None
+                    print(
+                        f"  [ASSET] automatic switch rejected: {asset_switch_error}",
+                        flush=True,
+                    )
+                    switch_request = None
+            else:
+                try:
+                    switch_request = _read_asset_switch(plan)
+                except (OSError, ValueError) as exc:
+                    asset_switch_phase = "failed"
+                    asset_switch_error = f"{type(exc).__name__}: {exc}"
+                    plan.switch_request_path.unlink(missing_ok=True)
+                    print(f"  [ASSET] rejected switch request: {asset_switch_error}", flush=True)
+                    switch_request = None
             if switch_request is not None:
                 candidate_runtime = None
                 candidate_anchor = None
@@ -404,7 +441,7 @@ def _run(
                         raise RuntimeError("the current slot has no standby GPU")
                     if recorder.is_recording or recorder.is_finalizing:
                         raise RuntimeError("finish saving before switching assets")
-                    if restore_queue is not None:
+                    if restore_queue is not None and not automatic_switch:
                         raise RuntimeError(
                             "asset switching is unavailable while a restore queue is active"
                         )
@@ -431,6 +468,11 @@ def _run(
                         candidate_plan,
                         gpu_id=inactive_gpu_id,
                     )
+                    if restore_queue is not None:
+                        restore_queue.prepare_runtime_for_next(
+                            candidate_plan,
+                            candidate_runtime,
+                        )
                     candidate_stage_path = build_render_stage(
                         candidate_runtime,
                         candidate_plan,
@@ -527,6 +569,9 @@ def _run(
                     candidate_grasp_probe = None
                     if candidate_runtime is not None:
                         candidate_runtime.close()
+                    if automatic_switch:
+                        pending_restore_asset_id = None
+                        restoration_phase = "switch_failed"
                     status.write(
                         "collecting" if previous_connected else "waiting_for_vr",
                         gpu_id=plan.gpu_id,
@@ -572,6 +617,11 @@ def _run(
                     old_runtime.close()
                     old_stage_path.unlink(missing_ok=True)
                     del old_runtime, old_recorder, old_anchor, old_stage_path
+                    if automatic_switch:
+                        assert restore_queue is not None
+                        restore_queue.activate(plan, runtime)
+                        pending_restore_asset_id = None
+                        prepare_restored_point(restore_queue.restore_next(runtime))
                     print(
                         f"  [ASSET] active={plan.asset_id} on cuda:{active_gpu_id}; "
                         f"standby=cuda:{inactive_gpu_id}",
@@ -667,7 +717,11 @@ def _run(
                     if reset_pressed:
                         advance_after_finalize = True
                     frozen = True
-                elif restoration_phase in {"aborting", "complete"}:
+                elif restoration_phase == "switch_failed":
+                    if reset_pressed:
+                        restore_next()
+                    frozen = True
+                elif restoration_phase in {"switching", "aborting", "complete"}:
                     frozen = True
             else:
                 if record_pressed:

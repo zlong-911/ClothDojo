@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -52,6 +53,7 @@ def _write_trajectory(
     task: str,
     fingerprints: dict[str, str],
     scenario_fingerprint: str | None = None,
+    asset_id: str = "shirt_a",
 ) -> None:
     writer = TrajectoryWriter(
         path,
@@ -68,7 +70,7 @@ def _write_trajectory(
                 else {"rtc_scenario": scenario_fingerprint}
             ),
         ),
-        metadata={"asset_id": "shirt_a"},
+        metadata={"asset_id": asset_id},
     )
     writer.write_initial_state(_state(0))
     writer.append_transition(
@@ -196,12 +198,12 @@ def test_hil_plan_cold_restores_hashed_breakpoint(tmp_path) -> None:
         "rollout_root": plan_value["runs"][0]["rollout_root"],
         "rollout_meta_sha256": plan_value["runs"][0]["rollout_meta_sha256"],
         "asset_id": plan_value["asset_id"],
-        "runtime": plan_value["runtime"],
+        "runtime": plan_value["assets"][0]["runtime"],
         "breakpoints": [
             {
                 key: item
                 for key, item in plan_value["breakpoints"][0].items()
-                if key != "source_run_id"
+                if key not in {"source_run_id", "asset_id"}
             }
         ],
     }
@@ -324,7 +326,7 @@ def test_hil_plan_queues_breakpoints_across_rollout_runs(tmp_path) -> None:
         ]
     )
     assert [run["run_id"] for run in value["runs"]] == ["run_a", "run_b"]
-    assert "config_fingerprints" not in value["runtime"]
+    assert "config_fingerprints" not in value["assets"][0]["runtime"]
     path = tmp_path / "intervention.json"
     path.write_text(json.dumps(value), encoding="utf-8")
     session = _session(
@@ -346,6 +348,96 @@ def test_hil_plan_queues_breakpoints_across_rollout_runs(tmp_path) -> None:
 
     retried = queue.restore_current(runtime)
     assert retried is second
+    assert queue.remaining == 0
+
+
+def test_hil_plan_switches_runtime_before_cross_asset_breakpoint(tmp_path) -> None:
+    assets, garment_a, fingerprints_a = _context(tmp_path)
+    garment_b = assets / "garments/converted/shirt_b/shirt_b.usdc"
+    garment_b.parent.mkdir(parents=True)
+    garment_b.write_bytes(b"garment-b")
+    fingerprints_b = {
+        "garment_usdc": _sha256(garment_b),
+        "piper_entry_usda": fingerprints_a["piper_entry_usda"],
+    }
+    profile = CollectionProfile(
+        id="shirt_flatten",
+        display_name="flatten",
+        scene="shirt_flatten",
+        dataset_root=tmp_path / "dataset",
+        hil_dataset_root=tmp_path / "hil-dataset",
+        rollout_root=tmp_path / "rollouts",
+        max_actions=20,
+    )
+    for run_id, episode_id, asset_id, fingerprints in (
+        ("run_a", "episode_a", "shirt_a", fingerprints_a),
+        ("run_b", "episode_b", "shirt_b", fingerprints_b),
+    ):
+        run = profile.rollout_root / run_id
+        _write_trajectory(
+            run / f"trajectories/{episode_id}",
+            task=profile.scene,
+            fingerprints=fingerprints,
+            asset_id=asset_id,
+        )
+        (run / "meta.json").write_text(
+            json.dumps(
+                {
+                    "schema": "clothdojo_rollout",
+                    "format_version": 1,
+                    "status": "complete",
+                    "camera_names": [],
+                    "trajectories": [
+                        {
+                            "asset_id": asset_id,
+                            "path": f"trajectories/{episode_id}",
+                            "action_count": 1,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    value = HILCatalog(profile).intervention_plan(
+        [
+            {"run_id": "run_a", "episode_id": "episode_a", "sample_index": 0},
+            {"run_id": "run_b", "episode_id": "episode_b", "sample_index": 0},
+        ]
+    )
+    assert value["asset_id"] == "shirt_a"
+    assert [item["asset_id"] for item in value["assets"]] == ["shirt_a", "shirt_b"]
+    assert [item["asset_id"] for item in value["breakpoints"]] == [
+        "shirt_a",
+        "shirt_b",
+    ]
+    plan_path = tmp_path / "intervention.json"
+    plan_path.write_text(json.dumps(value), encoding="utf-8")
+    session = _session(
+        tmp_path,
+        assets,
+        garment_a,
+        mode="intervention",
+        intervention_plan=plan_path,
+    )
+    runtime = _Runtime()
+    queue = RestorationQueue.load(session, runtime)
+    assert queue is not None
+
+    assert queue.restore_next(runtime).asset_id == "shirt_a"
+    assert queue.prepare_next() == "shirt_b"
+    with pytest.raises(RuntimeError, match="needs asset shirt_b"):
+        queue.restore_next(runtime)
+    assert queue.remaining == 1
+
+    candidate_plan = replace(session, asset_id="shirt_b", asset_path=garment_b)
+    candidate_runtime = _Runtime()
+    prepared = queue.prepare_runtime_for_next(candidate_plan, candidate_runtime)
+    assert prepared.asset_id == "shirt_b"
+    assert candidate_runtime.restored.sample_index == 0
+    assert queue.remaining == 1
+    queue.activate(candidate_plan, candidate_runtime)
+    assert queue.restore_next(candidate_runtime).asset_id == "shirt_b"
     assert queue.remaining == 0
 
 

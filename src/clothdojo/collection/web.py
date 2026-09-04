@@ -186,7 +186,7 @@ class BreakpointRequest(BaseModel):
 
 
 class InterventionPlanRequest(BaseModel):
-    breakpoints: list[BreakpointRequest] = Field(min_length=1, max_length=128)
+    breakpoints: list[BreakpointRequest] = Field(min_length=1, max_length=4096)
 
 
 class StartInterventionRequest(InterventionPlanRequest):
@@ -561,9 +561,14 @@ def create_app(config_path: str | Path):
                 [item.model_dump() for item in request.breakpoints],
             )
             asset_id = str(plan["asset_id"])
-            collectable = await asyncio.to_thread(assets.library.collectable_ids)
-            if asset_id not in set(collectable):
-                raise RuntimeError("rollout garment is no longer converted and collectable")
+            collectable = set(await asyncio.to_thread(assets.library.collectable_ids))
+            planned_assets = {str(item["asset_id"]) for item in plan["assets"]}
+            missing_assets = sorted(planned_assets - collectable)
+            if missing_assets:
+                raise RuntimeError(
+                    "rollout garments are no longer converted and collectable: "
+                    + ", ".join(missing_assets)
+                )
             result = await asyncio.to_thread(
                 supervisor.start_session,
                 profile_id=request.profile_id,

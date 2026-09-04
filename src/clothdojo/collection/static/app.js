@@ -103,10 +103,10 @@
     return [...counts.entries()].map(([id,value])=>({id,episode_count:value.collected,pending_count:value.pending,default:false})).sort((left,right)=>right.pending_count-left.pending_count||right.episode_count-left.episode_count||left.id.localeCompare(right.id));
   }
   function hilSessionContext(){
-    if(state.sessionMode!=="intervention"||!state.taskId||!state.assetId)return null;
-    const points=hilPendingPoints(state.taskId).filter(point=>point.asset_id===state.assetId);
+    if(state.sessionMode!=="intervention"||!state.taskId)return null;
+    const points=hilPendingPoints(state.taskId).sort((left,right)=>left.asset_id.localeCompare(right.asset_id)||String(left.created_at).localeCompare(String(right.created_at)));
     if(!points.length)return null;
-    return{profile_id:state.taskId,asset_id:state.assetId,breakpoints:points.map(({run_id,episode_id,sample_index})=>({run_id,episode_id,sample_index}))};
+    return{profile_id:state.taskId,asset_id:points[0].asset_id,asset_count:new Set(points.map(point=>point.asset_id)).size,breakpoints:points.map(({run_id,episode_id,sample_index})=>({run_id,episode_id,sample_index}))};
   }
   function pendingCount(task,assetId){return (task?.episodes||[]).filter(episode=>episode.asset_id===assetId&&episode.status==="pending").length}
   function sortedAssets(task){return [...(task?.assets||[])].sort((left,right)=>(right.default?1:0)-(left.default?1:0)||(task?.continuation?pendingCount(task,right.id)-pendingCount(task,left.id)||right.episode_count-left.episode_count||left.id.localeCompare(right.id):right.episode_count-left.episode_count||left.id.localeCompare(right.id)))}
@@ -160,7 +160,7 @@
       ? `<div class="slot-detail"><strong>${esc(taskName(session.profile_id))}${session.mode==="intervention"?" HIL":""} · ${esc(session.asset_id)}</strong>${restorationDetail(session)}</div>`
       : job
       ? `<div class="slot-detail"><strong>${t("review_export")} · ${esc(episodeTime(job.episode_id))}</strong></div>`
-      : `<div class="slot-detail">${slot.status==="offline"?`<strong>${t("service_offline")}</strong>`:slot.error?`<strong>${esc(slot.error)}</strong>`:hilMode?(hilContext?`<strong>${esc(task.display_name)} HIL · ${esc(hilContext.asset_id)} · ${hilContext.breakpoints.length} ${t("hil_points")}</strong>`:`<strong>${t("hil_worker_hint")}</strong>`):""}</div>`;
+      : `<div class="slot-detail">${slot.status==="offline"?`<strong>${t("service_offline")}</strong>`:slot.error?`<strong>${esc(slot.error)}</strong>`:hilMode?(hilContext?`<strong>${esc(task.display_name)} HIL · ${hilContext.breakpoints.length} ${t("hil_points")} · ${hilContext.asset_count} ${t("asset_prefix")}</strong>`:`<strong>${t("hil_worker_hint")}</strong>`):""}</div>`;
     const switchBusy=session&&(session.asset_switch_phase==="building"||session.asset_switch_phase==="opening_stage");
     const canSwitch=session&&session.mode==="collection"&&session.standby_gpu_id!=null&&session.profile_id===state.taskId&&session.asset_id!==state.assetId&&!session.recording&&!session.recording_finalizing&&!switchBusy;
     const switchAction=canSwitch?`<button onclick="switchSessionAsset(event,'${esc(session.id)}')">${t("switch_asset")}</button>`:"";
@@ -472,7 +472,7 @@
     const button=$("asset-pick"),hilContext=hilSessionContext();
     button.disabled=false;
     button.textContent=state.sessionMode==="intervention"
-      ?(state.assetId?`${t("asset_prefix")} · ${state.assetId} · ${hilContext?.breakpoints.length||0} ${t("hil_points")}`:t("hil_worker_hint"))
+      ?(hilContext?`${hilContext.breakpoints.length} ${t("hil_points")} · ${hilContext.asset_count} ${t("asset_prefix")}`:t("hil_worker_hint"))
       :(state.assetId?`${t("asset_prefix")} · ${state.assetId}`:t("pick_asset"));
   }
   function renderAssetVisual(){

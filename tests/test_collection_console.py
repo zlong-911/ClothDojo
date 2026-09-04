@@ -573,6 +573,8 @@ def test_collection_console_preserves_old_workspace_design() -> None:
     assert "function renderSlot" in script
     assert "function renderHilCollectionData" in script
     assert "function hilPendingPoints" in script
+    assert "asset_count:new Set(points.map(point=>point.asset_id)).size" in script
+    assert "hilPendingPoints(state.taskId).filter" not in script
     assert "'<strong>${t(\"service_offline\")}</strong>'" not in script
     assert "expected_revision" in script
     assert 'deviceProfile:"pico4ultra"' in script

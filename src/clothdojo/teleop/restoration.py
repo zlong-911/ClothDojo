@@ -14,7 +14,8 @@ import numpy as np
 from clothdojo.teleop.session import SessionPlan
 from clothdojo.trajectory import TrajectoryReader
 
-INTERVENTION_PLAN_SCHEMA = "clothdojo_intervention_plan_v2"
+INTERVENTION_PLAN_SCHEMA = "clothdojo_intervention_plan_v3"
+SINGLE_ASSET_INTERVENTION_PLAN_SCHEMA = "clothdojo_intervention_plan_v2"
 LEGACY_INTERVENTION_PLAN_SCHEMA = "clothdojo_intervention_plan_v1"
 CONTINUATION_PLAN_SCHEMA = "clothdojo_continuation_plan_v1"
 
@@ -22,6 +23,7 @@ CONTINUATION_PLAN_SCHEMA = "clothdojo_continuation_plan_v1"
 @dataclass(frozen=True, slots=True)
 class RestorationPoint:
     kind: Literal["human_intervention", "task_continuation"]
+    asset_id: str
     source_episode_id: str
     source_sample_index: int
     trajectory: Path
@@ -57,11 +59,16 @@ class RestorationQueue:
         self,
         points: list[RestorationPoint],
         readers: dict[Path, TrajectoryReader],
+        asset_runtime: dict[str, dict[str, Any]],
+        *,
+        active_asset_id: str,
     ) -> None:
         if not points:
             raise ValueError("a restore plan must contain at least one point")
         self._points = deque(points)
         self._readers = readers
+        self._asset_runtime = asset_runtime
+        self._active_asset_id = active_asset_id
         self.current: RestorationPoint | None = None
         self.current_gripper_open: np.ndarray | None = None
 
@@ -83,13 +90,26 @@ class RestorationQueue:
     def _load_intervention(cls, plan, runtime, value) -> RestorationQueue:
         if value.get("schema") == LEGACY_INTERVENTION_PLAN_SCHEMA:
             return cls._load_legacy_intervention(plan, runtime, value)
+        if value.get("schema") == SINGLE_ASSET_INTERVENTION_PLAN_SCHEMA:
+            asset_id = value.get("asset_id")
+            value = {
+                "schema": INTERVENTION_PLAN_SCHEMA,
+                "profile_id": value.get("profile_id"),
+                "asset_id": asset_id,
+                "assets": [{"asset_id": asset_id, "runtime": value.get("runtime")}],
+                "runs": value.get("runs"),
+                "breakpoints": [
+                    {"asset_id": asset_id, **raw} if isinstance(raw, dict) else raw
+                    for raw in value.get("breakpoints", [])
+                ],
+            }
         _require_keys(
             value,
             {
                 "schema",
                 "profile_id",
                 "asset_id",
-                "runtime",
+                "assets",
                 "runs",
                 "breakpoints",
             },
@@ -99,7 +119,23 @@ class RestorationQueue:
             raise ValueError("unsupported intervention plan schema")
         if value["profile_id"] != plan.profile_id or value["asset_id"] != plan.asset_id:
             raise ValueError("intervention plan does not match the teleoperation session")
-        _validate_runtime(plan, runtime, value["runtime"], source_task=plan.scene)
+        raw_assets = value["assets"]
+        if not isinstance(raw_assets, list) or not raw_assets:
+            raise ValueError("intervention plan needs garment assets")
+        asset_runtime: dict[str, dict[str, Any]] = {}
+        for raw_asset in raw_assets:
+            if not isinstance(raw_asset, dict):
+                raise ValueError("intervention garment asset must be an object")
+            _require_keys(raw_asset, {"asset_id", "runtime"}, "intervention garment asset")
+            asset_id = str(raw_asset["asset_id"])
+            if asset_id in asset_runtime:
+                raise ValueError("intervention plan contains duplicate garment assets")
+            if not isinstance(raw_asset["runtime"], dict):
+                raise ValueError("intervention garment runtime must be an object")
+            asset_runtime[asset_id] = raw_asset["runtime"]
+        if plan.asset_id not in asset_runtime:
+            raise ValueError("initial intervention asset is missing from its plan")
+        _validate_runtime(plan, runtime, asset_runtime[plan.asset_id], source_task=plan.scene)
         raw_runs = value["runs"]
         if not isinstance(raw_runs, list) or not raw_runs:
             raise ValueError("intervention plan needs rollout provenance")
@@ -130,6 +166,7 @@ class RestorationQueue:
             _require_keys(
                 raw,
                 {
+                    "asset_id",
                     "source_run_id",
                     "source_episode_id",
                     "source_sample_index",
@@ -144,16 +181,28 @@ class RestorationQueue:
                 raise ValueError("intervention breakpoint references an unknown rollout")
             rollout_root, rollout_meta_sha256 = provenance
             point = _point(
-                {key: item for key, item in raw.items() if key != "source_run_id"},
+                {
+                    key: item
+                    for key, item in raw.items()
+                    if key not in {"source_run_id", "asset_id"}
+                },
                 kind="human_intervention",
+                asset_id=str(raw.get("asset_id", "")),
                 source_run_id=run_id,
                 source_rollout_root=rollout_root,
                 source_rollout_meta_sha256=rollout_meta_sha256,
             )
             if point.trajectory.parent != (rollout_root / "trajectories").resolve():
                 raise ValueError("intervention trajectory is outside its rollout root")
+            if point.asset_id not in asset_runtime:
+                raise ValueError("intervention breakpoint references an unknown garment asset")
             points.append(point)
-        return cls(points, _readers(points, runtime, source_task=plan.scene))
+        return cls(
+            points,
+            _readers(points, runtime, source_task=plan.scene),
+            asset_runtime,
+            active_asset_id=plan.asset_id,
+        )
 
     @classmethod
     def _load_legacy_intervention(cls, plan, runtime, value) -> RestorationQueue:
@@ -184,6 +233,7 @@ class RestorationQueue:
             _point(
                 raw,
                 kind="human_intervention",
+                asset_id=str(value["asset_id"]),
                 source_run_id=str(value["run_id"]),
                 source_rollout_root=rollout_root,
                 source_rollout_meta_sha256=str(value["rollout_meta_sha256"]),
@@ -193,7 +243,12 @@ class RestorationQueue:
         trajectory_root = (rollout_root / "trajectories").resolve()
         if any(point.trajectory.parent != trajectory_root for point in points):
             raise ValueError("intervention trajectory is outside its rollout root")
-        return cls(points, _readers(points, runtime, source_task=plan.scene))
+        return cls(
+            points,
+            _readers(points, runtime, source_task=plan.scene),
+            {str(value["asset_id"]): value["runtime"]},
+            active_asset_id=plan.asset_id,
+        )
 
     @classmethod
     def _load_continuation(cls, plan, runtime, value) -> RestorationQueue:
@@ -223,11 +278,21 @@ class RestorationQueue:
         if not isinstance(raw_points, list) or not raw_points:
             raise ValueError("continuation plan needs terminal sources")
         points = [
-            _point(raw, kind="task_continuation", source_profile_id=source_profile)
+            _point(
+                raw,
+                kind="task_continuation",
+                asset_id=str(value["asset_id"]),
+                source_profile_id=source_profile,
+            )
             for raw in raw_points
         ]
         readers = _readers(points, runtime, source_task=source_task, require_terminal=True)
-        return cls(points, readers)
+        return cls(
+            points,
+            readers,
+            {str(value["asset_id"]): runtime_identity},
+            active_asset_id=plan.asset_id,
+        )
 
     @property
     def kind(self) -> str:
@@ -238,19 +303,55 @@ class RestorationQueue:
     def remaining(self) -> int:
         return len(self._points)
 
+    def prepare_next(self, *, requeue_current: bool = False) -> str | None:
+        """Return the next asset without consuming its restoration point."""
+
+        if requeue_current and self.current is not None:
+            self._points.append(self.current)
+        return None if not self._points else self._points[0].asset_id
+
+    def validate_runtime(self, plan: SessionPlan, runtime) -> None:
+        identity = self._asset_runtime.get(plan.asset_id)
+        if identity is None:
+            raise ValueError(f"restore queue has no runtime identity for {plan.asset_id}")
+        _validate_runtime(plan, runtime, identity, source_task=plan.scene)
+
+    def activate(self, plan: SessionPlan, runtime) -> None:
+        self.validate_runtime(plan, runtime)
+        self._active_asset_id = plan.asset_id
+
+    def prepare_runtime_for_next(self, plan: SessionPlan, runtime) -> RestorationPoint:
+        """Restore the queued state on a candidate runtime without consuming it."""
+
+        self.validate_runtime(plan, runtime)
+        if not self._points:
+            raise RuntimeError("restore queue has no next point")
+        point = self._points[0]
+        if point.asset_id != plan.asset_id:
+            raise RuntimeError(
+                f"next restore point needs asset {point.asset_id}, candidate is {plan.asset_id}"
+            )
+        state = self._readers[point.trajectory].state_at(point.source_sample_index)
+        runtime.restore_state(state)
+        return point
+
     def restore_next(
         self,
         runtime,
         *,
         requeue_current: bool = False,
     ) -> RestorationPoint | None:
-        if requeue_current and self.current is not None:
-            self._points.append(self.current)
-        if not self._points:
+        if self.prepare_next(requeue_current=requeue_current) is None:
             self.current = None
             self.current_gripper_open = None
             return None
-        point = self._points.popleft()
+        point = self._points[0]
+        if point.asset_id != self._active_asset_id:
+            raise RuntimeError(
+                f"restore point needs asset {point.asset_id}, active asset is "
+                f"{self._active_asset_id}"
+            )
+        self._points.popleft()
         return self._restore(runtime, point)
 
     def restore_current(self, runtime) -> RestorationPoint | None:
@@ -272,6 +373,7 @@ def _point(
     raw: object,
     *,
     kind: Literal["human_intervention", "task_continuation"],
+    asset_id: str,
     source_run_id: str | None = None,
     source_rollout_root: Path | None = None,
     source_rollout_meta_sha256: str | None = None,
@@ -294,6 +396,7 @@ def _point(
         raise ValueError("restore trajectory must be an absolute non-symlink path")
     return RestorationPoint(
         kind=kind,
+        asset_id=asset_id,
         source_episode_id=str(raw["source_episode_id"]),
         source_sample_index=sample,
         trajectory=path.resolve(),
@@ -327,6 +430,8 @@ def _readers(
             raise ValueError("restore source task does not match its plan")
         if manifest.scene.robot_id != "piper":
             raise ValueError("restore source robot is not Piper")
+        if manifest.metadata.get("asset_id") != point.asset_id:
+            raise ValueError("restore source garment asset does not match its plan")
         if not np.isclose(manifest.control_fps, runtime.spec.control_fps, rtol=0.0, atol=1e-9):
             raise ValueError("restore source control FPS differs from the runtime")
         if manifest.sim_substeps != runtime.spec.sim_substeps:

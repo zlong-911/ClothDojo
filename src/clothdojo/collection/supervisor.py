@@ -194,6 +194,14 @@ class TeleopSupervisor:
             with closing(self._connect()) as database:
                 database.execute("BEGIN IMMEDIATE")
                 slot = self._select_slot(database, slot_id)
+                if (
+                    intervention_plan is not None
+                    and len(intervention_plan.get("assets", ())) > 1
+                    and slot["standby_gpu_id"] is None
+                ):
+                    raise RuntimeError(
+                        "cross-asset intervention requires a standby GPU"
+                    )
                 session_root = self.sessions_root / session_id
                 status_path = session_root / "status.json"
                 log_path = session_root / "teleop.log"

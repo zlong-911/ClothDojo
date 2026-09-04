@@ -23,7 +23,7 @@ from clothdojo.trajectory import TrajectoryReader
 HIL_REVIEW_SCHEMA = "clothdojo_hil_review_v3"
 PREVIOUS_HIL_REVIEW_SCHEMA = "clothdojo_hil_review_v2"
 LEGACY_HIL_REVIEW_SCHEMA = "clothdojo_hil_review_v1"
-INTERVENTION_PLAN_SCHEMA = "clothdojo_intervention_plan_v2"
+INTERVENTION_PLAN_SCHEMA = "clothdojo_intervention_plan_v3"
 HIL_ROLLOUT_PLAN_SCHEMA = "clothdojo_hil_rollout_plan"
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 
@@ -341,8 +341,7 @@ class HILCatalog:
         run_cache: dict[str, tuple[Path, dict[str, Any], dict[str, dict[str, Any]]]] = {}
         run_provenance: dict[str, dict[str, str]] = {}
         normalized = []
-        asset_id: str | None = None
-        runtime: dict[str, Any] | None = None
+        asset_runtime: dict[str, dict[str, Any]] = {}
         for raw in breakpoints:
             if not isinstance(raw, dict) or set(raw) != {
                 "run_id",
@@ -376,10 +375,6 @@ class HILCatalog:
                     f"breakpoint is outside rollout trajectory: {episode_id}:{sample_index}"
                 )
             current_asset = str(item["asset_id"])
-            if asset_id is None:
-                asset_id = current_asset
-            elif asset_id != current_asset:
-                raise ValueError("one intervention plan cannot mix garment assets")
             trajectory = root / item["path"]
             reader = TrajectoryReader(trajectory)
             current_runtime = {
@@ -389,12 +384,12 @@ class HILCatalog:
                 "sim_substeps": reader.manifest.sim_substeps,
                 "asset_fingerprints": reader.manifest.scene.asset_fingerprints,
             }
-            if runtime is None:
-                runtime = current_runtime
-            elif runtime != current_runtime:
-                raise ValueError("one intervention plan cannot mix runtime identities")
+            previous_runtime = asset_runtime.setdefault(current_asset, current_runtime)
+            if previous_runtime != current_runtime:
+                raise ValueError("one garment asset cannot mix runtime identities")
             normalized.append(
                 {
+                    "asset_id": current_asset,
                     "source_run_id": run_id,
                     "source_episode_id": episode_id,
                     "source_sample_index": sample_index,
@@ -402,11 +397,16 @@ class HILCatalog:
                     "manifest_sha256": _sha256(trajectory / "manifest.json"),
                 }
             )
+        asset_order = {asset_id: index for index, asset_id in enumerate(asset_runtime)}
+        normalized.sort(key=lambda item: asset_order[str(item["asset_id"])])
         return {
             "schema": INTERVENTION_PLAN_SCHEMA,
             "profile_id": self.profile.id,
-            "asset_id": asset_id,
-            "runtime": runtime,
+            "asset_id": normalized[0]["asset_id"],
+            "assets": [
+                {"asset_id": asset_id, "runtime": runtime}
+                for asset_id, runtime in asset_runtime.items()
+            ],
             "runs": list(run_provenance.values()),
             "breakpoints": normalized,
         }
