@@ -21,7 +21,7 @@ from clothdojo.assets import GarmentLibrary
 from clothdojo.collection.config import CollectionConfig
 from clothdojo.collection.continuation import build_continuation_plan
 from clothdojo.teleop.install import TeleopInstallation
-from clothdojo.teleop.session import SessionPlan
+from clothdojo.teleop.session import AssetSwitchRequest, SessionPlan
 
 ACTIVE_STATES = ("starting", "waiting_for_vr", "collecting", "stopping")
 TERMINAL_STATES = ("stopped", "failed")
@@ -240,6 +240,7 @@ class TeleopSupervisor:
                     session_root=session_root,
                     status_path=status_path,
                     gpu_id=int(slot["gpu_id"]),
+                    standby_gpu_id=slot["standby_gpu_id"],
                     endpoint=str(slot["endpoint"]),
                     signaling_port=int(slot["signaling_port"]),
                     media_port=int(slot["media_port"]),
@@ -251,14 +252,15 @@ class TeleopSupervisor:
                 database.execute(
                     """
                     INSERT INTO sessions (
-                        id, slot_id, gpu_id, profile_id, asset_id, mode, status,
+                        id, slot_id, gpu_id, standby_gpu_id, profile_id, asset_id, mode, status,
                         endpoint, output_root, plan_path, status_path, log_path, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, 'starting', ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'starting', ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         session_id,
                         slot["id"],
                         slot["gpu_id"],
+                        slot["standby_gpu_id"],
                         profile_id,
                         asset_id,
                         mode,
@@ -309,6 +311,46 @@ class TeleopSupervisor:
                 database.commit()
         return self.session(session_id)
 
+    def request_asset_switch(self, session_id: str, asset_id: str) -> dict[str, Any]:
+        """Atomically request a hot asset replacement in a live collection session."""
+
+        asset_id = _identifier(asset_id, "asset_id")
+        asset_path = GarmentLibrary(self.config.assets_root).converted(asset_id)
+        self.reconcile()
+        with self._lock:
+            row = self._session_row(session_id)
+            if row["status"] not in {"waiting_for_vr", "collecting"}:
+                raise RuntimeError("asset switching requires a running teleoperation session")
+            if row["mode"] != "collection":
+                raise RuntimeError("asset switching is not available during intervention")
+            plan = SessionPlan.read(row["plan_path"])
+            if plan.standby_gpu_id is None:
+                raise RuntimeError("this teleoperation slot has no standby GPU")
+            if plan.continuation_plan is not None:
+                raise RuntimeError("asset switching is not available during continuation")
+            status = _read_status(Path(row["status_path"])) or {}
+            current_asset = str(status.get("asset_id") or row["asset_id"])
+            if asset_id == current_asset:
+                raise ValueError(f"asset {asset_id} is already active")
+            if status.get("recording") or status.get("recording_finalizing"):
+                raise RuntimeError("finish saving the current recording before switching assets")
+            request_path = plan.switch_request_path
+            if request_path.exists():
+                raise RuntimeError("an asset switch is already pending")
+            request = AssetSwitchRequest(
+                request_id=uuid.uuid4().hex,
+                session_id=session_id,
+                asset_id=asset_id,
+                asset_path=asset_path,
+                requested_at=_utc_now(),
+            )
+            request.write(request_path)
+        return {
+            "request_id": request.request_id,
+            "session_id": session_id,
+            "asset_id": asset_id,
+        }
+
     def stop_session(self, session_id: str) -> dict[str, Any]:
         row = self._session_row(session_id)
         if row["status"] in TERMINAL_STATES:
@@ -357,6 +399,9 @@ class TeleopSupervisor:
                 session_id = str(row["id"])
                 runtime_status = _read_status(Path(row["status_path"]))
                 reported = None if runtime_status is None else runtime_status.get("state")
+                reported_asset = (
+                    None if runtime_status is None else runtime_status.get("asset_id")
+                )
                 if (
                     reported in ACTIVE_STATES
                     and reported != row["status"]
@@ -369,6 +414,14 @@ class TeleopSupervisor:
                         )
                         database.commit()
                     row["status"] = reported
+                if reported_asset is not None and reported_asset != row["asset_id"]:
+                    with closing(self._connect()) as database:
+                        database.execute(
+                            "UPDATE sessions SET asset_id = ? WHERE id = ?",
+                            (reported_asset, session_id),
+                        )
+                        database.commit()
+                    row["asset_id"] = reported_asset
                 process = self._processes.get(session_id)
                 if process is not None:
                     exit_code = process.poll()
@@ -428,6 +481,7 @@ class TeleopSupervisor:
                 "id",
                 "slot_id",
                 "gpu_id",
+                "standby_gpu_id",
                 "profile_id",
                 "asset_id",
                 "mode",
@@ -447,6 +501,11 @@ class TeleopSupervisor:
         if status is not None:
             for key in (
                 "phase",
+                "asset_id",
+                "active_gpu_id",
+                "standby_gpu_id",
+                "asset_switch_phase",
+                "asset_switch_error",
                 "teleop_state",
                 "recording",
                 "recording_finalizing",
@@ -473,16 +532,25 @@ class TeleopSupervisor:
 
     def _slot_specs(self) -> list[dict[str, Any]]:
         host = _client_host(self.config.teleoperation.client_host)
+        standby_gpu_ids: tuple[int | None, ...] = (
+            self.config.teleoperation.standby_gpu_ids
+            or (None,) * len(self.config.teleoperation.gpu_ids)
+        )
         return [
             {
                 "id": f"gpu-{gpu_id}",
                 "gpu_id": gpu_id,
+                "standby_gpu_id": standby_gpu_id,
                 "endpoint": f"{host}:{PROXY_PORT}",
                 "signaling_port": SIGNALING_PORT + gpu_id * PORT_STRIDE,
                 "media_port": MEDIA_PORT + gpu_id * PORT_STRIDE,
                 "proxy_port": PROXY_PORT,
             }
-            for gpu_id in self.config.teleoperation.gpu_ids
+            for gpu_id, standby_gpu_id in zip(
+                self.config.teleoperation.gpu_ids,
+                standby_gpu_ids,
+                strict=True,
+            )
         ]
 
     def _slot(self, slot_id: str) -> dict[str, Any]:
@@ -554,6 +622,7 @@ class TeleopSupervisor:
                     id TEXT PRIMARY KEY,
                     slot_id TEXT NOT NULL,
                     gpu_id INTEGER NOT NULL,
+                    standby_gpu_id INTEGER,
                     profile_id TEXT NOT NULL,
                     asset_id TEXT NOT NULL,
                     mode TEXT NOT NULL,
@@ -583,6 +652,12 @@ class TeleopSupervisor:
                 );
                 """
             )
+            columns = {
+                str(row[1]) for row in database.execute("PRAGMA table_info(sessions)")
+            }
+            if "standby_gpu_id" not in columns:
+                database.execute("ALTER TABLE sessions ADD COLUMN standby_gpu_id INTEGER")
+                database.commit()
 
     def _connect(self) -> sqlite3.Connection:
         database = sqlite3.connect(self.database_path, timeout=10.0)

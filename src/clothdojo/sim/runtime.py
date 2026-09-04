@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import gc
+
 import numpy as np
 import warp as wp
 
@@ -141,6 +143,27 @@ def _prune_static_soft_contact_pairs(model, collision_pipeline) -> None:
     )
     collision_pipeline._soft_rigid_contact_pair_count = len(filtered)
     collision_pipeline._soft_contact_max = len(filtered) + full_surface_count
+
+
+def _clear_articulation_view_caches(scene: ShirtFlattenScene) -> None:
+    """Drop Newton 1.5's process-wide selection caches.
+
+    Newton decorates instance methods on ``ArticulationView`` with unbounded
+    ``functools`` caches.  Their keys retain the view and model after a runtime
+    is discarded.  Clearing a cache may evict entries for another live view,
+    but it does not invalidate arrays already returned to that view; a later
+    lookup simply rebuilds its entry.
+    """
+
+    view_types = {
+        type(view) for view in (scene.robot, scene.arms, scene.grippers, scene.end_effectors)
+    }
+    for view_type in view_types:
+        for method_name in ("_get_attribute_array", "_get_actuator_dof_mapping"):
+            method = getattr(view_type, method_name, None)
+            cache_clear = getattr(method, "cache_clear", None)
+            if cache_clear is not None:
+                cache_clear()
 
 
 class ShirtFlattenRuntime:
@@ -315,6 +338,34 @@ class ShirtFlattenRuntime:
             with wp.ScopedCapture(device=self.model.device, force_module_load=False) as capture:
                 self._restore_rigid_buffers(self._restore_joint_q, self._restore_joint_qd)
             self._rigid_restore_graph = capture.graph
+
+    @property
+    def closed(self) -> bool:
+        """Whether this runtime has released its owned simulation resources."""
+
+        return getattr(self, "_closed", False)
+
+    def close(self) -> None:
+        """Synchronously release this runtime's CPU and GPU resources.
+
+        A closed runtime cannot be used again.  The collection process keeps
+        another runtime alive while calling this method during an asset swap,
+        so teardown must not reset Warp or the CUDA device globally.
+        """
+
+        if self.closed:
+            return
+        device = self.model.device
+        wp.synchronize_device(device)
+        _clear_articulation_view_caches(self.scene)
+
+        # Break every ownership edge, including CUDA graphs and solver/model
+        # cycles.  Keeping an explicit attribute list here would silently leak
+        # newly added buffers in future runtime revisions.
+        self.__dict__.clear()
+        self._closed = True
+        gc.collect()
+        wp.synchronize_device(device)
 
     @property
     def control_dt(self) -> float:

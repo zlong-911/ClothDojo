@@ -239,11 +239,16 @@ class CollectionWorkspace:
     def slots(self) -> list[dict[str, Any]]:
         if self.supervisor is not None:
             return self.supervisor.slots()
+        standby_gpu_ids: tuple[int | None, ...] = (
+            self.config.teleoperation.standby_gpu_ids
+            or (None,) * len(self.config.teleoperation.gpu_ids)
+        )
         return [
             {
                 "id": f"gpu-{gpu_id}",
                 "worker_id": None,
                 "gpu_id": gpu_id,
+                "standby_gpu_id": standby_gpu_id,
                 "status": "offline",
                 "error": "Isaac Teleop supervisor is not configured",
                 "endpoint": None,
@@ -251,7 +256,11 @@ class CollectionWorkspace:
                 "session": None,
                 "export": None,
             }
-            for gpu_id in self.config.teleoperation.gpu_ids
+            for gpu_id, standby_gpu_id in zip(
+                self.config.teleoperation.gpu_ids,
+                standby_gpu_ids,
+                strict=True,
+            )
         ]
 
     def primary_hil_camera(

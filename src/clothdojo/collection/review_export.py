@@ -55,7 +55,7 @@ class ReviewExportManager:
             if self._job is None:
                 return {
                     "status": "idle",
-                    "excluded_gpu_ids": list(self.config.teleoperation.gpu_ids),
+                    "excluded_gpu_ids": list(self.config.teleoperation.reserved_gpu_ids),
                 }
             return _public_job(self._job)
 
@@ -63,7 +63,7 @@ class ReviewExportManager:
         work = _all_review_work(self.config)
         if not work:
             raise ValueError("no completed trajectories are configured for review export")
-        excluded = set(self.config.teleoperation.gpu_ids)
+        excluded = set(self.config.teleoperation.reserved_gpu_ids)
         gpu_ids = [gpu_id for gpu_id in self._gpu_detector() if gpu_id not in excluded]
         if not gpu_ids:
             raise RuntimeError("no non-teleop NVIDIA GPU is available for review export")
@@ -93,7 +93,7 @@ class ReviewExportManager:
             "trajectory_count": len(work),
             "completed_trajectory_count": 0,
             "gpu_ids": [worker["gpu_id"] for worker in workers],
-            "excluded_gpu_ids": list(self.config.teleoperation.gpu_ids),
+            "excluded_gpu_ids": list(self.config.teleoperation.reserved_gpu_ids),
             "workers": workers,
             "error": None,
             "created_at": _utc_now(),

@@ -54,7 +54,13 @@ class XRAnchorRuntime:
         self._post_sync_subscription.unsubscribe()
 
 
-def build_render_stage(runtime, plan, *, cloth_visual: str = "nocs") -> Path:
+def build_render_stage(
+    runtime,
+    plan,
+    *,
+    cloth_visual: str = "nocs",
+    output_path: str | Path | None = None,
+) -> Path:
     """Author the visual-only stage consumed by Isaac RTX/OpenXR."""
     return _build_render_stage(
         runtime.spec,
@@ -62,6 +68,7 @@ def build_render_stage(runtime, plan, *, cloth_visual: str = "nocs") -> Path:
         plan,
         cloth_visual=cloth_visual,
         robot_profile=runtime.scene.robot_profile,
+        output_path=output_path,
     )
 
 
@@ -91,6 +98,7 @@ def _build_render_stage(
     *,
     cloth_visual: str,
     robot_profile,
+    output_path: str | Path | None = None,
 ) -> Path:
     from pxr import Gf, Usd, UsdGeom, UsdLux, UsdShade, Vt
 
@@ -99,8 +107,13 @@ def _build_render_stage(
     if cloth_visual not in {"normal", "nocs"}:
         raise ValueError("cloth_visual must be 'normal' or 'nocs'")
 
-    output_path = plan.session_root / "teleop_stage.usda"
+    output_path = (
+        plan.session_root / "teleop_stage.usda"
+        if output_path is None
+        else Path(output_path).expanduser().resolve()
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.unlink(missing_ok=True)
     stage = Usd.Stage.CreateNew(str(output_path))
     world = UsdGeom.Xform.Define(stage, "/World")
     stage.SetDefaultPrim(world.GetPrim())

@@ -11,11 +11,12 @@ import sys
 import threading
 import time
 import traceback
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
 
-from clothdojo.teleop.session import SessionPlan, SessionStatusWriter
+from clothdojo.teleop.session import AssetSwitchRequest, SessionPlan, SessionStatusWriter
 
 
 def _configure_openusd_startup() -> None:
@@ -44,7 +45,13 @@ def main() -> None:
     try:
         if plan.mode == "intervention" and plan.intervention_plan is None:
             raise RuntimeError("an intervention session requires a cold-restore plan")
-        status.write("starting", phase="starting_isaac", gpu_id=plan.gpu_id)
+        status.write(
+            "starting",
+            phase="starting_isaac",
+            gpu_id=plan.gpu_id,
+            standby_gpu_id=plan.standby_gpu_id,
+            asset_id=plan.asset_id,
+        )
         os.environ.setdefault("OMNI_KIT_ACCEPT_EULA", "yes")
         portable = Path(os.environ.get("XDG_CACHE_HOME", plan.session_root)) / "kit-portable"
         portable.mkdir(parents=True, exist_ok=True)
@@ -58,7 +65,13 @@ def main() -> None:
             _simulation_app_config(plan, isaac_root),
             experience=str(Path(__file__).with_name("teleop.kit")),
         )
-        status.write("starting", phase="building_newton", gpu_id=plan.gpu_id)
+        status.write(
+            "starting",
+            phase="building_newton",
+            gpu_id=plan.gpu_id,
+            standby_gpu_id=plan.standby_gpu_id,
+            asset_id=plan.asset_id,
+        )
         runtime = _build_newton_runtime(plan)
         _run(app, runtime, plan, status, stop)
         status.write("stopped", phase="operator_stop" if stop.is_set() else "app_exit")
@@ -73,16 +86,22 @@ def main() -> None:
             app.close()
 
 
-def _build_newton_runtime(plan: SessionPlan):
+def _build_newton_runtime(plan: SessionPlan, *, gpu_id: int | None = None):
     """Build physics after Kit startup but before any ClothDojo USD import."""
 
     import warp as wp
 
-    device = wp.get_device()
-    if not device.is_cuda or device.ordinal != plan.gpu_id:
+    physics_gpu_id = plan.gpu_id if gpu_id is None else int(gpu_id)
+    device = wp.get_device(f"cuda:{physics_gpu_id}")
+    if not device.is_cuda or device.ordinal != physics_gpu_id:
+        raise RuntimeError(
+            "Warp could not resolve the requested physics GPU: "
+            f"expected cuda:{physics_gpu_id}, got {device}"
+        )
+    if gpu_id is None and wp.get_device() != device:
         raise RuntimeError(
             "Warp did not adopt Kit's active GPU context: "
-            f"expected cuda:{plan.gpu_id}, got {device}"
+            f"expected {device}, got {wp.get_device()}"
         )
     from clothdojo.sim.runtime import ShirtFlattenRuntime
     from clothdojo.sim.scene import ShirtFlattenSpec, build_scene
@@ -106,6 +125,20 @@ def _build_newton_runtime(plan: SessionPlan):
             flush=True,
         )
         return runtime
+
+
+def _render_stage_path(plan: SessionPlan, gpu_id: int) -> Path:
+    return plan.session_root / f"teleop-stage-gpu-{gpu_id}.usda"
+
+
+def _read_asset_switch(plan: SessionPlan) -> AssetSwitchRequest | None:
+    try:
+        request = AssetSwitchRequest.read(plan.switch_request_path)
+    except FileNotFoundError:
+        return None
+    if request.session_id != plan.session_id:
+        raise ValueError("asset switch request belongs to another session")
+    return request
 
 
 def _simulation_app_config(plan: SessionPlan, isaac_root: Path) -> dict:
@@ -164,7 +197,15 @@ def _run(
     from clothdojo.teleop.recording import TeleopRecorder
     from clothdojo.teleop.restoration import RestorationQueue
 
-    stage_path = build_render_stage(runtime, plan)
+    active_gpu_id = plan.gpu_id
+    inactive_gpu_id = plan.standby_gpu_id
+    asset_switch_phase = None
+    asset_switch_error = None
+    stage_path = build_render_stage(
+        runtime,
+        plan,
+        output_path=_render_stage_path(plan, active_gpu_id),
+    )
     context = omni.usd.get_context()
     if not context.open_stage(str(stage_path)):
         raise RuntimeError(f"Isaac could not open render stage: {stage_path}")
@@ -181,7 +222,13 @@ def _run(
         (-0.3, 0.0, 1.45),
         (0.65, 0.0, 0.8),
     )
-    status.write("waiting_for_vr", gpu_id=plan.gpu_id)
+    status.write(
+        "waiting_for_vr",
+        gpu_id=plan.gpu_id,
+        standby_gpu_id=inactive_gpu_id,
+        active_gpu_id=active_gpu_id,
+        asset_id=plan.asset_id,
+    )
     backend = IsaacOpenXRBackend()
     ik = DualArmIKController(runtime, iterations=10)
     left_home, right_home = ik.measured_pose_matrices()
@@ -233,6 +280,15 @@ def _run(
     current_origin = None
     completed_attempt = None
     advance_after_finalize = False
+
+    def asset_status() -> dict[str, object]:
+        return {
+            "asset_id": plan.asset_id,
+            "active_gpu_id": active_gpu_id,
+            "standby_gpu_id": inactive_gpu_id,
+            "asset_switch_phase": asset_switch_phase,
+            "asset_switch_error": asset_switch_error,
+        }
 
     def prepare_restored_point(point, *, preserve_completed: bool = False) -> bool:
         nonlocal arm_command, current_origin, restoration_phase, completed_attempt
@@ -326,6 +382,209 @@ def _run(
         while app.is_running() and not stop.is_set():
             frame_started = time.perf_counter()
             now = time.monotonic()
+            try:
+                switch_request = _read_asset_switch(plan)
+            except (OSError, ValueError) as exc:
+                asset_switch_phase = "failed"
+                asset_switch_error = f"{type(exc).__name__}: {exc}"
+                plan.switch_request_path.unlink(missing_ok=True)
+                print(f"  [ASSET] rejected switch request: {asset_switch_error}", flush=True)
+                switch_request = None
+            if switch_request is not None:
+                candidate_runtime = None
+                candidate_anchor = None
+                candidate_ik = None
+                candidate_controller = None
+                candidate_bridge = None
+                candidate_recorder = None
+                candidate_grasp_probe = None
+                stage_switched = False
+                try:
+                    if inactive_gpu_id is None:
+                        raise RuntimeError("the current slot has no standby GPU")
+                    if recorder.is_recording or recorder.is_finalizing:
+                        raise RuntimeError("finish saving before switching assets")
+                    if restore_queue is not None:
+                        raise RuntimeError(
+                            "asset switching is unavailable while a restore queue is active"
+                        )
+                    asset_switch_phase = "building"
+                    asset_switch_error = None
+                    status.write(
+                        "collecting" if previous_connected else "waiting_for_vr",
+                        gpu_id=plan.gpu_id,
+                        requested_asset_id=switch_request.asset_id,
+                        **asset_status(),
+                    )
+                    backend.set_grasp_haptics(False, False)
+                    print(
+                        f"  [ASSET] building {switch_request.asset_id} on "
+                        f"cuda:{inactive_gpu_id}",
+                        flush=True,
+                    )
+                    candidate_plan = replace(
+                        plan,
+                        asset_id=switch_request.asset_id,
+                        asset_path=switch_request.asset_path,
+                    )
+                    candidate_runtime = _build_newton_runtime(
+                        candidate_plan,
+                        gpu_id=inactive_gpu_id,
+                    )
+                    candidate_stage_path = build_render_stage(
+                        candidate_runtime,
+                        candidate_plan,
+                        output_path=_render_stage_path(candidate_plan, inactive_gpu_id),
+                    )
+                    candidate_ik = DualArmIKController(candidate_runtime, iterations=10)
+                    candidate_left_home, candidate_right_home = (
+                        candidate_ik.measured_pose_matrices()
+                    )
+                    candidate_controller = BimanualTeleopController(
+                        candidate_left_home,
+                        candidate_right_home,
+                        TeleopSafetyConfig(
+                            ee_min_x_m=0.0,
+                            ee_min_z_m=0.82,
+                            stale_after_s=0.15,
+                            clutch_threshold=0.5,
+                            translation_scale=1.0,
+                        ),
+                    )
+                    candidate_arm_command = candidate_ik.solve()
+                    candidate_gripper_command = wp.ones(
+                        (1, 2),
+                        dtype=wp.float32,
+                        device=candidate_runtime.model.device,
+                    )
+                    wp.synchronize_device(candidate_runtime.model.device)
+
+                    asset_switch_phase = "opening_stage"
+                    status.write(
+                        "collecting" if previous_connected else "waiting_for_vr",
+                        gpu_id=plan.gpu_id,
+                        requested_asset_id=switch_request.asset_id,
+                        **asset_status(),
+                    )
+                    if not context.open_stage(str(candidate_stage_path)):
+                        raise RuntimeError(
+                            f"Isaac could not open candidate stage: {candidate_stage_path}"
+                        )
+                    stage_switched = True
+                    for _ in range(30):
+                        app.update()
+                    candidate_stage = context.get_stage()
+                    if candidate_stage is None:
+                        raise RuntimeError("Isaac USD context has no candidate stage")
+                    candidate_bridge = NewtonFabricBridge(
+                        candidate_runtime.model,
+                        context,
+                        device=candidate_runtime.model.device,
+                    )
+                    candidate_anchor = configure_xr(
+                        app,
+                        candidate_stage,
+                        (-0.3, 0.0, 1.45),
+                        (0.65, 0.0, 0.8),
+                    )
+                    candidate_anchor.rebind()
+                    candidate_recorder = TeleopRecorder(candidate_runtime, candidate_plan)
+                    candidate_grasp_probe = candidate_runtime.grasp.region_probe()
+                except Exception as exc:
+                    asset_switch_phase = "failed"
+                    asset_switch_error = f"{type(exc).__name__}: {exc}"
+                    print(
+                        f"  [ASSET] switch to {switch_request.asset_id} failed; "
+                        f"keeping {plan.asset_id}: {asset_switch_error}",
+                        flush=True,
+                    )
+                    if candidate_anchor is not None:
+                        candidate_anchor.close()
+                    if stage_switched:
+                        if not context.open_stage(str(stage_path)):
+                            raise RuntimeError(
+                                f"Isaac could not restore active stage: {stage_path}"
+                            ) from exc
+                        for _ in range(30):
+                            app.update()
+                        restored_stage = context.get_stage()
+                        if restored_stage is None:
+                            raise RuntimeError("Isaac USD context lost the active stage") from exc
+                        bridge = NewtonFabricBridge(runtime.model, context, device=device)
+                        restored_anchor = configure_xr(
+                            app,
+                            restored_stage,
+                            (-0.3, 0.0, 1.45),
+                            (0.65, 0.0, 0.8),
+                        )
+                        restored_anchor.rebind()
+                        anchor.close()
+                        anchor = restored_anchor
+                    candidate_ik = None
+                    candidate_controller = None
+                    candidate_bridge = None
+                    candidate_recorder = None
+                    candidate_grasp_probe = None
+                    if candidate_runtime is not None:
+                        candidate_runtime.close()
+                    status.write(
+                        "collecting" if previous_connected else "waiting_for_vr",
+                        gpu_id=plan.gpu_id,
+                        **asset_status(),
+                    )
+                else:
+                    old_runtime = runtime
+                    old_recorder = recorder
+                    old_anchor = anchor
+                    old_stage_path = stage_path
+                    completed_on_switch = old_recorder.close()
+                    if completed_on_switch is not None:
+                        print(f"  [REC] saved {completed_on_switch}", flush=True)
+
+                    runtime = candidate_runtime
+                    plan = candidate_plan
+                    stage_path = candidate_stage_path
+                    device = runtime.model.device
+                    bridge = candidate_bridge
+                    anchor = candidate_anchor
+                    ik = candidate_ik
+                    controller = candidate_controller
+                    recorder = candidate_recorder
+                    grasp_probe = candidate_grasp_probe
+                    arm_command = candidate_arm_command
+                    gripper_command = candidate_gripper_command
+                    left_home = candidate_left_home
+                    right_home = candidate_right_home
+                    last_left_target = left_home.copy()
+                    last_right_target = right_home.copy()
+                    left_return.clear()
+                    right_return.clear()
+                    edges = ButtonEdges()
+                    current_origin = None
+                    completed_attempt = None
+                    restoration_phase = None
+                    advance_after_finalize = False
+                    active_gpu_id, inactive_gpu_id = inactive_gpu_id, active_gpu_id
+                    asset_switch_phase = "complete"
+                    asset_switch_error = None
+                    last_step = time.monotonic()
+                    old_anchor.close()
+                    old_runtime.close()
+                    old_stage_path.unlink(missing_ok=True)
+                    del old_runtime, old_recorder, old_anchor, old_stage_path
+                    print(
+                        f"  [ASSET] active={plan.asset_id} on cuda:{active_gpu_id}; "
+                        f"standby=cuda:{inactive_gpu_id}",
+                        flush=True,
+                    )
+                    status.write(
+                        "collecting" if previous_connected else "waiting_for_vr",
+                        gpu_id=plan.gpu_id,
+                        **asset_status(),
+                    )
+                finally:
+                    plan.switch_request_path.unlink(missing_ok=True)
+                now = time.monotonic()
             had_finalization = recorder.is_finalizing
             completed = recorder.poll_finalization()
             if completed is not None:
@@ -487,6 +746,7 @@ def _run(
                         recording_frames=recorder.frame_count,
                         frame=frame_index,
                         **restoration_status(),
+                        **asset_status(),
                     )
                     next_status = time.monotonic() + 1.0
                 continue
@@ -556,6 +816,7 @@ def _run(
                     fabric_submit_ms=1000.0 * report_seconds["fabric_submit"] / divisor,
                     app_ms=1000.0 * report_seconds["app"] / divisor,
                     **restoration_status(),
+                    **asset_status(),
                 )
                 next_status = status_now + 1.0
                 report_started = status_now

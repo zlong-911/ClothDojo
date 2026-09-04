@@ -200,6 +200,10 @@ class StartSessionRequest(BaseModel):
     asset_id: str = Field(min_length=1, max_length=160)
 
 
+class SwitchSessionAssetRequest(BaseModel):
+    asset_id: str = Field(min_length=1, max_length=160)
+
+
 def create_app(config_path: str | Path):
     try:
         from fastapi import FastAPI, HTTPException, Request
@@ -612,6 +616,30 @@ def create_app(config_path: str | Path):
             return result
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/sessions/{session_id}/asset", status_code=202)
+    async def workspace_switch_session_asset(
+        session_id: str,
+        request: SwitchSessionAssetRequest,
+    ):
+        collectable = await asyncio.to_thread(assets.library.collectable_ids)
+        if request.asset_id not in set(collectable):
+            raise HTTPException(
+                status_code=409,
+                detail="asset is rejected, missing, or not converted",
+            )
+        try:
+            result = await asyncio.to_thread(
+                supervisor.request_asset_switch,
+                session_id,
+                request.asset_id,
+            )
+            snapshot_cache.invalidate()
+            return result
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.get("/api/sessions/{session_id}/log")
     async def workspace_session_log(session_id: str):

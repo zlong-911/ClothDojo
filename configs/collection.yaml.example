@@ -9,7 +9,8 @@ listen:
 # Runtime paths, libraries and ports are deliberately not configurable here.
 teleoperation:
   client_host: auto
-  gpu_ids: [0, 1]
+  gpu_ids: [0]
+  standby_gpu_ids: [1]
 
 profiles:
   shirt_flatten:

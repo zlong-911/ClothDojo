@@ -26,7 +26,7 @@ from clothdojo.collection.supervisor import NoAvailableSlotError, TeleopSupervis
 from clothdojo.collection.web import build_cloudxr_client_url, create_app
 from clothdojo.collection.workspace import CollectionWorkspace
 from clothdojo.teleop.install import TeleopInstallation
-from clothdojo.teleop.session import SessionPlan, SessionStatusWriter
+from clothdojo.teleop.session import AssetSwitchRequest, SessionPlan, SessionStatusWriter
 
 
 def _manifest(path: Path, *, asset_id: str = "shirt_a", actions: int = 5) -> None:
@@ -82,6 +82,7 @@ listen: {host: 127.0.0.1, port: 8080}
 teleoperation:
   client_host: 10.0.0.8
   gpu_ids: [0, 2]
+  standby_gpu_ids: [1, 3]
 profiles:
   shirt_flatten:
     display_name: T 恤展平
@@ -102,6 +103,7 @@ profiles:
         tmp_path / "data/collections/shirt_flatten/hil/trajectories"
     )
     assert config.teleoperation.gpu_ids == (0, 2)
+    assert config.teleoperation.standby_gpu_ids == (1, 3)
     assert config.teleoperation.client_host == "10.0.0.8"
 
 
@@ -609,6 +611,7 @@ def test_collection_console_preserves_old_workspace_design() -> None:
     assert "function deleteEpisode" not in script
     assert "function startReviewExport" in script
     assert 'request("/api/review-export",{method:"POST"})' in script
+    assert 'request(`/api/sessions/${encodeURIComponent(id)}/asset`' in script
     assert "left.collected_at||left.id" in script
     assert ".runtime{" in styles
     assert ".review-pane-actions button{flex:0 0 auto;white-space:nowrap}" in styles
@@ -758,6 +761,7 @@ profiles:
             "/api/assets",
             "/api/hil/snapshot",
             "/api/review-export",
+            "/api/sessions/{session_id}/asset",
         } <= api_routes
         assert client.get("/").status_code == 200
         assert "ClothDojo Collection" in client.get("/").text
@@ -886,7 +890,11 @@ def test_review_export_covers_all_sources_and_excludes_teleop_gpus(
         state_dir=tmp_path / "state",
         host="127.0.0.1",
         port=8080,
-        teleoperation=TeleoperationConfig(client_host="auto", gpu_ids=(0, 2)),
+        teleoperation=TeleoperationConfig(
+            client_host="auto",
+            gpu_ids=(0,),
+            standby_gpu_ids=(2,),
+        ),
         profiles={profile.id: profile},
     )
     commands = []
@@ -956,6 +964,7 @@ def test_session_plan_and_status_are_atomic(tmp_path: Path) -> None:
         media_port=33434,
         proxy_port=44401,
         max_actions=3600,
+        standby_gpu_id=1,
     )
     path = plan.write(tmp_path / "session/plan.json")
     assert SessionPlan.read(path) == plan
@@ -965,12 +974,24 @@ def test_session_plan_and_status_are_atomic(tmp_path: Path) -> None:
     assert payload["state"] == "waiting_for_vr"
     assert payload["sequence"] == 1
 
+    switch = AssetSwitchRequest(
+        request_id="switch_test",
+        session_id=plan.session_id,
+        asset_id="shirt_b",
+        asset_path=tmp_path / "shirt_b.usdc",
+        requested_at="2026-09-04T00:00:00+00:00",
+    )
+    assert AssetSwitchRequest.read(switch.write(plan.switch_request_path)) == switch
+
 
 def test_local_supervisor_leases_gpu_and_stops_process(tmp_path: Path) -> None:
     assets_root = tmp_path / "assets"
     converted = assets_root / "garments/converted/shirt_a"
     converted.mkdir(parents=True)
     (converted / "shirt_a.usdc").write_bytes(b"usd")
+    converted_b = assets_root / "garments/converted/shirt_b"
+    converted_b.mkdir(parents=True)
+    (converted_b / "shirt_b.usdc").write_bytes(b"usd")
     profile = _profile(tmp_path)
     fold_profile = CollectionProfile(
         id="shirt_fold",
@@ -988,7 +1009,11 @@ def test_local_supervisor_leases_gpu_and_stops_process(tmp_path: Path) -> None:
         state_dir=tmp_path / "outputs/collection",
         host="127.0.0.1",
         port=8080,
-        teleoperation=TeleoperationConfig(client_host="10.0.0.8", gpu_ids=(0,)),
+        teleoperation=TeleoperationConfig(
+            client_host="10.0.0.8",
+            gpu_ids=(0,),
+            standby_gpu_ids=(1,),
+        ),
         profiles={profile.id: profile, fold_profile.id: fold_profile},
     )
     runtime_root = tmp_path / "teleop-runtime"
@@ -1031,6 +1056,7 @@ def test_local_supervisor_leases_gpu_and_stops_process(tmp_path: Path) -> None:
         config.state_dir / f"sessions/{session['id']}/plan.json"
     )
     assert session_plan.asset_id == "shirt_a"
+    assert session_plan.standby_gpu_id == 1
     assert session_plan.output_root == profile.trajectory_root
     SessionStatusWriter(
         config.state_dir / f"sessions/{session['id']}/status.json",
@@ -1054,6 +1080,21 @@ def test_local_supervisor_leases_gpu_and_stops_process(tmp_path: Path) -> None:
     assert reported["physics_submit_ms"] == 0.4
     assert reported["restoration_phase"] == "locked"
     assert reported["intervention_phase"] == "locked"
+    switch = supervisor.request_asset_switch(session["id"], "shirt_b")
+    assert switch["asset_id"] == "shirt_b"
+    switch_request = AssetSwitchRequest.read(session_plan.switch_request_path)
+    assert switch_request.session_id == session["id"]
+    assert switch_request.asset_id == "shirt_b"
+    with pytest.raises(RuntimeError, match="already pending"):
+        supervisor.request_asset_switch(session["id"], "shirt_b")
+    session_plan.switch_request_path.unlink()
+    SessionStatusWriter(
+        config.state_dir / f"sessions/{session['id']}/status.json",
+        session_id=session["id"],
+    ).write("collecting", asset_id="shirt_b", active_gpu_id=1, standby_gpu_id=0)
+    assert supervisor.session(session["id"])["asset_id"] == "shirt_b"
+    with pytest.raises(ValueError, match="already active"):
+        supervisor.request_asset_switch(session["id"], "shirt_b")
     supervisor.stop_session(session["id"])
     deadline = time.monotonic() + 5.0
     while time.monotonic() < deadline:
@@ -1121,6 +1162,7 @@ def test_local_supervisor_ports_are_stable_for_physical_gpu_ids(tmp_path: Path) 
         {
             "id": "gpu-2",
             "gpu_id": 2,
+            "standby_gpu_id": None,
             "endpoint": "10.0.0.8:44401",
             "signaling_port": 44408,
             "media_port": 33454,
@@ -1129,6 +1171,7 @@ def test_local_supervisor_ports_are_stable_for_physical_gpu_ids(tmp_path: Path) 
         {
             "id": "gpu-5",
             "gpu_id": 5,
+            "standby_gpu_id": None,
             "endpoint": "10.0.0.8:44401",
             "signaling_port": 44438,
             "media_port": 33484,

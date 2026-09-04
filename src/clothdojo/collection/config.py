@@ -15,12 +15,24 @@ class TeleoperationConfig:
 
     client_host: str
     gpu_ids: tuple[int, ...]
+    standby_gpu_ids: tuple[int, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.standby_gpu_ids and len(self.standby_gpu_ids) != len(self.gpu_ids):
+            raise ValueError("teleoperation standby_gpu_ids must match gpu_ids")
+        assigned = self.gpu_ids + self.standby_gpu_ids
+        if len(set(assigned)) != len(assigned):
+            raise ValueError("teleoperation GPUs must belong to only one slot")
 
     def for_client_host(self, host: str) -> TeleoperationConfig:
         host = host.strip()
         if not host:
             raise ValueError("XR client host must not be empty")
         return replace(self, client_host=host)
+
+    @property
+    def reserved_gpu_ids(self) -> tuple[int, ...]:
+        return self.gpu_ids + self.standby_gpu_ids
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,10 +101,20 @@ def load_config(path: str | Path) -> CollectionConfig:
     port = _port(listen["port"], "listen.port")
 
     teleoperation_value = _mapping(root["teleoperation"], "teleoperation")
-    _keys(teleoperation_value, {"client_host", "gpu_ids"}, "teleoperation")
+    _keys(
+        teleoperation_value,
+        {"client_host", "gpu_ids"},
+        "teleoperation",
+        optional={"standby_gpu_ids"},
+    )
     teleoperation = TeleoperationConfig(
         client_host=str(teleoperation_value["client_host"]).strip(),
         gpu_ids=_gpu_ids(teleoperation_value["gpu_ids"]),
+        standby_gpu_ids=(
+            ()
+            if "standby_gpu_ids" not in teleoperation_value
+            else _gpu_ids(teleoperation_value["standby_gpu_ids"], name="standby_gpu_ids")
+        ),
     )
     if not teleoperation.client_host:
         raise ValueError("teleoperation.client_host must not be empty")
@@ -212,12 +234,12 @@ def _port(value: object, name: str) -> int:
     return result
 
 
-def _gpu_ids(value: object) -> tuple[int, ...]:
+def _gpu_ids(value: object, *, name: str = "gpu_ids") -> tuple[int, ...]:
     if not isinstance(value, list) or not value:
-        raise ValueError("teleoperation.gpu_ids must be a non-empty list")
+        raise ValueError(f"teleoperation.{name} must be a non-empty list")
     if any(isinstance(item, bool) or not isinstance(item, int) or item < 0 for item in value):
-        raise ValueError("teleoperation.gpu_ids must contain non-negative integers")
+        raise ValueError(f"teleoperation.{name} must contain non-negative integers")
     result = tuple(value)
     if len(set(result)) != len(result):
-        raise ValueError("teleoperation.gpu_ids must not contain duplicates")
+        raise ValueError(f"teleoperation.{name} must not contain duplicates")
     return result

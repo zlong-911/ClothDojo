@@ -30,8 +30,13 @@ class SessionPlan:
     media_port: int
     proxy_port: int
     max_actions: int
+    standby_gpu_id: int | None = None
     intervention_plan: Path | None = None
     continuation_plan: Path | None = None
+
+    @property
+    def switch_request_path(self) -> Path:
+        return self.session_root / "asset-switch.json"
 
     def to_json_dict(self) -> dict[str, Any]:
         value = asdict(self)
@@ -70,6 +75,48 @@ class SessionPlan:
         ):
             if value.get(key) is not None:
                 value[key] = Path(value[key]).expanduser().resolve()
+        return cls(**value)
+
+
+@dataclass(frozen=True, slots=True)
+class AssetSwitchRequest:
+    """One server-authored request to replace a live collection asset."""
+
+    request_id: str
+    session_id: str
+    asset_id: str
+    asset_path: Path
+    requested_at: str
+
+    def write(self, path: str | Path) -> Path:
+        destination = Path(path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.with_name(f".{destination.name}.tmp")
+        payload = {
+            "schema": "clothdojo_asset_switch",
+            "format_version": 1,
+            "request_id": self.request_id,
+            "session_id": self.session_id,
+            "asset_id": self.asset_id,
+            "asset_path": str(self.asset_path),
+            "requested_at": self.requested_at,
+        }
+        temporary.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, destination)
+        return destination
+
+    @classmethod
+    def read(cls, path: str | Path) -> AssetSwitchRequest:
+        source = Path(path).expanduser().resolve()
+        value = json.loads(source.read_text(encoding="utf-8"))
+        if value.pop("schema", None) != "clothdojo_asset_switch":
+            raise ValueError("not a ClothDojo asset switch request")
+        if value.pop("format_version", None) != 1:
+            raise ValueError("unsupported asset switch request version")
+        value["asset_path"] = Path(value["asset_path"]).expanduser().resolve()
         return cls(**value)
 
 

@@ -25,7 +25,7 @@
       pane_unusable:"该轨迹不可用",pane_no_data:"该轨迹还没有生成数据",pane_generating:"审核数据生成中…",pane_not_generated:"审核数据还没有生成",
       marking:"标记中…点击结束",marked_count:"已标注",segment:"段",end_mark:"结束标记",mark_bad:"标记 bad 片段",good_btn:"Good",good_title:"整条轨迹审核通过",good_done:"已标记 Good",good_cleared:"已取消 Good",
       mark_start_toast:"已标记起点，再次点击结束标记",saved:"已保存标记",save_fail:"保存失败：",
-      start_session:"启动",vr_connect:"VR 连接",qr:"二维码",close:"关闭",stop_session:"关闭这个遥操作实例？",stopping_session:"正在关闭实例",
+      start_session:"启动",switch_asset:"切换到当前衣服",switching_asset:"正在切换衣服",asset_switching:"资产切换中",asset_switch_failed:"上次切换失败",vr_connect:"VR 连接",qr:"二维码",close:"关闭",stop_session:"关闭这个遥操作实例？",stopping_session:"正在关闭实例",
       review_export:"审核导出",review_export_all:"一键导出全部 Review",
       service_offline:"采集服务未启动",batch_done:"本批恢复点已完成",recording:"录制中",saving:"保存中",batch_remaining:"当前批次剩余",
       restore_waiting:"等待 trigger 匹配",restore_ready:"已就绪 · A 录制/保存 · X 下一场景",restore_retrying:"正在恢复当前点…",
@@ -56,7 +56,7 @@
       pane_unusable:"This trajectory is unusable",pane_no_data:"No data generated for this trajectory",pane_generating:"Generating review data…",pane_not_generated:"Review data not generated",
       marking:"Marking… click to end",marked_count:"Marked",segment:"segments",end_mark:"End mark",mark_bad:"Mark bad segment",good_btn:"Good",good_title:"Whole trajectory reviewed good",good_done:"Marked good",good_cleared:"Good mark cleared",
       mark_start_toast:"Start marked, click again to end",saved:"Mark saved",save_fail:"Save failed: ",
-      start_session:"Start",vr_connect:"VR connect",qr:"QR",close:"Close",stop_session:"Stop this teleop instance?",stopping_session:"Stopping instance",
+      start_session:"Start",switch_asset:"Switch to selected",switching_asset:"Switching asset",asset_switching:"Switching asset",asset_switch_failed:"Last switch failed",vr_connect:"VR connect",qr:"QR",close:"Close",stop_session:"Stop this teleop instance?",stopping_session:"Stopping instance",
       review_export:"Review export",review_export_all:"Export all reviews",
       service_offline:"Collection service offline",batch_done:"Restore queue complete",recording:"Recording",saving:"Saving",batch_remaining:"Batch remaining",
       restore_waiting:"Waiting for trigger match",restore_ready:"Ready · A record/save · X next scene",restore_retrying:"Restoring current point…",
@@ -140,6 +140,8 @@
     updateLog();
   }
   function restorationDetail(session){
+    if(session.asset_switch_phase==="building"||session.asset_switch_phase==="opening_stage")return `<span>${t("asset_switching")}…</span>`;
+    if(session.asset_switch_phase==="failed")return `<span style="color:#ffb3ad" title="${esc(session.asset_switch_error)}">${t("asset_switch_failed")}</span>`;
     if(session.recording)return `<span>${t("recording")} · ${(session.recording_frames||0).toLocaleString()} ${t("frames_unit")}</span>`;
     if(session.recording_finalizing||session.restoration_phase==="finalizing")return `<span>${t("saving")}…</span>`;
     if(session.restoration_phase==="complete"||session.continuation_phase==="exhausted")return `<span style="color:#ffb3ad">${t("batch_done")}</span>`;
@@ -159,13 +161,17 @@
       : job
       ? `<div class="slot-detail"><strong>${t("review_export")} · ${esc(episodeTime(job.episode_id))}</strong></div>`
       : `<div class="slot-detail">${slot.status==="offline"?`<strong>${t("service_offline")}</strong>`:slot.error?`<strong>${esc(slot.error)}</strong>`:hilMode?(hilContext?`<strong>${esc(task.display_name)} HIL · ${esc(hilContext.asset_id)} · ${hilContext.breakpoints.length} ${t("hil_points")}</strong>`:`<strong>${t("hil_worker_hint")}</strong>`):""}</div>`;
+    const switchBusy=session&&(session.asset_switch_phase==="building"||session.asset_switch_phase==="opening_stage");
+    const canSwitch=session&&session.mode==="collection"&&session.standby_gpu_id!=null&&session.profile_id===state.taskId&&session.asset_id!==state.assetId&&!session.recording&&!session.recording_finalizing&&!switchBusy;
+    const switchAction=canSwitch?`<button onclick="switchSessionAsset(event,'${esc(session.id)}')">${t("switch_asset")}</button>`:"";
     const actions=session
-      ? `<button class="primary" onclick="openConnect(event,'${esc(slot.id)}')">${t("vr_connect")}</button><button onclick="showQr(event,'${esc(session.id)}','${esc(slot.id)}','${esc(session.endpoint)}')">${t("qr")}</button><button class="danger" onclick="stopSession(event,'${esc(session.id)}')">${t("close")}</button>`
+      ? `${switchAction}<button class="primary" onclick="openConnect(event,'${esc(slot.id)}')">${t("vr_connect")}</button><button onclick="showQr(event,'${esc(session.id)}','${esc(slot.id)}','${esc(session.endpoint)}')">${t("qr")}</button><button class="danger" onclick="stopSession(event,'${esc(session.id)}')">${t("close")}</button>`
       : job
       ? ``
       : `<button class="primary" ${slot.status!=="available"||!hasPending?"disabled":""} title="${!hasPending?(hilMode?t("hil_worker_hint"):t("no_pending")):""}" onclick="startSession(event,'${esc(slot.id)}')">${t("start_session")}</button>`;
     const target=session?`selectLog('session','${esc(session.id)}')`:job?`selectLog('export','${esc(job.id)}')`:"";
-    return `<div class="slot ${selected?"selected":""}" onclick="${target}"><span class="gpu">${esc(slot.worker_id?`${slot.worker_id} · GPU ${slot.gpu_id}`:`GPU ${slot.gpu_id}`)}</span><span class="chip ${statusClass}">${t(slot.status)||esc(slot.status)}</span>${detail}<div class="slot-actions">${actions}</div></div>`;
+    const gpuLabel=`GPU ${slot.gpu_id}${slot.standby_gpu_id==null?"":` + ${slot.standby_gpu_id}`}`;
+    return `<div class="slot ${selected?"selected":""}" onclick="${target}"><span class="gpu">${esc(slot.worker_id?`${slot.worker_id} · ${gpuLabel}`:gpuLabel)}</span><span class="chip ${statusClass}">${t(slot.status)||esc(slot.status)}</span>${detail}<div class="slot-actions">${actions}</div></div>`;
   }
   function episodeKey(task,episode){return task.continuation?episode.result_episode_id:episode.id}
   function filteredRows(task){return orderedEpisodeRows(task).filter(episode=>state.dataAsset==="all"||episode.asset_id===state.dataAsset)}
@@ -532,6 +538,7 @@
     }catch(error){toast(error.message,true)}
   }
   async function stopSession(event,id){event.stopPropagation();if(!confirm(t("stop_session")))return;try{await request(`/api/sessions/${encodeURIComponent(id)}/stop`,{method:"POST"});toast(t("stopping_session"));await refresh()}catch(error){toast(error.message,true)}}
+  async function switchSessionAsset(event,id){event.stopPropagation();try{await request(`/api/sessions/${encodeURIComponent(id)}/asset`,{method:"POST",body:JSON.stringify({asset_id:state.assetId})});toast(t("switching_asset"));await refresh()}catch(error){toast(error.message,true)}}
   function connectionUrl(slotId){
     const slot=state.snapshot.slots.find(item=>item.id===slotId),target=new URL(`https://${slot.endpoint}`);
     const clientSlot=state.snapshot.slots[0]||slot;

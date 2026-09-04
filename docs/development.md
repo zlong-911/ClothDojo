@@ -188,4 +188,11 @@ CUDA_VISIBLE_DEVICES='' .venv/bin/pytest -q \
 
 Isaac Sim 6/CloudXR 遥操作作为独立应用运行。Isaac Sim 5 离线渲染使用项目主 `.venv`，并通过统一 `clothdojo data export-lerobot` 入口调用。
 
+遥操作 slot 可通过 `teleoperation.gpu_ids` 与 `teleoperation.standby_gpu_ids`
+配置一一对应的主、备用 GPU。普通无恢复队列的服装展平会话支持进程内热切换资产：
+备用 GPU 构建失败时继续保留主 GPU 的环境，成功后两张卡交换角色。Newton 1.5
+不能可靠地将候选构建与当前 step 放在同一进程的不同线程并发执行，因此构建期间会
+冻结 XR 循环；不要将它改为后台线程。完整 Kit 验证必须在没有其他 GPU 任务的节点上
+进行，因为 Isaac/Vulkan 启动时会在所有可见 GPU 上建立上下文。
+
 远端训练节点、共享路径和 Codex bootstrap 见 [`compute_hosts.md`](compute_hosts.md)。凭据不得写入仓库。
