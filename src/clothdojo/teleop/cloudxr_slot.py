@@ -24,6 +24,7 @@ run()
 _SHUTDOWN_TIMEOUT_S = 60.0
 _APP_STARTUP_PHASE_TIMEOUT_S = 150.0
 _NEWTON_BUILD_TIMEOUT_S = 300.0
+_RENDERER_BUILD_TIMEOUT_S = 900.0
 _FAILED_STARTUP_SHUTDOWN_TIMEOUT_S = 5.0
 _MAX_STREAM_FPS = 20
 
@@ -204,7 +205,11 @@ def _app_started(status: dict | None) -> bool:
 
 
 def _startup_timeout(phase: object) -> float:
-    return _NEWTON_BUILD_TIMEOUT_S if phase == "building_newton" else _APP_STARTUP_PHASE_TIMEOUT_S
+    if phase == "building_newton":
+        return _NEWTON_BUILD_TIMEOUT_S
+    if phase == "building_renderer":
+        return _RENDERER_BUILD_TIMEOUT_S
+    return _APP_STARTUP_PHASE_TIMEOUT_S
 
 
 def _read_status(path: Path) -> dict | None:

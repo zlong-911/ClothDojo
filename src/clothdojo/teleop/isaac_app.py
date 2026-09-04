@@ -74,6 +74,13 @@ def main() -> None:
             asset_id=plan.asset_id,
         )
         runtime = _build_newton_runtime(plan)
+        status.write(
+            "starting",
+            phase="building_renderer",
+            gpu_id=plan.gpu_id,
+            standby_gpu_id=plan.standby_gpu_id,
+            asset_id=plan.asset_id,
+        )
         _run(app, runtime, plan, status, stop)
         status.write("stopped", phase="operator_stop" if stop.is_set() else "app_exit")
     except BaseException as exc:

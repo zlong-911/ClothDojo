@@ -163,6 +163,7 @@ def test_cloudxr_startup_state_converges_only_after_isaac_is_ready() -> None:
     assert _app_started({"state": "waiting_for_vr"})
     assert _app_started({"state": "collecting"})
     assert _startup_timeout("building_newton") > _startup_timeout("starting_isaac")
+    assert _startup_timeout("building_renderer") > _startup_timeout("building_newton")
 
 
 def test_isaac_limits_openusd_traversal_before_kit_startup(monkeypatch) -> None:
