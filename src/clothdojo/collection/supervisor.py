@@ -9,6 +9,7 @@ import socket
 import sqlite3
 import subprocess
 import threading
+import time
 import uuid
 from collections.abc import Callable
 from contextlib import closing
@@ -28,6 +29,8 @@ SIGNALING_PORT = 44388
 MEDIA_PORT = 33434
 PROXY_PORT = 44401
 PORT_STRIDE = 10
+_GATEWAY_START_TIMEOUT_S = 10.0
+_GATEWAY_STOP_TIMEOUT_S = 5.0
 
 
 class NoAvailableSlotError(RuntimeError):
@@ -51,6 +54,8 @@ class TeleopSupervisor:
         self.installation = installation or TeleopInstallation.discover(config.project_root)
         self._launcher = launcher or self._launch
         self._processes: dict[str, subprocess.Popen] = {}
+        self._gateway_process: subprocess.Popen | None = None
+        self._gateway_error: str | None = None
         self._lock = threading.RLock()
         self.database_path = config.state_dir / "control.sqlite3"
         self.sessions_root = config.state_dir / "sessions"
@@ -69,7 +74,7 @@ class TeleopSupervisor:
                     ACTIVE_STATES,
                 )
             }
-        installation_problem = self.installation.problem()
+        installation_problem = self._gateway_error or self.installation.problem()
         result = []
         for slot in self._slot_specs():
             session = active.get(slot["id"])
@@ -98,6 +103,67 @@ class TeleopSupervisor:
             )
         return result
 
+    def start_gateway(self) -> None:
+        """Start the single HTTPS/WSS front door shared by every GPU slot."""
+        if self._gateway_process is not None and self._gateway_process.poll() is None:
+            return
+        problem = self.installation.problem()
+        if problem is not None:
+            self._gateway_error = problem
+            return
+        if not _can_bind(PROXY_PORT, socket.SOCK_STREAM):
+            self._gateway_error = f"CloudXR gateway port is already in use: {PROXY_PORT}"
+            return
+        gateway_root = self.config.state_dir / "cloudxr"
+        gateway_root.mkdir(parents=True, exist_ok=True)
+        command = [
+            str(self.installation.python),
+            "-m",
+            "clothdojo.teleop.cloudxr_gateway",
+            "--install-dir",
+            str(gateway_root),
+            "--proxy-port",
+            str(PROXY_PORT),
+        ]
+        for slot in self._slot_specs():
+            command.extend(("--signaling-port", str(slot["signaling_port"])))
+        environment = self.installation.gateway_environment(
+            source_root=self.config.project_root / "src"
+        )
+        log_path = gateway_root / "gateway.log"
+        log = log_path.open("ab", buffering=0)
+        try:
+            process = subprocess.Popen(
+                command,
+                cwd=self.config.project_root,
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+        finally:
+            log.close()
+        deadline = time.monotonic() + _GATEWAY_START_TIMEOUT_S
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                self._gateway_error = f"CloudXR gateway exited with code {process.returncode}"
+                return
+            if not _can_bind(PROXY_PORT, socket.SOCK_STREAM):
+                self._gateway_process = process
+                self._gateway_error = None
+                return
+            time.sleep(0.05)
+        _terminate_process_group(process, timeout_s=_GATEWAY_STOP_TIMEOUT_S)
+        self._gateway_error = "CloudXR gateway did not start listening"
+
+    def stop_gateway(self) -> None:
+        process = self._gateway_process
+        self._gateway_process = None
+        if process is None or process.poll() is not None:
+            return
+        _terminate_process_group(process, timeout_s=_GATEWAY_STOP_TIMEOUT_S)
+
     def start_session(
         self,
         *,
@@ -116,8 +182,6 @@ class TeleopSupervisor:
             raise ValueError(f"unknown teleoperation mode: {mode}")
         if mode == "intervention" and intervention_plan is None:
             raise ValueError("intervention sessions require an immutable plan")
-        if mode == "intervention" and profile.continuation_source_profile is not None:
-            raise ValueError("a continuation profile cannot run HIL intervention")
         problem = self.installation.problem()
         if problem is not None:
             raise RuntimeError(problem)
@@ -159,7 +223,11 @@ class TeleopSupervisor:
                         leased_episode_ids=leased,
                     )
                     continuation_path = session_root / "continuation-plan.json"
-                output_root = profile.trajectory_root
+                output_root = (
+                    profile.hil_trajectory_root
+                    if mode == "intervention"
+                    else profile.trajectory_root
+                )
                 plan = SessionPlan(
                     session_id=session_id,
                     mode=mode,
@@ -394,6 +462,8 @@ class TeleopSupervisor:
                 "physics_submit_ms",
                 "fabric_submit_ms",
                 "app_ms",
+                "restoration_phase",
+                "intervention_phase",
                 "continuation_phase",
                 "continuation_remaining",
             ):
@@ -407,10 +477,10 @@ class TeleopSupervisor:
             {
                 "id": f"gpu-{gpu_id}",
                 "gpu_id": gpu_id,
-                "endpoint": f"{host}:{PROXY_PORT + gpu_id * PORT_STRIDE}",
+                "endpoint": f"{host}:{PROXY_PORT}",
                 "signaling_port": SIGNALING_PORT + gpu_id * PORT_STRIDE,
                 "media_port": MEDIA_PORT + gpu_id * PORT_STRIDE,
-                "proxy_port": PROXY_PORT + gpu_id * PORT_STRIDE,
+                "proxy_port": PROXY_PORT,
             }
             for gpu_id in self.config.teleoperation.gpu_ids
         ]
@@ -442,7 +512,6 @@ class TeleopSupervisor:
         checks = (
             (int(slot["signaling_port"]), socket.SOCK_STREAM),
             (int(slot["media_port"]), socket.SOCK_DGRAM),
-            (int(slot["proxy_port"]), socket.SOCK_STREAM),
         )
         return [port for port, kind in checks if not _can_bind(port, kind)]
 
@@ -565,6 +634,26 @@ def _can_bind(port: int, kind: socket.SocketKind) -> bool:
         return True
     except OSError:
         return False
+
+
+def _terminate_process_group(process: subprocess.Popen, *, timeout_s: float) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        process.wait(timeout=timeout_s)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+    try:
+        process.wait(timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        return
 
 
 def _client_host(configured: str) -> str:

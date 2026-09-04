@@ -29,15 +29,15 @@
       </article>
     </section>
     <section class="panel">
-      <div class="panel-head"><h2 data-i18n="task_data">采集数据</h2></div>
+      <div class="panel-head"><h2 id="task-data-title" data-i18n="task_data">采集数据</h2><button class="primary" id="review-export" data-i18n="review_export_all">一键导出全部 Review</button></div>
       <div class="data-split">
         <aside class="info-col">
           <button id="data-asset-pick" class="asset-pick">全部资产</button>
           <div class="info-stats">
-            <div class="stat"><strong id="episode-count">0</strong><span data-i18n="stat_count">条数据</span></div>
-            <div class="stat"><strong id="frame-count">0</strong><span data-i18n="stat_frames">总帧数</span></div>
-            <div class="stat"><strong id="duration">0 秒</strong><span data-i18n="stat_duration">总时长</span></div>
-            <div class="stat"><strong id="annotation-count">0</strong><span data-i18n="stat_annotations">标注</span></div>
+            <div class="stat"><strong id="episode-count">0</strong><span id="episode-count-label" data-i18n="stat_count">条数据</span></div>
+            <div class="stat"><strong id="frame-count">0</strong><span id="frame-count-label" data-i18n="stat_frames">总帧数</span></div>
+            <div class="stat"><strong id="duration">0 秒</strong><span id="duration-label" data-i18n="stat_duration">总时长</span></div>
+            <div class="stat"><strong id="annotation-count">0</strong><span id="annotation-count-label" data-i18n="stat_annotations">标注</span></div>
           </div>
           <div class="info-controls">
             <button class="sort-btn" id="time-sort" title="切换时间排序">采集时间 ↓</button>
@@ -53,7 +53,7 @@
       </div>
     </section>
     <section class="panel stack-gap" id="hil">
-      <div class="panel-head"><h2 data-i18n="hil_title">HIL 介入</h2><div class="task-picker"><label><span data-i18n="task">任务</span> <select id="hil-profile"></select></label><span id="hil-status">—</span></div></div>
+      <div class="panel-head"><h2 data-i18n="hil_title">HIL 介入</h2><span id="hil-status">—</span></div>
       <div class="data-split">
         <aside class="info-col">
           <button id="hil-asset-pick" class="asset-pick">全部资产</button>
@@ -62,11 +62,6 @@
             <div class="stat"><strong id="hil-episode-count">0</strong><span data-i18n="stat_count">条数据</span></div>
             <div class="stat"><strong id="hil-points-count">0</strong><span data-i18n="hil_points">介入点</span></div>
             <div class="stat"><strong id="hil-annotation-count">0</strong><span data-i18n="stat_annotations">标注</span></div>
-          </div>
-          <div class="info-controls">
-            <button class="primary" id="hil-vr" hidden data-i18n="vr_connect">VR 连接</button>
-            <button class="danger" id="hil-stop" hidden data-i18n="hil_stop">停止</button>
-            <button class="primary" id="hil-start" disabled data-i18n="hil_start">启动 HIL</button>
           </div>
           <div class="info-asset-preview" id="hil-asset-visual"></div>
         </aside>

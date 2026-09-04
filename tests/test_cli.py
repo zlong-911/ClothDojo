@@ -803,6 +803,8 @@ def test_render_review_dispatches_incremental_export(monkeypatch, capsys) -> Non
             "assets_root": "/data/assets",
             "device": "cuda:2",
             "fps": 10,
+            "camera_name": "cam_high",
+            "output": None,
         },
     }
     assert json.loads(capsys.readouterr().out) == {"episodes": 8}
@@ -927,6 +929,9 @@ def test_norm_stats_command_calls_openpi_preparation(monkeypatch, capsys) -> Non
 
     assert call == {
         "args": ("/data/good", "/data/stats"),
-        "kwargs": {"block_size": 128},
+        "kwargs": {
+            "block_size": 128,
+            "action_chunk_boundary": "repeat_last",
+        },
     }
     assert json.loads(capsys.readouterr().out) == {"frames": 12}

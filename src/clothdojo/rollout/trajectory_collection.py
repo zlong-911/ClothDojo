@@ -375,6 +375,7 @@ def _run_asset(
     world_count = min(spec.batch_size, job.state_count)
     scene = build_scene(
         assets,
+        task_name=scenario.task_name,
         spec=ShirtFlattenSpec(garment_id=job.asset_id, world_count=world_count),
         device=device,
         visuals=True,

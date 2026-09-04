@@ -120,6 +120,13 @@ UUID 限制同时作用于服务器和子进程；命令中的 `cuda:0` 是限�
 先用 `--plan-only` 检查 episode、frame、renderer 和 `training_eligible`，不会加载渲染器
 或写数据。
 
+Isaac 随机化重放默认直接使用目标轨迹发布的完整动力学状态。若审查或论文渲染显式叠加
+`retarget_metrics.npz` 中的几何参考，只允许通过
+`overlay_kinematic_arm_reference` 替换 robot profile 声明的 arm `q/qd`；夹爪主动坐标、
+从动坐标和其他非臂状态必须整体保留自目标轨迹。FR3 Duo 与 UR5e 的 Robotiq 夹爪包含
+闭环从动连杆，几何 IK 参考不拥有这些坐标；用整份 `reference_joint_q` 覆盖状态会把从动
+连杆复位到张开 home，不能作为随机化导出输入。
+
 ## 数据语义
 
 每条目标轨迹仍使用项目标准的 `manifest.json`、`states.npz` 和 `actions.npz`，普通

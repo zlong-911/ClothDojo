@@ -304,7 +304,17 @@ def _launch_simulation_nodes(
                         "--plan",
                         str(remote_plan),
                     ],
-                    environment={"PYTHONPATH": str(node.project_root / "src")},
+                    environment={
+                        "PYTHONPATH": str(node.project_root / "src"),
+                        "HTTP_PROXY": "",
+                        "HTTPS_PROXY": "",
+                        "ALL_PROXY": "",
+                        "http_proxy": "",
+                        "https_proxy": "",
+                        "all_proxy": "",
+                        "NO_PROXY": "*",
+                        "no_proxy": "*",
+                    },
                     log_path=logs / f"simulation-node-{node_index:03d}.log",
                     label=f"simulation node {node_index}",
                 )

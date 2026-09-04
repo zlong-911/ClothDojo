@@ -11,7 +11,7 @@ import socket
 import sys
 import tempfile
 import traceback
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Literal
@@ -25,7 +25,9 @@ from clothdojo.assets.materials import (
     prepare_polyhaven_assets,
     require_polyhaven_assets,
 )
+from clothdojo.rendering import CameraSpec
 from clothdojo.robots import RobotProfile
+from clothdojo.trajectory import TrajectoryState
 
 ROBODOJO_REVISION = "c037c1b3183a030724e694d69a08cb62369ed285"
 _ISAAC_MAJOR_MINOR = (5, 0)
@@ -124,6 +126,47 @@ class VisualLayout:
     ground: MaterialAppearance
     lighting: LightingAppearance
     room: str | None
+
+
+def overlay_kinematic_arm_reference(
+    state: TrajectoryState,
+    *,
+    reference_joint_q: np.ndarray,
+    reference_joint_qd: np.ndarray,
+    robot_profile: RobotProfile,
+) -> TrajectoryState:
+    """Overlay arm references without discarding simulated gripper linkages.
+
+    Robotiq workstations contain passive closed-chain coordinates that are not
+    part of the geometric IK reference. Replacing the complete generalized
+    state would reset those coordinates to their open home pose. Keep every
+    non-arm coordinate from the dynamics replay and replace only the arm
+    position and velocity entries declared by the robot profile.
+    """
+
+    joint_q = np.asarray(state.joint_q, dtype=np.float32)
+    joint_qd = np.asarray(state.joint_qd, dtype=np.float32)
+    reference_q = np.asarray(reference_joint_q, dtype=np.float32)
+    reference_qd = np.asarray(reference_joint_qd, dtype=np.float32)
+    expected_q = (len(robot_profile.home_joint_q),)
+    expected_qd = (robot_profile.joint_dof_count,)
+    if (
+        joint_q.shape != expected_q
+        or reference_q.shape != expected_q
+        or joint_qd.shape != expected_qd
+        or reference_qd.shape != expected_qd
+    ):
+        raise ValueError("kinematic arm reference does not match the trajectory state")
+    if not np.isfinite(reference_q).all() or not np.isfinite(reference_qd).all():
+        raise ValueError("kinematic arm reference must be finite")
+
+    mixed_q = joint_q.copy()
+    mixed_qd = joint_qd.copy()
+    arm_q = np.asarray(robot_profile.arm_coord_indices, dtype=np.int64)
+    arm_qd = np.asarray(robot_profile.arm_dof_indices, dtype=np.int64)
+    mixed_q[arm_q] = reference_q[arm_q]
+    mixed_qd[arm_qd] = reference_qd[arm_qd]
+    return replace(state, joint_q=mixed_q, joint_qd=mixed_qd)
 
 
 def sample_visual_layout(
@@ -393,18 +436,17 @@ class IsaacRandomizedCamera:
         randomize: tuple[VisualComponent, ...],
         layouts: list[dict[str, Any]],
         robot_profile: RobotProfile,
+        cameras: tuple[CameraSpec, ...] | None = None,
+        render_resolution: tuple[int, int] = (640, 480),
+        pathtrace_spp: int | None = None,
+        room_light_saturation: float = 1.0,
+        room_light_intensity_scale: float = 1.0,
+        use_recorded_body_q: bool = False,
     ) -> None:
         import omni.usd
         import warp as wp
 
-        body_q = np.asarray(initial_state.body_q, dtype=np.float32)
         particle_q = np.asarray(initial_state.particle_q, dtype=np.float32)
-        if body_q.shape != (len(robot_profile.body_names), 7):
-            raise ValueError(
-                f"Isaac randomized export requires {robot_profile.robot_id} body_q shape "
-                f"{(len(robot_profile.body_names), 7)}, got {body_q.shape}"
-            )
-        _validate_robot_installations(body_q, robot_profile)
         if particle_q.ndim != 2 or particle_q.shape[1] != 3:
             raise ValueError(
                 "Isaac randomized export requires particle_q shape (particles, 3), "
@@ -416,9 +458,30 @@ class IsaacRandomizedCamera:
         self._randomize = randomize
         self._visual_assets_root = visual_assets_root
         self._layouts = layouts
-        self._cameras = robot_profile.cameras
+        if not 0.0 <= room_light_saturation <= 1.0:
+            raise ValueError("room light saturation must be in [0, 1]")
+        if not 0.0 <= room_light_intensity_scale <= 1.0:
+            raise ValueError("room light intensity scale must be in [0, 1]")
+        self._room_light_saturation = room_light_saturation
+        self._room_light_intensity_scale = room_light_intensity_scale
+        self._cameras = robot_profile.cameras if cameras is None else cameras
+        if not self._cameras:
+            raise ValueError("Isaac randomized export requires at least one camera")
+        if (
+            len(render_resolution) != 2
+            or any(isinstance(value, bool) or not isinstance(value, int) or value <= 0
+                   for value in render_resolution)
+        ):
+            raise ValueError("Isaac render resolution must contain two positive integers")
+        if pathtrace_spp is not None and (
+            isinstance(pathtrace_spp, bool)
+            or not isinstance(pathtrace_spp, int)
+            or pathtrace_spp <= 0
+        ):
+            raise ValueError("Isaac path-tracing samples must be a positive integer")
+        self._render_resolution = render_resolution
+        self._pathtrace_spp = pathtrace_spp
         self._closed = False
-        self._episode_warmup = False
         self._temporary = tempfile.TemporaryDirectory(prefix="clothdojo-isaac-export-")
         plan = _RenderPlan(
             session_root=Path(self._temporary.name),
@@ -447,13 +510,29 @@ class IsaacRandomizedCamera:
         import omni.replicator.core as rep
 
         self._rep = rep
+        self._articulation = None
+        if use_recorded_body_q:
+            body_q = np.asarray(initial_state.body_q, dtype=np.float32)
+            _validate_robot_installations(body_q, robot_profile)
+            replay_body_q = wp.array(body_q, dtype=wp.transformf, device=device)
+        else:
+            self._articulation = _NewtonArticulationReplay(
+                initial_state,
+                asset=assets_root / robot_profile.asset,
+                device=device,
+                robot_profile=robot_profile,
+            )
+            _validate_robot_installations(
+                self._articulation.body_q.numpy(), robot_profile
+            )
+            replay_body_q = self._articulation.body_q
         self._model = SimpleNamespace(
             body_label=robot_profile.body_names,
             body_count=len(robot_profile.body_names),
             particle_count=int(particle_q.shape[0]),
         )
         self._state = SimpleNamespace(
-            body_q=wp.array(body_q, dtype=wp.transformf, device=device),
+            body_q=replay_body_q,
             particle_q=wp.array(particle_q, dtype=wp.vec3f, device=device),
         )
         self._usd_context = context
@@ -464,10 +543,13 @@ class IsaacRandomizedCamera:
             self._model.body_label,
             self._cameras,
         )
-        rep.settings.set_render_rtx_realtime(antialiasing="DLAA")
+        if pathtrace_spp is None:
+            rep.settings.set_render_rtx_realtime(antialiasing="DLAA")
+        else:
+            rep.settings.set_render_pathtraced(samples_per_pixel=pathtrace_spp)
         self._render_product = rep.create.render_product_tiled(
             cameras=list(self._camera_paths),
-            tile_resolution=(640, 480),
+            tile_resolution=render_resolution,
             force_new=True,
             name="ClothDojoCameras",
         )
@@ -478,17 +560,31 @@ class IsaacRandomizedCamera:
         for _ in range(4):
             app.update()
 
-    def begin_episode(self, episode_index: int, *, source_episode_id: str | None) -> None:
-        layout = sample_visual_layout(
-            self._base_seed,
-            episode_index,
-            source_episode_id=source_episode_id,
-            include_room=self._include_room,
-            randomize=self._randomize,
+    def begin_episode(
+        self,
+        episode_index: int,
+        *,
+        source_episode_id: str | None,
+        layout: VisualLayout | None = None,
+    ) -> None:
+        if layout is None:
+            layout = sample_visual_layout(
+                self._base_seed,
+                episode_index,
+                source_episode_id=source_episode_id,
+                include_room=self._include_room,
+                randomize=self._randomize,
+            )
+        elif layout.episode_index != episode_index:
+            raise ValueError("explicit visual layout has the wrong episode index")
+        _apply_layout(
+            self._stage,
+            layout,
+            self._visual_assets_root,
+            room_light_saturation=self._room_light_saturation,
+            room_light_intensity_scale=self._room_light_intensity_scale,
         )
-        _apply_layout(self._stage, layout, self._visual_assets_root)
         self._layouts.append(asdict(layout))
-        self._episode_warmup = True
         for _ in range(3):
             self._app.update()
         # Layout edits can rebuild Fabric and discard custom attributes, so bind
@@ -504,14 +600,23 @@ class IsaacRandomizedCamera:
     def __call__(self, state) -> dict[str, np.ndarray]:
         if self._bridge is None:
             raise RuntimeError("Isaac camera episode has not been initialized")
-        self._state.body_q.assign(np.asarray(state.body_q, dtype=np.float32))
+        if self._articulation is None:
+            self._state.body_q.assign(np.asarray(state.body_q, dtype=np.float32))
+        else:
+            self._articulation.update(state)
         self._state.particle_q.assign(np.asarray(state.particle_q, dtype=np.float32))
         self._bridge.update(self._state)
         for _ in range(4):
             self._app.update()
-        if self._episode_warmup:
-            self._capture()
-            self._episode_warmup = False
+        # Isaac RTX can finish the render before Fabric publishes the dirty
+        # rigid transforms and cloth points.  A capture alone does not make
+        # that pending state authoritative at high path-tracing SPP.  Publish
+        # the same state once more after draining the preceding render, then
+        # capture the frame that is allowed to leave this camera.
+        self._capture()
+        self._bridge.update(self._state)
+        for _ in range(4):
+            self._app.update()
         images = self._capture()
         return {
             f"observation.images.{camera.name}": image[None, ...]
@@ -539,7 +644,11 @@ class IsaacRandomizedCamera:
         data = self._annotator.get_data(device="cpu", do_array_copy=True)
         if isinstance(data, dict):
             data = data.get("data")
-        return _split_tiled_rgb(data, camera_count=len(self._camera_paths))
+        return _split_tiled_rgb(
+            data,
+            camera_count=len(self._camera_paths),
+            tile_resolution=self._render_resolution,
+        )
 
     def close(self) -> None:
         if self._closed:
@@ -550,6 +659,79 @@ class IsaacRandomizedCamera:
         finally:
             self._render_product.destroy()
             self._temporary.cleanup()
+
+
+class _NewtonArticulationReplay:
+    """Reconstruct robot bodies from importer-stable generalized coordinates."""
+
+    def __init__(
+        self,
+        initial_state,
+        *,
+        asset: Path,
+        device: str,
+        robot_profile: RobotProfile,
+    ) -> None:
+        import newton
+        import warp as wp
+
+        from clothdojo.sim.scene import _add_robot
+
+        builder = newton.ModelBuilder(gravity=wp.vec3(0.0))
+        _add_robot(
+            newton,
+            wp,
+            builder,
+            asset,
+            robot_profile,
+            load_visual_shapes=False,
+        )
+        self._newton = newton
+        self._model = builder.finalize(device=device, requires_grad=False)
+        self._state = self._model.state()
+        self.update(initial_state)
+
+    @property
+    def body_q(self):
+        return self._state.body_q
+
+    def update(self, recorded_state) -> None:
+        joint_q = np.asarray(recorded_state.joint_q, dtype=np.float32)
+        joint_qd = np.asarray(recorded_state.joint_qd, dtype=np.float32)
+        body_q = np.asarray(recorded_state.body_q, dtype=np.float32)
+        body_qd = np.asarray(recorded_state.body_qd, dtype=np.float32)
+        expected = {
+            "joint_q": tuple(self._state.joint_q.shape),
+            "joint_qd": tuple(self._state.joint_qd.shape),
+            "body_q": (*tuple(self._state.body_q.shape), 7),
+            "body_qd": (*tuple(self._state.body_qd.shape), 6),
+        }
+        actual = {
+            "joint_q": joint_q.shape,
+            "joint_qd": joint_qd.shape,
+            "body_q": body_q.shape,
+            "body_qd": body_qd.shape,
+        }
+        mismatched = [
+            f"{name} expected {expected[name]}, got {actual[name]}"
+            for name in expected
+            if expected[name] != actual[name]
+        ]
+        if mismatched:
+            raise ValueError("Isaac articulation replay shape mismatch: " + "; ".join(mismatched))
+        self._state.joint_q.assign(np.ascontiguousarray(joint_q))
+        self._state.joint_qd.assign(np.ascontiguousarray(joint_qd))
+        # Preserve recorded poses for any non-articulated bodies before FK. The
+        # articulated body array is reconstructed because legacy trajectories
+        # predate a persisted, importer-stable body-name order.
+        self._state.body_q.assign(np.ascontiguousarray(body_q))
+        self._state.body_qd.assign(np.ascontiguousarray(body_qd))
+        self._newton.eval_fk(
+            self._model,
+            self._state.joint_q,
+            self._state.joint_qd,
+            self._state,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -614,6 +796,14 @@ def _author_cameras(stage, body_labels, cameras) -> tuple[str, ...]:
     if embedded:
         if set(embedded) != set(requested_names):
             raise RuntimeError("robot USD contains only part of the requested camera set")
+        # CameraSpec is the rendering contract even when the workstation already
+        # embeds the camera prim. This permits paper-only lens overrides while
+        # preserving the authored pose and clipping range.
+        for view in cameras:
+            camera = UsdGeom.Camera(stage.GetPrimAtPath(embedded[view.name]))
+            camera.GetFocalLengthAttr().Set(view.focal_length)
+            camera.GetHorizontalApertureAttr().Set(view.horizontal_aperture)
+            camera.GetVerticalApertureAttr().Set(view.vertical_aperture)
         return tuple(embedded[name] for name in requested_names)
 
     body_paths = _find_render_body_paths(stage, body_labels)
@@ -661,10 +851,16 @@ def _matches_semantic_body(label: str, semantic_name: str) -> bool:
     return all(part in positions for part in semantic_parts[:-1])
 
 
-def _split_tiled_rgb(data, *, camera_count: int) -> list[np.ndarray]:
+def _split_tiled_rgb(
+    data,
+    *,
+    camera_count: int,
+    tile_resolution: tuple[int, int] = (640, 480),
+) -> list[np.ndarray]:
     tiles_per_side = int(np.ceil(np.sqrt(camera_count)))
     tiled = np.asarray(data)
-    expected = (tiles_per_side * 480, tiles_per_side * 640)
+    width, height = tile_resolution
+    expected = (tiles_per_side * height, tiles_per_side * width)
     if tiled.ndim != 3 or tiled.shape[:2] != expected or tiled.shape[2] < 3:
         raise RuntimeError(
             f"Isaac tiled RGB shape {tiled.shape} does not match "
@@ -672,7 +868,11 @@ def _split_tiled_rgb(data, *, camera_count: int) -> list[np.ndarray]:
         )
     return [
         np.ascontiguousarray(
-            tiled[row * 480 : (row + 1) * 480, column * 640 : (column + 1) * 640, :3]
+            tiled[
+                row * height : (row + 1) * height,
+                column * width : (column + 1) * width,
+                :3,
+            ]
         )
         for row, column in (
             divmod(index, tiles_per_side) for index in range(camera_count)
@@ -680,7 +880,14 @@ def _split_tiled_rgb(data, *, camera_count: int) -> list[np.ndarray]:
     ]
 
 
-def _apply_layout(stage, layout: VisualLayout, root: Path) -> None:
+def _apply_layout(
+    stage,
+    layout: VisualLayout,
+    root: Path,
+    *,
+    room_light_saturation: float = 1.0,
+    room_light_intensity_scale: float = 1.0,
+) -> None:
     from pxr import Gf, Sdf, UsdGeom
 
     catalog = load_material_catalog()
@@ -714,7 +921,13 @@ def _apply_layout(stage, layout: VisualLayout, root: Path) -> None:
         if room:
             stage.RemovePrim(room.GetPath())
     else:
-        _reference_room(stage, root / "robodojo/Assets/Room", layout.room)
+        _reference_room(
+            stage,
+            root / "robodojo/Assets/Room",
+            layout.room,
+            light_saturation=room_light_saturation,
+            light_intensity_scale=room_light_intensity_scale,
+        )
     dome = stage.GetPrimAtPath("/World/Lighting/Dome")
     dome.GetAttribute("inputs:color").Set(Gf.Vec3f(1.0, 1.0, 1.0))
     dome.GetAttribute("inputs:intensity").Set(1000.0)
@@ -741,7 +954,14 @@ def _apply_layout(stage, layout: VisualLayout, root: Path) -> None:
     key.GetAttribute("inputs:intensity").Set(0.0)
 
 
-def _reference_room(stage, room_root: Path, room_name: str) -> None:
+def _reference_room(
+    stage,
+    room_root: Path,
+    room_name: str,
+    *,
+    light_saturation: float,
+    light_intensity_scale: float,
+) -> None:
     from pxr import Gf, UsdGeom
 
     source = room_root / room_name / "base0.usd"
@@ -754,6 +974,16 @@ def _reference_room(stage, room_root: Path, room_name: str) -> None:
     xform.AddTranslateOp().Set(Gf.Vec3d(0.782, 0.0, 0.0))
     xform.AddRotateZOp().Set(-90.0)
     xform.AddScaleOp().Set(Gf.Vec3f(0.5, 0.5, 0.5))
+    light = stage.GetPrimAtPath("/World/RoboDojoRoom/simple_room/RectLight")
+    if light:
+        color = light.GetAttribute("inputs:color")
+        authored = np.asarray(color.Get(), dtype=np.float32)
+        mild = 1.0 + light_saturation * (authored - 1.0)
+        color.Set(Gf.Vec3f(*(float(value) for value in mild)))
+        for name in ("inputs:intensity", "intensity"):
+            intensity = light.GetAttribute(name)
+            if intensity and intensity.HasAuthoredValue():
+                intensity.Set(float(intensity.Get()) * light_intensity_scale)
 
 
 def _bind_polyhaven_material(

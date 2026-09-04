@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from dataclasses import asdict
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -12,8 +12,10 @@ from clothdojo.assets.materials import load_material_catalog
 from clothdojo.data.isaac_render import (
     _ROOMS,
     ROBODOJO_REVISION,
+    IsaacRandomizedCamera,
     _author_cameras,
     _matches_semantic_body,
+    _NewtonArticulationReplay,
     _physical_gpu,
     _require_robodojo_rooms,
     _require_visual_assets,
@@ -21,17 +23,20 @@ from clothdojo.data.isaac_render import (
     _start_isaac_app,
     _validate_robot_installations,
     export_isaac_rollout_collection,
+    overlay_kinematic_arm_reference,
     parse_visual_randomization,
     prepare_isaac_assets,
     sample_visual_layout,
 )
 from clothdojo.robots import (
     ALOHA2,
+    FR3_DUO,
     PIPER,
     UR5E_2F85,
     robot_profile,
 )
 from clothdojo.teleop.isaac_stage import _author_robot
+from clothdojo.trajectory import TrajectoryState
 
 
 def test_visual_layout_is_stable_by_source_episode() -> None:
@@ -43,6 +48,155 @@ def test_visual_layout_is_stable_by_source_episode() -> None:
     assert first.seed != changed.seed
     assert first.room is None
     assert 0.0 <= first.lighting.rotation_z <= 360.0
+
+
+def test_isaac_camera_flushes_stale_rgb_after_every_state() -> None:
+    calls: list[str] = []
+
+    class Array:
+        def assign(self, value):
+            calls.append(f"particle:{np.asarray(value).shape}")
+
+    camera = SimpleNamespace(
+        _bridge=SimpleNamespace(update=lambda _state: calls.append("bridge")),
+        _articulation=SimpleNamespace(update=lambda _state: calls.append("articulation")),
+        _state=SimpleNamespace(particle_q=Array()),
+        _app=SimpleNamespace(update=lambda: calls.append("app")),
+        _cameras=(SimpleNamespace(name="cam_high"),),
+    )
+    captures = iter(
+        (
+            [np.full((2, 2, 3), 1, dtype=np.uint8)],
+            [np.full((2, 2, 3), 2, dtype=np.uint8)],
+        )
+    )
+    camera._capture = lambda: calls.append("capture") or next(captures)
+
+    result = IsaacRandomizedCamera.__call__(
+        camera,
+        SimpleNamespace(particle_q=np.zeros((3, 3), dtype=np.float32)),
+    )
+
+    assert calls.count("bridge") == 2
+    assert calls.count("capture") == 2
+    np.testing.assert_array_equal(
+        result["observation.images.cam_high"],
+        np.full((1, 2, 2, 3), 2, dtype=np.uint8),
+    )
+
+
+def test_isaac_replay_reconstructs_articulated_bodies_from_joint_state(
+    monkeypatch,
+) -> None:
+    class Array:
+        def __init__(self, shape):
+            self.shape = shape
+            self.value = None
+
+        def assign(self, value):
+            self.value = np.asarray(value).copy()
+
+    state = SimpleNamespace(
+        joint_q=Array((2,)),
+        joint_qd=Array((2,)),
+        body_q=Array((3,)),
+        body_qd=Array((3,)),
+    )
+    model = SimpleNamespace(state=lambda: state)
+    builder = SimpleNamespace(finalize=lambda **_kwargs: model)
+    newton = ModuleType("newton")
+    newton.ModelBuilder = lambda **_kwargs: builder
+    calls = []
+
+    def eval_fk(_model, joint_q, joint_qd, target):
+        calls.append((joint_q.value.copy(), joint_qd.value.copy()))
+        target.body_q.assign(np.full((3, 7), 9.0, dtype=np.float32))
+
+    newton.eval_fk = eval_fk
+    warp = ModuleType("warp")
+    warp.vec3 = lambda value: value
+    monkeypatch.setitem(sys.modules, "newton", newton)
+    monkeypatch.setitem(sys.modules, "warp", warp)
+    monkeypatch.setattr("clothdojo.sim.scene._add_robot", lambda *_args, **_kwargs: None)
+    recorded = SimpleNamespace(
+        joint_q=np.array([1.0, 2.0], dtype=np.float32),
+        joint_qd=np.array([3.0, 4.0], dtype=np.float32),
+        body_q=np.zeros((3, 7), dtype=np.float32),
+        body_qd=np.zeros((3, 6), dtype=np.float32),
+    )
+
+    replay = _NewtonArticulationReplay(
+        recorded,
+        asset=Path("robot.usd"),
+        device="cpu",
+        robot_profile=SimpleNamespace(),
+    )
+
+    assert len(calls) == 1
+    np.testing.assert_array_equal(calls[0][0], recorded.joint_q)
+    np.testing.assert_array_equal(replay.body_q.value, np.full((3, 7), 9.0))
+
+
+@pytest.mark.parametrize("robot_id", (FR3_DUO, UR5E_2F85))
+def test_kinematic_arm_overlay_preserves_closed_chain_gripper(robot_id) -> None:
+    profile = robot_profile(robot_id)
+    joint_q = np.linspace(-1.0, 1.0, len(profile.home_joint_q), dtype=np.float32)
+    joint_qd = np.linspace(-2.0, 2.0, profile.joint_dof_count, dtype=np.float32)
+    state = TrajectoryState(
+        sample_index=7,
+        joint_q=joint_q.copy(),
+        joint_qd=joint_qd.copy(),
+        body_q=np.zeros((len(profile.body_names), 7), dtype=np.float32),
+        body_qd=np.zeros((len(profile.body_names), 6), dtype=np.float32),
+        particle_q=np.zeros((2, 3), dtype=np.float32),
+        particle_qd=np.zeros((2, 3), dtype=np.float32),
+        gripper_open_state=np.zeros(2, dtype=np.float32),
+        grasp_attached=np.ones(2, dtype=np.int32),
+        grasp_previous_open=np.ones(2, dtype=np.float32),
+        grasp_pin_count=np.zeros(2, dtype=np.int32),
+        grasp_pins=np.full((2, 2), -1, dtype=np.int32),
+        grasp_pin_local=np.zeros((2, 2, 3), dtype=np.float32),
+    )
+    reference_q = np.full_like(joint_q, 5.0)
+    reference_qd = np.full_like(joint_qd, 6.0)
+
+    mixed = overlay_kinematic_arm_reference(
+        state,
+        reference_joint_q=reference_q,
+        reference_joint_qd=reference_qd,
+        robot_profile=profile,
+    )
+
+    arm_q = np.asarray(profile.arm_coord_indices)
+    arm_qd = np.asarray(profile.arm_dof_indices)
+    non_arm_q = np.setdiff1d(np.arange(len(joint_q)), arm_q)
+    non_arm_qd = np.setdiff1d(np.arange(len(joint_qd)), arm_qd)
+    np.testing.assert_array_equal(mixed.joint_q[arm_q], reference_q[arm_q])
+    np.testing.assert_array_equal(mixed.joint_qd[arm_qd], reference_qd[arm_qd])
+    np.testing.assert_array_equal(mixed.joint_q[non_arm_q], joint_q[non_arm_q])
+    np.testing.assert_array_equal(mixed.joint_qd[non_arm_qd], joint_qd[non_arm_qd])
+    np.testing.assert_array_equal(
+        mixed.joint_q[list(profile.gripper_coord_indices)],
+        joint_q[list(profile.gripper_coord_indices)],
+    )
+    np.testing.assert_array_equal(state.joint_q, joint_q)
+
+    with pytest.raises(ValueError, match="does not match"):
+        overlay_kinematic_arm_reference(
+            state,
+            reference_joint_q=reference_q[:-1],
+            reference_joint_qd=reference_qd,
+            robot_profile=profile,
+        )
+    invalid_q = reference_q.copy()
+    invalid_q[arm_q[0]] = np.nan
+    with pytest.raises(ValueError, match="must be finite"):
+        overlay_kinematic_arm_reference(
+            state,
+            reference_joint_q=invalid_q,
+            reference_joint_qd=reference_qd,
+            robot_profile=profile,
+        )
 
 
 def test_visual_layout_applies_hdri_exposure_calibration() -> None:

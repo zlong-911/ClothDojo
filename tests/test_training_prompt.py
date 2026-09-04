@@ -92,7 +92,15 @@ def test_sft_worker_overrides_task_before_official_tokenization(
     monkeypatch.setattr(FSDPVlaSftWorker, "build_dataloader", build_upstream)
     worker = object.__new__(OpenPiRlinfSftWorker)
     worker.cfg = OmegaConf.create(
-        {"actor": {"seed": 43, "model": {"openpi_data": {"default_prompt": prompt}}}}
+        {
+            "actor": {
+                "seed": 43,
+                "model": {
+                    "num_action_chunks": 4,
+                    "openpi_data": {"default_prompt": prompt},
+                },
+            }
+        }
     )
     worker._rank = 0
     result, actual_config = worker.build_dataloader(["dataset"], eval_dataset=eval_dataset)

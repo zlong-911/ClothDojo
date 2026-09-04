@@ -1,0 +1,36 @@
+\section{Related Work}
+\label{sec:related-work}
+
+\subsection{Garment manipulation}
+
+Garment manipulation has commonly been made tractable by reducing control to
+task-specific primitives, such as selecting grasp points followed by a fixed
+pick--place or fling motion. These methods encode useful geometric and control
+knowledge and can solve well-defined garment tasks efficiently. At the same
+time, the primitive determines much of the behavior before learning begins. It
+therefore provides limited evidence about whether a generalist policy can infer
+garment state, produce continuous robot motion, and recover from its own
+mistakes. ClothDojo retains the ordinary robot action interface so that these
+abilities remain part of the evaluated problem.
+
+\subsection{Deformable simulation and benchmarks}
+
+Simulation environments, simulation benchmarks, and policy benchmarks answer
+different questions. An environment determines what can be simulated; a
+fidelity benchmark measures how well simulated cloth matches physical cloth;
+a policy benchmark measures what an agent can accomplish under a fixed task
+distribution. GarmentLab and RGBench primarily strengthen the first two
+layers. SimWeaver additionally connects simulation to policy training and is
+therefore the closest setting to ClothDojo. ClothDojo concentrates on the third
+layer: severe garment flattening with continuous actions, scalable successful
+data, and closed-loop evaluation across garment variation.
+
+\subsection{Data generation for generalist robot policies}
+
+Privileged supervision separates the difficulty of producing useful training
+behavior from the difficulty of the final visual task. NOCS supplies stable
+cross-asset geometric cues to the trajectory agent while preserving the VLA's
+image-to-action structure. Once a successful physical trajectory exists, its
+observations can be rendered without those cues. Thus the downstream policy
+still acts from ordinary images and never accesses particle state; privilege is
+used to manufacture data, not to simplify the evaluated policy.

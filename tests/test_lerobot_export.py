@@ -341,6 +341,62 @@ def test_video_export_can_use_hardware_h264(tmp_path: Path, monkeypatch) -> None
     assert validations == [(calls[0][1], 1)]
 
 
+def test_video_export_falls_back_to_software_h264_after_nvenc_error(
+    tmp_path: Path, monkeypatch
+) -> None:
+    calls = []
+    validations = []
+    monkeypatch.setattr("clothdojo.data.lerobot.VIDEO_ENCODER", "h264_nvenc")
+
+    def fail_nvenc(_image_dir, video_path, _fps):
+        video_path.parent.mkdir(parents=True)
+        video_path.write_bytes(b"partial")
+        raise OSError("NVENC session unavailable")
+
+    def encode_software(image_dir, video_path, fps):
+        assert not video_path.exists()
+        calls.append((image_dir, video_path, fps))
+
+    monkeypatch.setattr(
+        "clothdojo.data.lerobot._encode_nvenc_video_frames", fail_nvenc
+    )
+    monkeypatch.setattr(
+        "clothdojo.data.lerobot._encode_software_video_frames", encode_software
+    )
+    monkeypatch.setattr(
+        "clothdojo.data.lerobot._validate_video",
+        lambda path, frames: validations.append((path, frames)),
+    )
+
+    class Meta:
+        video_keys = ("observation.images.high",)
+
+        @staticmethod
+        def get_video_file_path(episode_index, key):
+            return Path("videos") / key / f"episode_{episode_index:06d}.mp4"
+
+    class Writer:
+        root = tmp_path
+        meta = Meta()
+        fps = 50
+        episode_buffer: ClassVar = {"frame_index": [0]}
+
+        def _get_image_file_path(self, episode_index, image_key, frame_index):
+            return (
+                self.root
+                / "images"
+                / image_key
+                / f"episode_{episode_index:06d}"
+                / f"frame_{frame_index:06d}.png"
+            )
+
+    _encode_episode_videos(Writer(), 5)
+
+    assert len(calls) == 1
+    assert calls[0][2] == 50
+    assert validations == [(calls[0][1], 1)]
+
+
 def test_video_export_rejects_missing_png_against_recorded_episode(tmp_path, monkeypatch):
     from types import SimpleNamespace
 

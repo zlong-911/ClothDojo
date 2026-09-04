@@ -16,9 +16,9 @@ from clothdojo.assets.materials import (
 def test_catalog_contains_only_runtime_materials() -> None:
     catalog = load_material_catalog()
 
-    assert len(catalog.materials) == 15
-    assert len(catalog.pool("cloth")) == 7
-    assert sum(len(item.color_channels) for item in catalog.pool("cloth")) == 12
+    assert len(catalog.materials) == 22
+    assert len(catalog.pool("cloth")) == 14
+    assert sum(len(item.color_channels) for item in catalog.pool("cloth")) == 19
     assert len(catalog.pool("table")) == 4
     assert len(catalog.pool("ground")) == 4
     assert len(catalog.lighting) == 4
@@ -83,7 +83,7 @@ def test_complete_material_set_is_reused_without_network(
     result = prepare_polyhaven_assets(tmp_path, catalog)
 
     assert result["downloaded_files"] == 0
-    assert result["reused_files"] == 54
+    assert result["reused_files"] == 75
     assert result["bytes"] > 0
 
 

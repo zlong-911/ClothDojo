@@ -1,0 +1,23 @@
+defaults:
+  - pi05_aloha_openpi_rlinf_mirrored_runtime_target_fullonly_wd001_40k
+  - _self_
+
+# Original-only control over the same remaining shirt-fold trajectories. The
+# effective global batch remains 256 via gradient accumulation on two nodes.
+clothdojo:
+  action_chunk_boundary: full_only
+  image_augmentation: false
+
+cluster:
+  num_nodes: 2
+  component_placement:
+    actor: all
+
+runner:
+  logger:
+    experiment_name: shirt_fold_original_allgood_runtime_target_fullonly_wd001_b256_40k_s43_20260903
+
+actor:
+  model:
+    openpi_data:
+      default_prompt: Fold the shirt.

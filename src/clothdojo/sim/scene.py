@@ -25,7 +25,7 @@ from clothdojo.robots import (
     robot_profile,
 )
 from clothdojo.sim.cloth import add_style3d_garment, load_garment_mesh
-from clothdojo.tasks import SHIRT_FLATTEN, task_profile
+from clothdojo.tasks import SHIRT_FLATTEN, SHIRT_FOLD, task_profile
 
 ARM_JOINTS = tuple(f"{side}/joint{joint}" for side in ("left", "right") for joint in range(1, 7))
 GRIPPER_JOINTS = tuple(f"{side}/joint{joint}" for side in ("left", "right") for joint in (7, 8))
@@ -253,7 +253,7 @@ def build_scene(
         raise NotImplementedError(
             f"{task_name} task assets and randomization are not defined yet"
         )
-    if task_name != SHIRT_FLATTEN:
+    if task_name not in {SHIRT_FLATTEN, SHIRT_FOLD}:
         raise ValueError(f"no scene builder is registered for task {task_name!r}")
     return _build_shirt_flatten(
         assets_root,
@@ -356,6 +356,7 @@ def _add_robot(
             ],
         )
     imported = builder.add_usd(**import_options)
+    _restore_authored_mimic_constraints(stage, imported, builder)
     if profile.robot_id == ALOHA2:
         _restore_exported_joint_dynamics(stage, imported, builder)
     legacy_contract = None
@@ -512,6 +513,61 @@ def _add_robot(
     return body_count, arm_joints, gripper_joints, arm_coords, end_effectors
 
 
+def _restore_authored_mimic_constraints(stage, imported, builder) -> None:
+    """Recover Newton mimic rows when a host OpenUSD misses the applied schema.
+
+    Isaac owns the OpenUSD plugin registry before ClothDojo imports the robot.
+    The custom relationship and coefficients remain readable in that case even
+    if ``Usd.Prim.HasAPI("NewtonMimicAPI")`` is false. Newton's USD importer
+    consequently skips the row, leaving passive gripper fingers uncontrolled.
+    Keep the USD as the source of truth and add only rows the importer omitted.
+    """
+
+    path_joint_map = imported["path_joint_map"]
+    existing = {
+        (int(follower), int(leader))
+        for follower, leader in zip(
+            builder.constraint_mimic_joint0,
+            builder.constraint_mimic_joint1,
+            strict=True,
+        )
+    }
+    for follower_path, follower in path_joint_map.items():
+        prim = stage.GetPrimAtPath(follower_path)
+        relationship = prim.GetRelationship("newton:mimicJoint")
+        targets = relationship.GetTargets() if relationship else []
+        if not targets:
+            continue
+        leader_path = targets[0]
+        if not leader_path.IsAbsolutePath():
+            leader_path = prim.GetPath().GetParentPath().AppendPath(leader_path)
+        leader = path_joint_map.get(str(leader_path))
+        if leader is None:
+            raise RuntimeError(
+                f"mimic joint {follower_path} references missing leader {leader_path}"
+            )
+        pair = (int(follower), int(leader))
+        if pair in existing:
+            continue
+
+        coef0_attr = prim.GetAttribute("newton:mimicCoef0")
+        coef1_attr = prim.GetAttribute("newton:mimicCoef1")
+        enabled_attr = prim.GetAttribute("newton:mimicEnabled")
+        coef0 = float(coef0_attr.Get()) if coef0_attr and coef0_attr.HasAuthoredValue() else 0.0
+        coef1 = float(coef1_attr.Get()) if coef1_attr and coef1_attr.HasAuthoredValue() else 1.0
+        has_enabled = enabled_attr and enabled_attr.HasAuthoredValue()
+        enabled = bool(enabled_attr.Get()) if has_enabled else True
+        builder.add_constraint_mimic(
+            joint0=pair[0],
+            joint1=pair[1],
+            coef0=coef0,
+            coef1=coef1,
+            enabled=enabled,
+            label=str(follower_path),
+        )
+        existing.add(pair)
+
+
 def _restore_exported_joint_dynamics(stage, imported, builder) -> None:
     """Restore SI joint values written by Newton's ModelBuilder USD exporter."""
 
@@ -662,6 +718,35 @@ def _configure_robot_collision_geometry(
     for slot, left_shape in enumerate(contact_shapes):
         for right_shape in contact_shapes[slot + 1 :]:
             builder.add_shape_collision_filter_pair(left_shape, right_shape)
+
+    # Some upstream Piper layers author articulation self-collision as disabled.
+    # The importer materializes that choice as filter pairs before ClothDojo's
+    # proxy roles are applied.  Cross-arm proxy pairs belong to this workstation
+    # contract, so remove only those inherited filters; adjacent/same-arm filters
+    # are reconstructed below from the actual body topology.
+    proxy_set = set(proxy_shapes)
+    body_labels = tuple(str(value) for value in builder.body_label)
+
+    def arm_side(shape: int) -> str | None:
+        body = int(builder.shape_body[shape])
+        label = body_labels[body] if 0 <= body < len(body_labels) else ""
+        if label.startswith("left/"):
+            return "left"
+        if label.startswith("right/"):
+            return "right"
+        return None
+
+    builder.shape_collision_filter_pairs = [
+        (shape_a, shape_b)
+        for shape_a, shape_b in builder.shape_collision_filter_pairs
+        if not (
+            shape_a in proxy_set
+            and shape_b in proxy_set
+            and arm_side(shape_a) is not None
+            and arm_side(shape_b) is not None
+            and arm_side(shape_a) != arm_side(shape_b)
+        )
+    ]
 
     robot_bodies = set(range(body_start, body_end))
     ignored_body_pairs = {(body, body) for body in robot_bodies}

@@ -8,6 +8,10 @@ import pytest
 import torch
 
 from clothdojo.training.augmentation import install_training_augmentation
+from clothdojo.training.training_time_rtc import (
+    TrainingTimeRTCSpec,
+    install_training_time_rtc,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -214,6 +218,45 @@ def assert_matching_gradients(left, right):
     assert nonzero > 0
 
 
+def test_training_time_rtc_conditions_clean_prefix_and_masks_its_loss(monkeypatch):
+    core = tiny_core(monkeypatch, "float32")
+    install_training_time_rtc(core, TrainingTimeRTCSpec(max_delay=4))
+    obs = observation()
+    actions = torch.randn(2, 4, 32)
+    noise = torch.randn_like(actions)
+    time = torch.tensor([0.25, 0.75])
+    delay = torch.tensor([2, 0])
+
+    loss = core.compute_loss(
+        obs, actions, train=False, noise=noise, time=time, delay=delay
+    )
+
+    assert loss.shape == (2, 4)
+    assert torch.equal(loss[0, :2], torch.zeros(2))
+    assert torch.count_nonzero(loss[0, 2:]) == 2
+    assert torch.count_nonzero(loss[1]) == 4
+    loss.mean().backward()
+    assert any(
+        parameter.grad is not None and torch.count_nonzero(parameter.grad)
+        for parameter in core.parameters()
+    )
+
+
+def test_training_time_rtc_delay_zero_preserves_unconditioned_loss_scale(monkeypatch):
+    core = tiny_core(monkeypatch, "float32")
+    reference = copy.deepcopy(core)
+    install_training_time_rtc(core, TrainingTimeRTCSpec(max_delay=4))
+    obs, actions = observation(), torch.randn(2, 4, 32)
+    noise, time = torch.randn_like(actions), torch.tensor([0.25, 0.75])
+
+    actual = core.compute_loss(
+        obs, actions, train=False, noise=noise, time=time, delay=torch.zeros(2, dtype=torch.long)
+    )
+    expected = reference.compute_loss(obs, actions, train=False, noise=noise, time=time)
+
+    torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-6)
+
+
 @pytest.mark.parametrize("dtype", ["float32", "bfloat16"])
 def test_disabled_augmentation_preserves_flow_sampling_and_gradients(monkeypatch, dtype):
     core = tiny_core(monkeypatch, dtype)
@@ -306,6 +349,7 @@ def test_sft_worker_installs_configured_image_policy(monkeypatch, setting):
     worker.model.model = RecordingCore()
     worker.optimizer = SimpleNamespace(state={})
     worker._action_offset_weights = (1.0,)
+    worker._training_time_rtc = None
     expected = (setting or {}).get("image_augmentation", False)
     if not isinstance(expected, bool):
         with pytest.raises(TypeError, match="must be a bool"):

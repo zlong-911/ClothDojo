@@ -208,6 +208,48 @@ def mirror_state_arrays(arrays: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     _require_shape(arrays["grasp_pins"], (2, None), "grasp_pins")
     _require_shape(arrays["grasp_pin_local"], (2, None, 3), "grasp_pin_local")
 
+    result = mirror_robot_state_arrays(
+        {
+            name: values
+            for name, values in arrays.items()
+            if name not in {"particle_q", "particle_qd"}
+        }
+    )
+    particle_q = np.asarray(arrays["particle_q"]).copy()
+    particle_q[..., 1] *= -1.0
+    particle_qd = np.asarray(arrays["particle_qd"]).copy()
+    particle_qd[..., 1] *= -1.0
+    result.update({"particle_q": particle_q, "particle_qd": particle_qd})
+    _require_finite(result, "mirrored state")
+    return {name: result[name] for name in arrays}
+
+
+def mirror_robot_state_arrays(arrays: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """Mirror Piper state fields while leaving derived cloth fields to an overlay."""
+
+    expected = {
+        "sample_index",
+        "joint_q",
+        "joint_qd",
+        "body_q",
+        "body_qd",
+        "gripper_open_state",
+        "grasp_attached",
+        "grasp_previous_open",
+        "grasp_pin_count",
+        "grasp_pins",
+        "grasp_pin_local",
+    }
+    _require_fields(arrays, expected, "robot state")
+    _require_shape(arrays["joint_q"], (16,), "joint_q")
+    _require_shape(arrays["joint_qd"], (16,), "joint_qd")
+    _require_shape(arrays["body_q"], (_PIPER_BODY_COUNT, 7), "body_q")
+    _require_shape(arrays["body_qd"], (_PIPER_BODY_COUNT, 6), "body_qd")
+    for name in ("gripper_open_state", "grasp_attached", "grasp_previous_open", "grasp_pin_count"):
+        _require_shape(arrays[name], (2,), name)
+    _require_shape(arrays["grasp_pins"], (2, None), "grasp_pins")
+    _require_shape(arrays["grasp_pin_local"], (2, None, 3), "grasp_pin_local")
+
     body_permutation = np.concatenate(
         (
             np.asarray((0,), dtype=np.int64),
@@ -230,10 +272,6 @@ def mirror_state_arrays(arrays: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     body_qd = np.asarray(arrays["body_qd"][:, body_permutation]).copy()
     body_qd *= _BODY_VELOCITY_SIGNS
 
-    particle_q = np.asarray(arrays["particle_q"]).copy()
-    particle_q[..., 1] *= -1.0
-    particle_qd = np.asarray(arrays["particle_qd"]).copy()
-    particle_qd[..., 1] *= -1.0
     pin_local = np.asarray(arrays["grasp_pin_local"][:, ::-1]).copy()
     # link6's home frame maps its local x axis to world y. Its local reflection
     # is therefore H^-1 S H = diag(-1, 1, 1), consistent with body_q above.
@@ -246,8 +284,6 @@ def mirror_state_arrays(arrays: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         "joint_qd": _mirror_piper_joint_coordinates(arrays["joint_qd"]),
         "body_q": body_q,
         "body_qd": body_qd,
-        "particle_q": particle_q,
-        "particle_qd": particle_qd,
         "gripper_open_state": np.asarray(arrays["gripper_open_state"][:, ::-1]).copy(),
         "grasp_attached": np.asarray(arrays["grasp_attached"][:, ::-1]).copy(),
         "grasp_previous_open": np.asarray(
@@ -257,7 +293,7 @@ def mirror_state_arrays(arrays: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         "grasp_pins": np.asarray(arrays["grasp_pins"][:, ::-1]).copy(),
         "grasp_pin_local": pin_local,
     }
-    _require_finite(result, "mirrored state")
+    _require_finite(result, "mirrored robot state")
     return result
 
 

@@ -5,7 +5,12 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from clothdojo.trajectory.newton import capture_actions, capture_states
+from clothdojo.trajectory.newton import (
+    NewtonTrajectoryRecorder,
+    capture_actions,
+    capture_canonical_actions,
+    capture_states,
+)
 
 
 class FakeArray:
@@ -66,12 +71,19 @@ def _runtime():
         particle_q=FakeArray(np.arange(18, dtype=np.float32).reshape(6, 3)),
         particle_qd=FakeArray(np.arange(18, dtype=np.float32).reshape(6, 3) + 0.25),
     )
-    return SimpleNamespace(
+    runtime = SimpleNamespace(
         model=SimpleNamespace(world_count=2),
         scene=SimpleNamespace(robot=robot, grippers=grippers),
         state_0=state,
         grasp=FakeGrasp(),
     )
+    runtime.canonical_arm_target = FakeArray(
+        np.arange(24, dtype=np.float32).reshape(2, 12)
+    )
+    runtime.canonical_gripper_open = FakeArray(
+        np.asarray([[0.0, 1.0], [0.5, 0.25]], dtype=np.float32)
+    )
+    return runtime
 
 
 def test_capture_states_splits_worlds_and_copies_simulator_arrays() -> None:
@@ -120,3 +132,107 @@ def test_capture_actions_preserves_worlds_and_rejects_wrong_shapes() -> None:
 
     with pytest.raises(ValueError, match="arm_target shape"):
         capture_actions(runtime, 3, FakeArray(np.zeros((2, 11))), gripper)
+
+
+def test_capture_canonical_actions_reads_runtime_owned_buffers() -> None:
+    runtime = _runtime()
+
+    actions = capture_canonical_actions(runtime, 4)
+
+    assert [action.sample_index for action in actions] == [4, 4]
+    np.testing.assert_array_equal(actions[1].joint_target, np.arange(12, 24))
+    np.testing.assert_array_equal(actions[1].gripper_open_command, [0.5, 0.25])
+
+
+def test_batched_recorder_copies_each_runtime_canonical_action_before_overwrite() -> None:
+    import warp as wp
+
+    worlds = 2
+
+    class WarpView:
+        def __init__(self, **values) -> None:
+            self.values = values
+
+        def get_attribute(self, name, _source):
+            return self.values[name]
+
+    class Grasp:
+        def __init__(self) -> None:
+            self.attached = wp.zeros((worlds, 2), dtype=wp.int32, device="cpu")
+            self.previous_open = wp.ones((worlds, 2), dtype=wp.float32, device="cpu")
+            self.pin_count = wp.zeros((worlds, 2), dtype=wp.int32, device="cpu")
+            self.pins = wp.full((worlds, 2, 2), -1, dtype=wp.int32, device="cpu")
+            self.pin_local = wp.zeros((worlds, 2, 2), dtype=wp.vec3, device="cpu")
+
+        @staticmethod
+        def particle_ranges():
+            return ((0, 2), (2, 4))
+
+    joint_q = wp.zeros((worlds, 1, 16), dtype=wp.float32, device="cpu")
+    joint_qd = wp.zeros((worlds, 1, 16), dtype=wp.float32, device="cpu")
+    robot = WarpView(
+        joint_q=joint_q,
+        joint_qd=joint_qd,
+        body_q=wp.zeros((worlds, 1, 21), dtype=wp.transform, device="cpu"),
+        body_qd=wp.zeros((worlds, 1, 21), dtype=wp.spatial_vector, device="cpu"),
+    )
+    grippers = WarpView(
+        joint_q=wp.zeros((worlds, 1, 4), dtype=wp.float32, device="cpu"),
+        joint_limit_lower=wp.zeros((worlds, 1, 4), dtype=wp.float32, device="cpu"),
+        joint_limit_upper=wp.ones((worlds, 1, 4), dtype=wp.float32, device="cpu"),
+    )
+    state = SimpleNamespace(
+        joint_q=joint_q,
+        joint_qd=joint_qd,
+        particle_q=wp.zeros(4, dtype=wp.vec3, device="cpu"),
+        particle_qd=wp.zeros(4, dtype=wp.vec3, device="cpu"),
+    )
+    runtime = SimpleNamespace(
+        model=SimpleNamespace(world_count=worlds),
+        scene=SimpleNamespace(
+            robot=robot,
+            grippers=grippers,
+            world_offsets=np.zeros((worlds, 3), dtype=np.float32),
+        ),
+        state_0=state,
+        grasp=Grasp(),
+        canonical_arm_target=wp.zeros((worlds, 12), dtype=wp.float32, device="cpu"),
+        canonical_gripper_open=wp.zeros((worlds, 2), dtype=wp.float32, device="cpu"),
+    )
+
+    class Writer:
+        def __init__(self) -> None:
+            self.initial = None
+            self.transitions = []
+
+        def write_initial_state(self, value) -> None:
+            self.initial = value
+
+        def append_transition(self, action, next_state) -> None:
+            self.transitions.append((action, next_state))
+
+    writers = [Writer(), Writer()]
+    recorder = NewtonTrajectoryRecorder(runtime, capacity=3)
+    recorder.capture_state(0)
+    for index in range(2):
+        runtime.canonical_arm_target.assign(
+            np.full((worlds, 12), 10 * (index + 1), dtype=np.float32)
+            + np.arange(worlds, dtype=np.float32)[:, None]
+        )
+        runtime.canonical_gripper_open.assign(
+            np.full((worlds, 2), 0.25 * (index + 1), dtype=np.float32)
+        )
+        recorder.capture_action(index)
+        recorder.capture_state(index + 1)
+    recorder.enqueue_readback()
+    wp.synchronize_device("cpu")
+    recorder.drain(writers)
+
+    assert writers[0].initial.sample_index == 0
+    assert [item[0].sample_index for item in writers[1].transitions] == [0, 1]
+    np.testing.assert_array_equal(writers[1].transitions[0][0].joint_target, 11.0)
+    np.testing.assert_array_equal(writers[1].transitions[1][0].joint_target, 21.0)
+    np.testing.assert_array_equal(
+        writers[0].transitions[1][0].gripper_open_command,
+        [0.5, 0.5],
+    )

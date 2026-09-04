@@ -10,7 +10,11 @@ from typing import Any
 import numpy as np
 
 from clothdojo.rollout.scenario import RolloutScenario
-from clothdojo.trajectory import SceneMetadata, TrajectoryWriter
+from clothdojo.trajectory import (
+    RUNTIME_ACTION_SEMANTICS,
+    SceneMetadata,
+    TrajectoryWriter,
+)
 from clothdojo.trajectory.newton import NewtonTrajectoryRecorder, gripper_openness
 
 POLICY_ACTION_DIM = 14
@@ -62,14 +66,6 @@ class NewtonBatchEnvironment:
         self._sample_index = 0
         model = runtime.model
         scene = runtime.scene
-        self._arm_lower = np.asarray(
-            scene.arms.get_attribute("joint_limit_lower", model).numpy()[:, 0],
-            dtype=np.float32,
-        )
-        self._arm_upper = np.asarray(
-            scene.arms.get_attribute("joint_limit_upper", model).numpy()[:, 0],
-            dtype=np.float32,
-        )
         self._gripper_lower = np.asarray(
             scene.grippers.get_attribute("joint_limit_lower", model).numpy()[:, 0],
             dtype=np.float32,
@@ -123,8 +119,6 @@ class NewtonBatchEnvironment:
         if np.asarray(policy_actions).shape != expected:
             raise ValueError(f"batched policy action shape must be {expected}")
         arms, grippers = unpack_policy_actions(policy_actions)
-        arms = np.ascontiguousarray(np.clip(arms, self._arm_lower, self._arm_upper))
-        grippers = np.ascontiguousarray(np.clip(grippers, 0.0, 1.0))
         self._arm_device.assign(arms)
         self._gripper_device.assign(grippers)
         self.runtime.step(self._arm_device, self._gripper_device)
@@ -185,7 +179,7 @@ class NewtonTrajectoryEpisode(NewtonBatchEnvironment):
                     writers.append(None)
                     continue
                 garment_id = str(scenario.garment_id)
-                overlap = {"producer", "training_eligible"} & set(extra)
+                overlap = {"producer", "training_eligible", "action_semantics"} & set(extra)
                 if overlap:
                     raise ValueError(
                         f"trajectory metadata contains reserved fields: {sorted(overlap)}"
@@ -196,6 +190,7 @@ class NewtonTrajectoryEpisode(NewtonBatchEnvironment):
                     "seed": scenario.seed,
                     "prompt": scenario.prompt,
                     "training_eligible": bool(training_eligible),
+                    "action_semantics": RUNTIME_ACTION_SEMANTICS,
                     **extra,
                 }
                 writer = TrajectoryWriter(
@@ -230,8 +225,8 @@ class NewtonTrajectoryEpisode(NewtonBatchEnvironment):
 
     def step(self, policy_actions: np.ndarray) -> None:
         sample_index = self.sample_index
-        arms, grippers = super().step(policy_actions)
-        self._recorder.capture_action(sample_index, arms, grippers)
+        super().step(policy_actions)
+        self._recorder.capture_action(sample_index)
         self._recorder.capture_state(self.sample_index)
 
     def synchronize(self) -> None:

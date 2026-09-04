@@ -104,8 +104,10 @@ def inspect_openpi_rlinf_sft(
         inspect_openpi_norm_stats,
     )
     from clothdojo.training.openpi_rlinf_sft import (
+        _action_chunk_boundary_from_config,
         _action_offset_loss_manifest_from_config,
     )
+    from clothdojo.training.training_time_rtc import training_time_rtc_manifest_from_config
     from clothdojo.training.worker_environment import worker_environment_from_config
 
     model_type = str(cfg.actor.model.model_type)
@@ -153,14 +155,18 @@ def inspect_openpi_rlinf_sft(
     image_augmentation = cfg.get("clothdojo", {}).get("image_augmentation", False)
     if not isinstance(image_augmentation, bool):
         raise TypeError("clothdojo.image_augmentation must be a boolean")
+    action_chunk_boundary = _action_chunk_boundary_from_config(cfg)
     jax_reference = _inspect_jax_reference(cfg, config_path, training_contract)
-    dataset = inspect_openpi_dataset(cfg.data.train_data_paths)
     openpi_data = OmegaConf.to_container(cfg.actor.model.openpi_data, resolve=True)
     if not isinstance(openpi_data, dict):
         raise TypeError("OpenPI/RLinf openpi_data config must be a mapping")
     from clothdojo.training.openpi import TrainingPrompt
 
     training_prompt = TrainingPrompt(openpi_data.get("default_prompt")).prompt
+    dataset = inspect_openpi_dataset(
+        cfg.data.train_data_paths,
+        expected_task=training_prompt,
+    )
     # JAX reads the dataset task; its default_prompt only fills a missing key.
     # RLINF explicitly overrides that text, so compare the actual tokenizer input.
     if jax_reference is not None and dataset["prompt"] != training_prompt:
@@ -174,6 +180,7 @@ def inspect_openpi_rlinf_sft(
         config_name=str(cfg.actor.model.openpi.config_name),
         data_kwargs=openpi_data,
         action_horizon=int(cfg.actor.model.num_action_chunks),
+        action_chunk_boundary=action_chunk_boundary,
     )
     resolved = OmegaConf.to_container(cfg, resolve=True)
     if not isinstance(resolved, dict):
@@ -186,6 +193,7 @@ def inspect_openpi_rlinf_sft(
         "numerical_contract": numerical,
         "training_contract": training_contract,
         "image_augmentation": image_augmentation,
+        "action_chunk_boundary": action_chunk_boundary,
         "training_prompt": training_prompt,
         "jax_reference": jax_reference,
         "openpi_data_home": str(openpi_data_home),
@@ -193,6 +201,7 @@ def inspect_openpi_rlinf_sft(
         "dataset": dataset,
         "norm_stats": norm,
         "action_offset_loss": _action_offset_loss_manifest_from_config(cfg),
+        "training_time_rtc": training_time_rtc_manifest_from_config(cfg),
         "worker_environment": worker_environment_from_config(cfg),
         "resolved_config": resolved,
     }

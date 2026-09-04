@@ -1,0 +1,19 @@
+defaults:
+  - pi05_aloha_openpi_rlinf_mirrored_runtime_target_fullonly_wd001_40k
+  - _self_
+
+# Original-only control for the spatially augmented fold run. The effective
+# global batch stays 256; two-node execution uses gradient accumulation.
+cluster:
+  num_nodes: 2
+  component_placement:
+    actor: all
+
+runner:
+  logger:
+    experiment_name: shirt_fold_original_runtime_target_fullonly_wd001_b256_40k_s43_20260903
+
+actor:
+  model:
+    openpi_data:
+      default_prompt: Fold the shirt.

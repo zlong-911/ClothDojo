@@ -1105,6 +1105,9 @@ def _validate_server_metadata(
         _require_sha256(identity.get("norm_provenance_sha256"), "server norm provenance")
         _require_sha256(identity.get("training_manifest_sha256"), "server training manifest")
     if backend in {"rlinf-sft", "openpi"}:
+        training_dataset_root = identity.get("training_dataset_root")
+        if not isinstance(training_dataset_root, str) or not training_dataset_root.strip():
+            raise ValueError("policy server is missing its training dataset root")
         _require_sha256(identity.get("dataset_info_sha256"), "server dataset info")
         _require_sha256(identity.get("dataset_sidecar_sha256"), "server dataset sidecar")
         source_framework = identity.get("source_framework")

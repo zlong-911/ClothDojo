@@ -273,8 +273,9 @@ def test_cfg_preflight_matches_rlinf_size_balanced_sampling(monkeypatch, tmp_pat
     ]
 
 
-def test_cfg_pipeline_matches_multiple_rollout_entries_by_role_and_path(
-    monkeypatch, tmp_path: Path
+@pytest.mark.parametrize("expert_only", [False, True])
+def test_cfg_pipeline_matches_entries_by_role_and_path(
+    monkeypatch, tmp_path: Path, expert_only: bool
 ) -> None:
     from omegaconf import OmegaConf
 
@@ -292,6 +293,8 @@ def test_cfg_pipeline_matches_multiple_rollout_entries_by_role_and_path(
         ("rollout", "rollout_0", "rollout_tag"),
         ("rollout", "rollout_1", "rollout_tag"),
     ):
+        if expert_only and role == "rollout":
+            continue
         path = project_data / name
         path.mkdir()
         datasets.append(
@@ -340,6 +343,84 @@ def test_cfg_pipeline_matches_multiple_rollout_entries_by_role_and_path(
 
     assert report["compatible"] is True
     assert report["labels_complete"] is False
+
+
+def test_cfg_expert_only_preflight(monkeypatch, tmp_path: Path) -> None:
+    from omegaconf import OmegaConf
+
+    expert, _ = _configure(monkeypatch, tmp_path)
+    # A Good trajectory can contain both high- and low-ranked action chunks.
+    _dataset_root = expert / "meta"
+    table = pq.read_table(_dataset_root / f"advantages_{ADVANTAGE_TAG}.parquet")
+    table = table.set_column(2, "advantage", pa.array([True, True, True, False]))
+    pq.write_table(table, _dataset_root / f"advantages_{ADVANTAGE_TAG}.parquet")
+    path = _dataset_root / f"advantages_{ADVANTAGE_TAG}.json"
+    manifest = json.loads(path.read_text())
+    manifest.update(positive=3, negative=1)
+    path.write_text(json.dumps(manifest))
+    source = Path(__file__).resolve().parents[1] / "configs/training/cfg_pi05_aloha.yaml"
+    cfg = compose_config(source)
+    cfg.data.train_data_paths = [cfg.data.train_data_paths[0]]
+    config = tmp_path / "expert_only.yaml"
+    OmegaConf.save(cfg, config, resolve=True)
+
+    report = inspect_cfg_training(config)
+    assert report["sampling_probabilities"] == {"sft": 1.0, "rollout": 0.0}
+    assert report["datasets"][0]["negative_frames"] == 1
+
+    cfg.data.train_data_paths = []
+    OmegaConf.save(cfg, config, resolve=True)
+    with pytest.raises(ValueError, match="exactly one sft"):
+        inspect_cfg_training(config)
+
+
+def test_cfg_continuation_binds_sft_norm_for_changed_dataset(tmp_path: Path) -> None:
+    from test_rollout_artifacts import _fixture
+
+    from clothdojo.training.cfg import _validate_norm_binding
+
+    checkpoint, norm, _ = _fixture(tmp_path)
+    info = tmp_path / "expert_info.json"
+    info.write_text('{"total_episodes": 1644}')
+    model = SimpleNamespace(
+        openpi=SimpleNamespace(config_name="pi05_aloha_robotwin"), num_action_chunks=50
+    )
+    provenance = json.loads((norm / "clothdojo.json").read_text())
+
+    binding = _validate_norm_binding(checkpoint, norm, provenance, info, model)
+    assert binding["source"] == "sft_initialization"
+    (norm / "norm_stats.json").write_text('{"changed": true}')
+    with pytest.raises(ValueError, match="SHA-256 differs"):
+        _validate_norm_binding(checkpoint, norm, provenance, info, model)
+
+
+def test_cfg_rejects_unbound_norm_for_changed_dataset(monkeypatch, tmp_path: Path) -> None:
+    _configure(monkeypatch, tmp_path)
+    path = tmp_path / "norm/clothdojo.json"
+    provenance = json.loads(path.read_text())
+    provenance["dataset_info_sha256"] = "0" * 64
+    path.write_text(json.dumps(provenance))
+    config = Path(__file__).resolve().parents[1] / "configs/training/cfg_pi05_aloha.yaml"
+    with pytest.raises(ValueError, match="match neither"):
+        inspect_cfg_training(config)
+
+
+def test_cfg_expert_only_continuation_budget(monkeypatch, tmp_path: Path) -> None:
+    _configure(monkeypatch, tmp_path)
+    config = (
+        Path(__file__).resolve().parents[1]
+        / "configs/training/cfg_pi05_aloha_expert822_mirrored.yaml"
+    )
+    cfg = compose_config(config)
+    assert [entry.type for entry in cfg.data.train_data_paths] == ["sft"]
+    assert cfg.actor.global_batch_size == 256
+    assert cfg.actor.micro_batch_size == 16
+    assert cfg.actor.seed == 43
+    assert cfg.runner.max_steps == cfg.actor.optim.total_training_steps == 12000
+    assert cfg.actor.optim.lr_warmup_steps == 2000
+    assert cfg.actor.optim.lr == pytest.approx(1e-5)
+    assert cfg.actor.model.openpi.unconditional_prob == 0.1
+    assert cfg.actor.model.openpi.positive_only_conditional is True
 
 
 def test_cfg_launch_manifest_binds_serving_contract(monkeypatch, tmp_path: Path) -> None:

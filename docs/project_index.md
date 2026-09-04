@@ -48,8 +48,11 @@
 | `src/clothdojo/data/` | 数据转换与导出 |
 | `src/clothdojo/data/retarget.py` | Piper 到目标 robot profile 的几何参考、门禁与多 GPU／同卡常驻 worker 调度 |
 | `src/clothdojo/data/retarget_dynamics.py` | 共用 RobotDynamicsRetargeter：刚体逆动力学、一步 shooting、夹爪事件前馈与 action-only replay |
+| `src/clothdojo/data/front_back.py` | shirt_fold 的前后可达性搜索、Piper action-only 重放、刚体碰撞门禁及四变体 overlay 发布 |
+| `src/clothdojo/data/action_canonicalization.py` | 完整复制历史 Piper collection，并将 action 替换为 runtime joint-limit target |
 | `src/clothdojo/data/rollout_review.py` | canonical trajectory 的增量无 solver 轻量审查视频 |
-| `src/clothdojo/collection/` | 采集控制面 |
+| `src/clothdojo/collection/` | 采集控制面与 HIL 审查视频切换 |
+| `src/clothdojo/collection/review_export.py` | 排除 teleop GPU 的全数据源 Review 多 GPU 导出调度 |
 | `src/clothdojo/teleop/` | 遥操运行时 |
 | `src/clothdojo/training/` | 训练与数据处理入口 |
 | `src/clothdojo/training/jax_sft.py` | `openpi-jax` 单次与矩阵训练入口 |
@@ -59,7 +62,7 @@
 | `configs/training/pi05_aloha_openpi_rlinf_mirrored_noaug_bs256_wd001_40k.yaml` | 四机32卡、镜像 NOCS、统一图像/文本输入并启用 weight decay 的 B256 SFT 配置；30k衰减后低学习率训练至40k |
 | `src/clothdojo/training/steam.py` | STEAM critic 数据/超参数门禁、launch manifest 与三成员 checkpoint 合并 |
 | `src/clothdojo/training/rlinf_steam.py` | RLINF STEAM 的确定性 DataLoader、state/full-model 与 FP32-master 运行时适配 |
-| `src/clothdojo/training/worker_environment.py` | SFT/STEAM 在 worker 内应用通信配置，覆盖容器默认网卡与 RoCE 设置 |
+| `src/clothdojo/training/worker_environment.py` | SFT/STEAM/CFG 在 worker 内应用通信配置，覆盖容器默认网卡与 RoCE 设置 |
 | `src/clothdojo/training/rlinf_steam_state.py` | 当前项目拥有的 STEAM state-aware 训练/推理扩展与严格 checkpoint 加载门禁 |
 | `src/clothdojo/training/steam_geometry.py` | NOCS 完整 Good 镜像数据筛选、逐帧几何特征及原/镜像一致性检查；不改 policy state |
 | `configs/training/steam_value_shirt_flatten.yaml` | 三个独立 8-GPU STEAM evaluator member 共用的正式训练配置 |
@@ -69,6 +72,7 @@
 | `src/clothdojo/training/rlinf_cfg.py` | 项目拥有的 CFG worker、向量化 advantage loader、严格 checkpoint 加载与保存合同 |
 | `src/clothdojo/training/cfg_data_runtime.py` | CFG 的 epoch-tagged 采样、无解码跳过已消费 batch 与续训状态校验 |
 | `configs/training/cfg_pi05_aloha_rollout400.yaml` | 719 条受审专家轨迹与 400 条 rollout 的正式 STEAM/CFGRL 续训配置 |
+| `configs/training/cfg_pi05_aloha_expert822_mirrored.yaml` | 822 条 Good 专家及镜像的 expert-only CFGRL；续训沿用初始化 SFT 的归一化指纹 |
 | `src/clothdojo/rollout/` | 策略执行、共用 trajectory collection runner 与轨迹生成 |
 | `src/clothdojo/rollout/policy.py` | SFT/CFG 服务、远端协议与 CFG+RTC 组合 |
 | `src/clothdojo/rollout/guided_rtc.py` | Physical Intelligence guided RTC 数学 |
@@ -76,10 +80,11 @@
 | `src/clothdojo/rollout/conversion.py` | JAX EMA 到 rollout checkpoint 的一次性受检转换 |
 | `src/clothdojo/rollout/parity.py` | JAX/PyTorch 同观测、同噪声的数值对齐门禁 |
 | `src/clothdojo/rollout/trajectory_collection.py` | rollout 与 evaluation 共用的 worker、batch、轨迹恢复和事务发布 |
+| `configs/rollout/shirt_flatten.yaml` / `configs/rollout/shirt_fold.yaml` | 展平与折叠的独立 rollout task identity、prompt 和时长入口；折叠初态由显式 state pool 提供 |
 | `src/clothdojo/data/rollout.py` | canonical rollout/trajectory 的 LeRobot 四视角发布与确定性多 GPU 分片 |
 | `src/clothdojo/data/lerobot.py` | 标准 LeRobot v2.1 读写、视频编码与 trajectory shard 无重编码合并 |
 | `src/clothdojo/data/mirror.py` | Piper canonical collection 的双臂中轴镜像增强与完整独立发布 |
-| `src/clothdojo/data/isaac_render.py` | 同一导出入口的 Isaac RTX 与逐 episode 外观随机化后端 |
+| `src/clothdojo/data/isaac_render.py` | 同一导出入口的 Isaac RTX 与逐 episode 外观随机化后端；运动学臂参考只覆盖 profile 的 arm 坐标，保留动力学夹爪闭环状态 |
 | `src/clothdojo/training/cfg_pipeline.py` | STEAM advantage、数据 gate 与 CFG launch |
 | `src/clothdojo/evaluation/collection.py` | 冻结 balanced-200 / 800-case 正式评测 condition 规划、离线 scoring 与发布 |
 | `src/clothdojo/evaluation/managed.py` | 单一正式入口的策略服务、多机仿真、恢复、评分与进程清理 Coordinator |
@@ -87,6 +92,7 @@
 | `src/clothdojo/evaluation/worker.py` | 只写互斥 trajectory shard 的内部节点 Worker |
 | `src/clothdojo/runtime_identity.py` | 多机推理与仿真节点共用的项目 Python 源码指纹 |
 | `src/clothdojo/evaluation/scoring.py` | canonical trajectory 的离线指标计算 |
+| `src/clothdojo/evaluation/folding.py` | 折叠目标的平面对齐对应粒子距离与 target-free 终态诊断 |
 | `src/clothdojo/evaluation/results.py` | condition 读取与配对汇总 |
 | `configs/evaluation/balanced200_20260901.yaml` | 正式800-case面板的稳定输入入口 |
 | `configs/evaluation/runs/` | 模型、执行条件与输出身份的正式 run config |
@@ -106,11 +112,14 @@
 - [`steam.md`](steam.md)：STEAM 的 state/geometry 输入、NOCS 数据准备和 checkpoint 合同。
 - [`retargeting.md`](retargeting.md)：机械臂 retarget 的使用入口、产物语义与验证边界。
 - [`mirroring.md`](mirroring.md)：Piper 原始轨迹镜像增强的数据变换、产物和验证边界。
+- [`front_back_augmentation.md`](front_back_augmentation.md)：shirt_fold 前后镜像的坐标语义、可达性搜索、四变体产物和严格门禁。
 - [`mount_alignment.md`](mount_alignment.md)：机械臂底座孔型配准的证据等级、计算入口与验收关系。
 - [`robot_dynamics.md`](robot_dynamics.md)：机器人 USD 动力学来源、单位与运行时适用边界。
 - [`robot_workstations.md`](robot_workstations.md)：五套固定工作站、外部 payload 部署与统一渲染入口。
 - [`reference_index.md`](reference_index.md)：官方文档与源码入口。
 - [`compute_hosts.md`](compute_hosts.md)：远端计算节点。
+- [`experiments/evaluation_results.md`](experiments/evaluation_results.md)：按实验组逐项整理的模型评测结果。
+- [`experiments/fold_metric_research.md`](experiments/fold_metric_research.md)：折叠指标选择、专家轨迹基线与正式阈值边界。
 - [`experiments/rapid_iteration_evaluation.md`](experiments/rapid_iteration_evaluation.md)：
   固定 12 seen + 12 unseen、每资产 4 初态的 checkpoint、后端、RTC 与
   exec-horizon 配对评测结果。

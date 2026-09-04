@@ -8,8 +8,10 @@ import numpy as np
 import pytest
 
 from clothdojo.data.rollout_review import (
+    _merge_review_metadata,
     _RawVideoEncoder,
     _review_stride,
+    _ReviewTrajectory,
 )
 
 
@@ -35,6 +37,47 @@ def test_review_rejects_evaluation_collection(tmp_path) -> None:
     with pytest.raises(ValueError, match="unsupported review source schema"):
         render_review(tmp_path)
     assert not (tmp_path / "review").exists()
+
+
+def test_review_metadata_merges_independent_gpu_shards(tmp_path) -> None:
+    trajectories = [
+        _ReviewTrajectory("hil_a", tmp_path / "hil_a", "shirt_a", "a" * 64),
+        _ReviewTrajectory("hil_b", tmp_path / "hil_b", "shirt_b", "b" * 64),
+    ]
+    path = tmp_path / "review/meta.json"
+    record_a = {
+        "trajectory_id": "hil_a",
+        "source_frames": 10,
+        "video_frames": 2,
+    }
+    record_b = {
+        "trajectory_id": "hil_b",
+        "source_frames": 20,
+        "video_frames": 4,
+    }
+
+    _merge_review_metadata(
+        path,
+        source=tmp_path,
+        camera="cam_high",
+        trajectories=trajectories,
+        selected_ids={"hil_a"},
+        records={"hil_a": record_a},
+    )
+    merged = _merge_review_metadata(
+        path,
+        source=tmp_path,
+        camera="cam_high",
+        trajectories=trajectories,
+        selected_ids={"hil_b"},
+        records={"hil_b": record_b},
+    )
+
+    assert merged == [record_a, record_b]
+    assert json.loads(path.read_text(encoding="utf-8"))["episodes"] == [
+        record_a,
+        record_b,
+    ]
 
 
 def test_raw_video_encoder_streams_frames_without_image_files(tmp_path) -> None:

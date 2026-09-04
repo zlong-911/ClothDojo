@@ -19,15 +19,27 @@ def _write_arm_targets(
     upper: wp.array3d(dtype=float),
     joints_per_articulation: int,
     target: wp.array3d(dtype=float),
+    canonical: wp.array2d(dtype=float),
 ):
     world, joint = wp.tid()
     articulation = joint // joints_per_articulation
     articulation_joint = joint % joints_per_articulation
-    target[world, articulation, articulation_joint] = wp.clamp(
+    value = wp.clamp(
         action[world, joint],
         lower[world, articulation, articulation_joint],
         upper[world, articulation, articulation_joint],
     )
+    target[world, articulation, articulation_joint] = value
+    canonical[world, joint] = value
+
+
+@wp.kernel
+def _clip_unit_actions(
+    action: wp.array2d(dtype=float),
+    canonical: wp.array2d(dtype=float),
+):
+    world, side = wp.tid()
+    canonical[world, side] = wp.clamp(action[world, side], 0.0, 1.0)
 
 
 @wp.kernel
@@ -260,6 +272,16 @@ class ShirtFlattenRuntime:
         if int(np.prod(self._gripper_targets.shape[1:])) != self._gripper_action_count:
             raise RuntimeError("bimanual gripper view differs from its robot profile")
         self._gripper_joints_per_articulation = int(self._gripper_targets.shape[2])
+        self._canonical_arm_target = wp.empty(
+            (self.model.world_count, self._arm_action_count),
+            dtype=wp.float32,
+            device=self.model.device,
+        )
+        self._canonical_gripper_open = wp.empty(
+            (self.model.world_count, 2),
+            dtype=wp.float32,
+            device=self.model.device,
+        )
         self._gripper_closed_positions = wp.array(
             scene.robot_profile.gripper_closed_positions * 2,
             dtype=wp.float32,
@@ -306,6 +328,18 @@ class ShirtFlattenRuntime:
     def rigid_cuda_graph_enabled(self) -> bool:
         return self._rigid_step_graph is not None
 
+    @property
+    def canonical_arm_target(self):
+        """Borrow the latest joint-limited arm target; read only after a successful step."""
+
+        return self._canonical_arm_target
+
+    @property
+    def canonical_gripper_open(self):
+        """Borrow the latest bounded gripper command; read only after a successful step."""
+
+        return self._canonical_gripper_open
+
     def apply_action(self, arm_target, gripper_open) -> None:
         """Apply one profile-sized arm action and two gripper commands per world."""
 
@@ -321,15 +355,22 @@ class ShirtFlattenRuntime:
                 self._arm_upper,
                 self._arm_joints_per_articulation,
             ],
-            outputs=[self._arm_targets],
+            outputs=[self._arm_targets, self._canonical_arm_target],
             device=self.model.device,
         )
         self.scene.arms.set_attribute("joint_target_q", self.control, self._arm_targets)
         wp.launch(
+            _clip_unit_actions,
+            dim=(self.model.world_count, 2),
+            inputs=[gripper_open],
+            outputs=[self._canonical_gripper_open],
+            device=self.model.device,
+        )
+        wp.launch(
             _write_gripper_targets,
             dim=(self.model.world_count, self._gripper_action_count),
             inputs=[
-                gripper_open,
+                self._canonical_gripper_open,
                 self._gripper_closed_positions,
                 self._gripper_open_positions,
                 self._gripper_joints_per_articulation,
@@ -455,11 +496,18 @@ class ShirtFlattenRuntime:
         world_count = int(solver.mjw_data.nworld)
         dofs_per_world = int(self.model.joint_dof_count) // world_count
         if self._inverse_layout is None:
-            mapping = np.asarray(solver.mjc_actuator_to_newton_idx.numpy(), dtype=np.int64)
-            if np.any(mapping < 0):
-                raise RuntimeError("inverse dynamics requires position-controlled actuators")
+            encoded_mapping = np.asarray(solver.mjc_actuator_to_newton_idx.numpy(), dtype=np.int64)
+            control_source = np.asarray(solver.mjc_actuator_ctrl_source.numpy(), dtype=np.int64)
+            if np.any(control_source != 0):
+                raise RuntimeError("inverse dynamics requires joint-target actuators")
+            mapped = encoded_mapping != -1
+            mapping = np.where(
+                encoded_mapping >= 0,
+                encoded_mapping,
+                -(encoded_mapping + 2),
+            )[mapped]
             mj_model = solver.mj_model
-            actuator_joint = np.asarray(mj_model.actuator_trnid[:, 0], dtype=np.int64)
+            actuator_joint = np.asarray(mj_model.actuator_trnid[:, 0], dtype=np.int64)[mapped]
             actuator_dof = np.asarray(mj_model.jnt_dofadr[actuator_joint], dtype=np.int64)
             dof_map = np.asarray(solver.mjc_dof_to_newton_dof.numpy(), dtype=np.int64)
             local_dof_map = dof_map % dofs_per_world
@@ -528,9 +576,13 @@ class ShirtFlattenRuntime:
         arms = np.asarray(arm_targets, dtype=np.float32)
         grippers = np.asarray(gripper_commands, dtype=np.float32)
         worlds = int(self.model.world_count)
-        if (arms.ndim != 3 or arms.shape[1:] != (worlds, self._arm_action_count)
-                or grippers.shape != (len(arms), worlds, 2)
-                or not np.isfinite(arms).all() or not np.isfinite(grippers).all()):
+        if (
+            arms.ndim != 3
+            or arms.shape[1:] != (worlds, self._arm_action_count)
+            or grippers.shape != (len(arms), worlds, 2)
+            or not np.isfinite(arms).all()
+            or not np.isfinite(grippers).all()
+        ):
             raise ValueError("rigid rollout commands must be finite [steps, worlds, actions]")
         counts = {
             "joint_q": self.model.joint_coord_count,
@@ -540,7 +592,8 @@ class ShirtFlattenRuntime:
         }
         history = {
             name: wp.empty(
-                (len(arms) + 1) * counts[name], dtype=getattr(self.state_0, name).dtype,
+                (len(arms) + 1) * counts[name],
+                dtype=getattr(self.state_0, name).dtype,
                 device=self.model.device,
             )
             for name in fields
@@ -552,8 +605,12 @@ class ShirtFlattenRuntime:
         for step in range(len(arms)):
             self.step_rigid(gpu_arms[step], gpu_grippers[step])
             for name, values in history.items():
-                wp.copy(values, getattr(self.state_0, name),
-                        dest_offset=(step + 1) * counts[name], count=counts[name])
+                wp.copy(
+                    values,
+                    getattr(self.state_0, name),
+                    dest_offset=(step + 1) * counts[name],
+                    count=counts[name],
+                )
         result = {}
         for name, values in history.items():
             array = values.numpy()
@@ -719,8 +776,13 @@ class ShirtFlattenRuntime:
         wp.launch(
             _reset_particles,
             dim=self.model.particle_count,
-            inputs=[self.model.world_count, world_mask, self.model.particle_world,
-                    self.model.particle_q, self.model.particle_qd],
+            inputs=[
+                self.model.world_count,
+                world_mask,
+                self.model.particle_world,
+                self.model.particle_q,
+                self.model.particle_qd,
+            ],
             outputs=[state.particle_q, state.particle_qd, state.particle_f],
             device=self.model.device,
         )
@@ -788,6 +850,11 @@ class ShirtFlattenRuntime:
         # flags=0 keeps the restored joint coordinates while clearing MuJoCo's
         # acceleration, force, activation and control warm-start buffers.
         self.rigid.reset(self.state_0, flags=0)
+        # Cold restore runs inside host applications such as Isaac, where
+        # MuJoCo Warp's equality buffers may have been initialized before the
+        # host finished registering custom USD schemas. Re-assert the model's
+        # mimic/equality rows so passive gripper fingers remain coupled.
+        self.rigid.notify_model_changed(newton.ModelFlags.CONSTRAINT_PROPERTIES)
         self.cloth.dx.zero_()
         self.cloth.rebuild_bvh(self.state_0)
         self._control_steps_since_cloth_bvh_rebuild = 0

@@ -14,7 +14,8 @@ import numpy as np
 from clothdojo.teleop.session import SessionPlan
 from clothdojo.trajectory import TrajectoryReader
 
-INTERVENTION_PLAN_SCHEMA = "clothdojo_intervention_plan_v1"
+INTERVENTION_PLAN_SCHEMA = "clothdojo_intervention_plan_v2"
+LEGACY_INTERVENTION_PLAN_SCHEMA = "clothdojo_intervention_plan_v1"
 CONTINUATION_PLAN_SCHEMA = "clothdojo_continuation_plan_v1"
 
 
@@ -26,6 +27,8 @@ class RestorationPoint:
     trajectory: Path
     manifest_sha256: str
     source_run_id: str | None = None
+    source_rollout_root: Path | None = None
+    source_rollout_meta_sha256: str | None = None
     source_profile_id: str | None = None
 
     def recording_metadata(self) -> dict[str, Any]:
@@ -38,6 +41,10 @@ class RestorationPoint:
         }
         if self.source_run_id is not None:
             value["source_run_id"] = self.source_run_id
+        if self.source_rollout_root is not None:
+            value["source_rollout_root"] = str(self.source_rollout_root)
+        if self.source_rollout_meta_sha256 is not None:
+            value["source_rollout_meta_sha256"] = self.source_rollout_meta_sha256
         if self.source_profile_id is not None:
             value["source_profile_id"] = self.source_profile_id
         return value
@@ -74,6 +81,82 @@ class RestorationQueue:
 
     @classmethod
     def _load_intervention(cls, plan, runtime, value) -> RestorationQueue:
+        if value.get("schema") == LEGACY_INTERVENTION_PLAN_SCHEMA:
+            return cls._load_legacy_intervention(plan, runtime, value)
+        _require_keys(
+            value,
+            {
+                "schema",
+                "profile_id",
+                "asset_id",
+                "runtime",
+                "runs",
+                "breakpoints",
+            },
+            "intervention plan",
+        )
+        if value["schema"] != INTERVENTION_PLAN_SCHEMA:
+            raise ValueError("unsupported intervention plan schema")
+        if value["profile_id"] != plan.profile_id or value["asset_id"] != plan.asset_id:
+            raise ValueError("intervention plan does not match the teleoperation session")
+        _validate_runtime(plan, runtime, value["runtime"], source_task=plan.scene)
+        raw_runs = value["runs"]
+        if not isinstance(raw_runs, list) or not raw_runs:
+            raise ValueError("intervention plan needs rollout provenance")
+        run_provenance: dict[str, tuple[Path, str]] = {}
+        for raw_run in raw_runs:
+            if not isinstance(raw_run, dict):
+                raise ValueError("intervention rollout provenance must be an object")
+            _require_keys(
+                raw_run,
+                {"run_id", "rollout_root", "rollout_meta_sha256"},
+                "intervention rollout provenance",
+            )
+            run_id = str(raw_run["run_id"])
+            if run_id in run_provenance:
+                raise ValueError("intervention plan contains duplicate rollout ids")
+            rollout_root = Path(raw_run["rollout_root"]).resolve()
+            meta_sha256 = str(raw_run["rollout_meta_sha256"])
+            if _sha256(rollout_root / "meta.json") != meta_sha256:
+                raise ValueError("intervention rollout metadata changed after planning")
+            run_provenance[run_id] = (rollout_root, meta_sha256)
+        raw_points = value["breakpoints"]
+        if not isinstance(raw_points, list) or not raw_points:
+            raise ValueError("intervention plan needs breakpoints")
+        points = []
+        for raw in raw_points:
+            if not isinstance(raw, dict):
+                raise ValueError("intervention breakpoint must be an object")
+            _require_keys(
+                raw,
+                {
+                    "source_run_id",
+                    "source_episode_id",
+                    "source_sample_index",
+                    "trajectory",
+                    "manifest_sha256",
+                },
+                "intervention breakpoint",
+            )
+            run_id = str(raw["source_run_id"])
+            provenance = run_provenance.get(run_id)
+            if provenance is None:
+                raise ValueError("intervention breakpoint references an unknown rollout")
+            rollout_root, rollout_meta_sha256 = provenance
+            point = _point(
+                {key: item for key, item in raw.items() if key != "source_run_id"},
+                kind="human_intervention",
+                source_run_id=run_id,
+                source_rollout_root=rollout_root,
+                source_rollout_meta_sha256=rollout_meta_sha256,
+            )
+            if point.trajectory.parent != (rollout_root / "trajectories").resolve():
+                raise ValueError("intervention trajectory is outside its rollout root")
+            points.append(point)
+        return cls(points, _readers(points, runtime, source_task=plan.scene))
+
+    @classmethod
+    def _load_legacy_intervention(cls, plan, runtime, value) -> RestorationQueue:
         _require_keys(
             value,
             {
@@ -86,10 +169,8 @@ class RestorationQueue:
                 "runtime",
                 "breakpoints",
             },
-            "intervention plan",
+            "legacy intervention plan",
         )
-        if value["schema"] != INTERVENTION_PLAN_SCHEMA:
-            raise ValueError("unsupported intervention plan schema")
         if value["profile_id"] != plan.profile_id or value["asset_id"] != plan.asset_id:
             raise ValueError("intervention plan does not match the teleoperation session")
         rollout_root = Path(value["rollout_root"]).resolve()
@@ -104,6 +185,8 @@ class RestorationQueue:
                 raw,
                 kind="human_intervention",
                 source_run_id=str(value["run_id"]),
+                source_rollout_root=rollout_root,
+                source_rollout_meta_sha256=str(value["rollout_meta_sha256"]),
             )
             for raw in raw_points
         ]
@@ -168,6 +251,16 @@ class RestorationQueue:
             self.current_gripper_open = None
             return None
         point = self._points.popleft()
+        return self._restore(runtime, point)
+
+    def restore_current(self, runtime) -> RestorationPoint | None:
+        """Restore the active queue item again without changing queue order."""
+
+        if self.current is None:
+            return None
+        return self._restore(runtime, self.current)
+
+    def _restore(self, runtime, point: RestorationPoint) -> RestorationPoint:
         state = self._readers[point.trajectory].state_at(point.source_sample_index)
         runtime.restore_state(state)
         self.current = point
@@ -180,6 +273,8 @@ def _point(
     *,
     kind: Literal["human_intervention", "task_continuation"],
     source_run_id: str | None = None,
+    source_rollout_root: Path | None = None,
+    source_rollout_meta_sha256: str | None = None,
     source_profile_id: str | None = None,
 ) -> RestorationPoint:
     expected = {
@@ -204,6 +299,8 @@ def _point(
         trajectory=path.resolve(),
         manifest_sha256=str(raw["manifest_sha256"]),
         source_run_id=source_run_id,
+        source_rollout_root=source_rollout_root,
+        source_rollout_meta_sha256=source_rollout_meta_sha256,
         source_profile_id=source_profile_id,
     )
 

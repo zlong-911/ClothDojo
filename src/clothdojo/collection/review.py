@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from clothdojo.collection.config import CollectionProfile
+from clothdojo.collection.trajectory_store import remove_trajectory, trajectory_path
 from clothdojo.data.annotations import ANNOTATION_SCHEMA, KNOWN_LABELS
 from clothdojo.data.rollout_review import REVIEW_CAMERA
 from clothdojo.trajectory.schema import TrajectoryManifest
@@ -97,6 +98,9 @@ class ReviewCatalog:
             raise ValueError("review_status must be in_progress or complete")
         path = self._annotation_path(episode_id)
         with self._lock:
+            # Serialize against operator deletion. A save that started before a
+            # deletion must not recreate an orphan annotation afterwards.
+            self._complete_manifest(episode_id)
             current_revision = (
                 hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
             )
@@ -113,6 +117,23 @@ class ReviewCatalog:
             _atomic_json(path, payload)
             self._episode_cache = None
         return self.annotation(episode_id, manifest=manifest)
+
+    def delete_trajectory(self, episode_id: str) -> dict[str, object]:
+        """Permanently delete a collected trajectory and its review artifacts."""
+
+        episode_id = _identity(episode_id, "episode id")
+        with self._lock:
+            source = trajectory_path(self.profile.dataset_root, episode_id)
+            manifest = _manifest(source / "manifest.json")
+            if manifest.status == "recording":
+                raise RuntimeError("cannot delete a trajectory while it is recording")
+            result = remove_trajectory(
+                self.profile.dataset_root,
+                episode_id,
+                disposition="delete",
+            )
+            self._episode_cache = None
+        return result
 
     def video(self, episode_id: str, camera: str) -> Path:
         episode_id = _identity(episode_id, "episode id")
@@ -144,8 +165,8 @@ class ReviewCatalog:
                 except (OSError, RuntimeError, TypeError, ValueError):
                     continue
                 annotation = self.annotation(episode_id, manifest=manifest)
-                video = self.profile.review_root / "videos" / REVIEW_CAMERA / f"{episode_id}.mp4"
-                review_ready = video.is_file() and not video.is_symlink()
+                cameras = _review_cameras(self.profile.review_root, episode_id)
+                review_ready = bool(cameras)
                 items.append(
                     {
                         "id": episode_id,
@@ -155,7 +176,7 @@ class ReviewCatalog:
                         "asset_id": manifest.metadata.get("asset_id"),
                         "metadata": dict(manifest.metadata),
                         "review_ready": review_ready,
-                        "cameras": [REVIEW_CAMERA] if review_ready else [],
+                        "cameras": cameras,
                         "review_status": annotation["review_status"],
                         "annotation": annotation,
                         "bad_segment_count": sum(
@@ -293,3 +314,16 @@ def _file_set_stamp(path: Path, pattern: str) -> tuple[tuple[str, int, int], ...
             continue
         result.append((str(item.relative_to(path)), stat.st_mtime_ns, stat.st_size))
     return tuple(sorted(result))
+
+
+def _review_cameras(review_root: Path, episode_id: str) -> list[str]:
+    videos = review_root / "videos"
+    if not videos.is_dir() or videos.is_symlink():
+        return []
+    cameras = []
+    for path in videos.glob(f"*/{episode_id}.mp4"):
+        camera = path.parent.name
+        if _ID.fullmatch(camera) and path.is_file() and not path.is_symlink():
+            cameras.append(camera)
+    cameras.sort(key=lambda camera: (camera != REVIEW_CAMERA, camera))
+    return cameras

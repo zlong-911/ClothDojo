@@ -1,0 +1,19 @@
+defaults:
+  - pi05_aloha_openpi_rlinf_mirrored_runtime_target_fullonly_wd001_40k
+  - _self_
+
+# Training-Time Action Conditioning for Efficient Real-Time Chunking.
+# H10 at 50 Hz admits delay prefixes 0..9 (up to 180 ms).
+clothdojo:
+  training_time_rtc:
+    max_delay: 10
+
+cluster:
+  num_nodes: 2
+
+runner:
+  logger:
+    experiment_name: nocs1838_training_time_rtc_d0_9_fullonly_noaug_wd001_b256_40k_s43_train2_20260902
+
+actor:
+  micro_batch_size: 16

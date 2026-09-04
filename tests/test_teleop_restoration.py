@@ -46,7 +46,13 @@ def _state(index: int) -> TrajectoryState:
     )
 
 
-def _write_trajectory(path, *, task: str, fingerprints: dict[str, str]) -> None:
+def _write_trajectory(
+    path,
+    *,
+    task: str,
+    fingerprints: dict[str, str],
+    scenario_fingerprint: str | None = None,
+) -> None:
     writer = TrajectoryWriter(
         path,
         control_fps=20.0,
@@ -56,6 +62,11 @@ def _write_trajectory(path, *, task: str, fingerprints: dict[str, str]) -> None:
             task_name=task,
             robot_id="piper",
             asset_fingerprints=fingerprints,
+            config_fingerprints=(
+                {}
+                if scenario_fingerprint is None
+                else {"rtc_scenario": scenario_fingerprint}
+            ),
         ),
         metadata={"asset_id": "shirt_a"},
     )
@@ -126,6 +137,7 @@ def test_hil_plan_cold_restores_hashed_breakpoint(tmp_path) -> None:
         display_name="flatten",
         scene="shirt_flatten",
         dataset_root=tmp_path / "dataset",
+        hil_dataset_root=tmp_path / "hil-dataset",
         rollout_root=tmp_path / "rollouts",
         max_actions=20,
     )
@@ -151,7 +163,7 @@ def test_hil_plan_cold_restores_hashed_breakpoint(tmp_path) -> None:
         encoding="utf-8",
     )
     plan_value = HILCatalog(profile).intervention_plan(
-        "run_a", [{"episode_id": "episode_a", "sample_index": 0}]
+        [{"run_id": "run_a", "episode_id": "episode_a", "sample_index": 0}]
     )
     plan_path = tmp_path / "intervention.json"
     plan_path.write_text(json.dumps(plan_value), encoding="utf-8")
@@ -170,12 +182,171 @@ def test_hil_plan_cold_restores_hashed_breakpoint(tmp_path) -> None:
     assert point is not None and point.source_episode_id == "episode_a"
     assert runtime.restored.sample_index == 0
     np.testing.assert_allclose(queue.current_gripper_open, (0.25, 0.75))
-    assert point.recording_metadata()["source"] == "human_intervention"
+    recording_metadata = point.recording_metadata()
+    assert recording_metadata["source"] == "human_intervention"
+    assert recording_metadata["source_rollout_root"] == str(run.resolve())
+    assert recording_metadata["source_rollout_meta_sha256"] == plan_value["runs"][0][
+        "rollout_meta_sha256"
+    ]
+
+    legacy_value = {
+        "schema": "clothdojo_intervention_plan_v1",
+        "profile_id": plan_value["profile_id"],
+        "run_id": plan_value["runs"][0]["run_id"],
+        "rollout_root": plan_value["runs"][0]["rollout_root"],
+        "rollout_meta_sha256": plan_value["runs"][0]["rollout_meta_sha256"],
+        "asset_id": plan_value["asset_id"],
+        "runtime": plan_value["runtime"],
+        "breakpoints": [
+            {
+                key: item
+                for key, item in plan_value["breakpoints"][0].items()
+                if key != "source_run_id"
+            }
+        ],
+    }
+    plan_path.write_text(json.dumps(legacy_value), encoding="utf-8")
+    legacy_queue = RestorationQueue.load(session, runtime)
+    assert legacy_queue is not None
+    assert legacy_queue.restore_next(runtime).source_run_id == "run_a"
 
     manifest = trajectory / "manifest.json"
     manifest.write_text(manifest.read_text() + " ", encoding="utf-8")
     with pytest.raises(ValueError, match="manifest changed"):
         RestorationQueue.load(session, runtime)
+
+
+def test_fold_hil_restores_only_fold_rollout_breakpoints(tmp_path) -> None:
+    assets, garment, fingerprints = _context(tmp_path)
+    profile = CollectionProfile(
+        id="shirt_fold",
+        display_name="fold",
+        scene="shirt_fold",
+        dataset_root=tmp_path / "fold-dataset",
+        hil_dataset_root=tmp_path / "fold-hil-dataset",
+        rollout_root=tmp_path / "fold-rollouts",
+        max_actions=20,
+    )
+    run = profile.rollout_root / "run_fold"
+    trajectory = run / "trajectories/episode_fold"
+    _write_trajectory(trajectory, task="shirt_fold", fingerprints=fingerprints)
+    (run / "meta.json").write_text(
+        json.dumps(
+            {
+                "schema": "clothdojo_rollout",
+                "format_version": 1,
+                "status": "complete",
+                "camera_names": [],
+                "trajectories": [
+                    {
+                        "asset_id": "shirt_a",
+                        "path": "trajectories/episode_fold",
+                        "action_count": 1,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    value = HILCatalog(profile).intervention_plan(
+        [{"run_id": "run_fold", "episode_id": "episode_fold", "sample_index": 0}]
+    )
+    path = tmp_path / "fold-intervention.json"
+    path.write_text(json.dumps(value), encoding="utf-8")
+    runtime = _Runtime()
+    fold_session = _session(
+        tmp_path,
+        assets,
+        garment,
+        profile_id=profile.id,
+        scene=profile.scene,
+        mode="intervention",
+        intervention_plan=path,
+    )
+
+    queue = RestorationQueue.load(fold_session, runtime)
+    assert queue is not None
+    assert queue.restore_next(runtime).source_episode_id == "episode_fold"
+
+    flatten_session = _session(
+        tmp_path,
+        assets,
+        garment,
+        mode="intervention",
+        intervention_plan=path,
+    )
+    with pytest.raises(ValueError, match="does not match the teleoperation session"):
+        RestorationQueue.load(flatten_session, runtime)
+
+
+def test_hil_plan_queues_breakpoints_across_rollout_runs(tmp_path) -> None:
+    assets, garment, fingerprints = _context(tmp_path)
+    profile = CollectionProfile(
+        id="shirt_flatten",
+        display_name="flatten",
+        scene="shirt_flatten",
+        dataset_root=tmp_path / "dataset",
+        hil_dataset_root=tmp_path / "hil-dataset",
+        rollout_root=tmp_path / "rollouts",
+        max_actions=20,
+    )
+    for run_id, episode_id in (("run_a", "episode_a"), ("run_b", "episode_b")):
+        run = profile.rollout_root / run_id
+        _write_trajectory(
+            run / f"trajectories/{episode_id}",
+            task=profile.scene,
+            fingerprints=fingerprints,
+            scenario_fingerprint=f"scenario-{run_id}",
+        )
+        (run / "meta.json").write_text(
+            json.dumps(
+                {
+                    "schema": "clothdojo_rollout",
+                    "format_version": 1,
+                    "status": "complete",
+                    "camera_names": [],
+                    "trajectories": [
+                        {
+                            "asset_id": "shirt_a",
+                            "path": f"trajectories/{episode_id}",
+                            "action_count": 1,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    value = HILCatalog(profile).intervention_plan(
+        [
+            {"run_id": "run_a", "episode_id": "episode_a", "sample_index": 0},
+            {"run_id": "run_b", "episode_id": "episode_b", "sample_index": 0},
+        ]
+    )
+    assert [run["run_id"] for run in value["runs"]] == ["run_a", "run_b"]
+    assert "config_fingerprints" not in value["runtime"]
+    path = tmp_path / "intervention.json"
+    path.write_text(json.dumps(value), encoding="utf-8")
+    session = _session(
+        tmp_path,
+        assets,
+        garment,
+        mode="intervention",
+        intervention_plan=path,
+    )
+    runtime = _Runtime()
+
+    queue = RestorationQueue.load(session, runtime)
+    assert queue is not None and queue.remaining == 2
+    first = queue.restore_next(runtime)
+    second = queue.restore_next(runtime)
+    assert (first.source_run_id, first.source_episode_id) == ("run_a", "episode_a")
+    assert (second.source_run_id, second.source_episode_id) == ("run_b", "episode_b")
+    assert queue.remaining == 0
+
+    retried = queue.restore_current(runtime)
+    assert retried is second
+    assert queue.remaining == 0
 
 
 def test_continuation_plan_uses_only_terminal_unconsumed_sources(tmp_path) -> None:
@@ -185,6 +356,7 @@ def test_continuation_plan_uses_only_terminal_unconsumed_sources(tmp_path) -> No
         display_name="flatten",
         scene="shirt_flatten",
         dataset_root=tmp_path / "flatten",
+        hil_dataset_root=tmp_path / "flatten-hil",
         rollout_root=tmp_path / "rollouts",
         max_actions=20,
     )
@@ -193,6 +365,7 @@ def test_continuation_plan_uses_only_terminal_unconsumed_sources(tmp_path) -> No
         display_name="fold",
         scene="shirt_fold",
         dataset_root=tmp_path / "fold",
+        hil_dataset_root=tmp_path / "fold-hil",
         rollout_root=tmp_path / "fold-rollouts",
         max_actions=20,
         continuation_source_profile=source.id,
@@ -241,6 +414,7 @@ def test_continuation_inventory_refreshes_when_assets_change(tmp_path) -> None:
         display_name="flatten",
         scene="shirt_flatten",
         dataset_root=tmp_path / "flatten",
+        hil_dataset_root=tmp_path / "flatten-hil",
         rollout_root=tmp_path / "rollouts",
         max_actions=20,
     )
@@ -249,6 +423,7 @@ def test_continuation_inventory_refreshes_when_assets_change(tmp_path) -> None:
         display_name="fold",
         scene="shirt_fold",
         dataset_root=tmp_path / "fold",
+        hil_dataset_root=tmp_path / "fold-hil",
         rollout_root=tmp_path / "fold-rollouts",
         max_actions=20,
         continuation_source_profile=source.id,

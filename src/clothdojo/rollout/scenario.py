@@ -10,6 +10,8 @@ from typing import Any
 
 import yaml
 
+from clothdojo.tasks import task_profile
+
 ROLLOUT_SCENARIO_SCHEMA = "clothdojo_rollout_scenario"
 ROLLOUT_SCENARIO_FORMAT_VERSION = 1
 
@@ -69,17 +71,18 @@ def load_rollout_scenario(path: str | Path) -> RolloutScenario:
         raise ValueError(
             f"unsupported rollout scenario version: {payload['format_version']!r}"
         )
-    for field in ("scenario_id", "prompt"):
+    for field in ("scenario_id", "task_name", "prompt"):
         _nonempty_string(payload[field], field)
     garment_id = payload.get("garment_id")
     if garment_id is not None:
         _nonempty_string(garment_id, "garment_id")
-    if payload["task_name"] != "shirt_flatten":
-        raise ValueError("the first rollout slice supports task_name=shirt_flatten only")
+    task = task_profile(payload["task_name"])
+    if not task.scene_available:
+        raise ValueError(f"no rollout scene is available for task {task.task_name!r}")
 
     return RolloutScenario(
         scenario_id=str(payload["scenario_id"]),
-        task_name="shirt_flatten",
+        task_name=task.task_name,
         garment_id=None if garment_id is None else str(garment_id),
         seed=_nonnegative_int(payload["seed"], "seed"),
         prompt=str(payload["prompt"]),

@@ -18,22 +18,24 @@ ROBO_DOJO_CAMERA_STAND = HERE / "robodojo/camera_stand.usdc"
 # Center the old stand foot on the widest four-hole subset of Kai0's central
 # six-hole pattern, with its lowest surface seated on the integrated plate.
 CAMERA_STAND_POSITION = (0.261, 0.0, 0.81)
+CAMERA_STAND_EXTENSION = 0.1
+CAMERA_COLUMN_LOCAL_Z_RANGE = (-0.006, 0.579509973526001)
 CAM_HIGH_TRANSFORM = Gf.Matrix4d(
     0.0,
     -1.0,
     0.0,
     0.0,
-    0.7224967097223222,
+    0.8660254037844386,
     0.0,
-    0.6913743591140898,
+    0.5,
     0.0,
-    -0.6913743591140898,
+    -0.5,
     0.0,
-    0.7224967097223222,
+    0.8660254037844386,
     0.0,
     0.3179578738615954,
     -0.0225080347427568,
-    1.34981,
+    1.44981,
     1.0,
 )
 
@@ -261,6 +263,28 @@ def _author_camera_stand(stage: Usd.Stage) -> None:
         Sdf.ValueTypeNames.String,
         "foot centered on Kai0 central outer four holes; 8.21 mm maximum hole-center residual",
     )
+    _set_custom(
+        stand.GetPrim(),
+        "clothdojo:columnExtensionMeters",
+        Sdf.ValueTypeNames.Float,
+        CAMERA_STAND_EXTENSION,
+    )
+
+    column = UsdGeom.Xformable(stage.GetPrimAtPath(f"{stand.GetPath()}/Column"))
+    column_bottom, column_top = CAMERA_COLUMN_LOCAL_Z_RANGE
+    column_scale = 1.0 + CAMERA_STAND_EXTENSION / (column_top - column_bottom)
+    column_transform = Gf.Matrix4d(1.0)
+    column_transform.SetScale(Gf.Vec3d(1.0, 1.0, column_scale))
+    column_transform.SetTranslateOnly(
+        Gf.Vec3d(0.0, 0.0, column_bottom * (1.0 - column_scale))
+    )
+    column.AddTransformOp(opSuffix="extension").Set(column_transform)
+    for child_name in ("CameraMount", "D455"):
+        UsdGeom.Xformable(
+            stage.GetPrimAtPath(f"{stand.GetPath()}/{child_name}")
+        ).AddTranslateOp(opSuffix="extension").Set(
+            Gf.Vec3d(0.0, 0.0, CAMERA_STAND_EXTENSION)
+        )
 
     camera = stage.GetPrimAtPath("/Robot/Semantics/cam_high")
     if not camera or not camera.IsA(UsdGeom.Camera):

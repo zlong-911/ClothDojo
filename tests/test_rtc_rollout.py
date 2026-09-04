@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from clothdojo.rollout.engine import run_episode
-from clothdojo.rollout.newton import pack_policy_state, unpack_policy_actions
+from clothdojo.rollout.newton import (
+    NewtonBatchEnvironment,
+    pack_policy_state,
+    unpack_policy_actions,
+)
 from clothdojo.rollout.scenario import RolloutScenario, load_rollout_scenario
 
 
@@ -197,12 +202,49 @@ def test_policy_layout_matches_aloha_order() -> None:
     np.testing.assert_array_equal(unpacked_grippers, grippers)
 
 
+def test_rollout_forwards_unclipped_actions_to_runtime() -> None:
+    class Buffer:
+        def assign(self, values: np.ndarray) -> None:
+            self.values = np.asarray(values).copy()
+
+    class Runtime:
+        model = SimpleNamespace(world_count=1)
+
+        def step(self, arms: Buffer, grippers: Buffer) -> None:
+            self.received = (arms.values.copy(), grippers.values.copy())
+
+    runtime = Runtime()
+    environment = NewtonBatchEnvironment.__new__(NewtonBatchEnvironment)
+    environment.runtime = runtime
+    environment._sample_index = 0
+    environment._cached_observation = None
+    environment._arm_device = Buffer()
+    environment._gripper_device = Buffer()
+    actions = np.asarray(
+        [[-4, -3, -2, -1, 0, 1, -0.25, 2, 3, 4, 5, 6, 7, 1.25]],
+        dtype=np.float32,
+    )
+
+    arms, grippers = environment.step(actions)
+
+    expected_arms, expected_grippers = unpack_policy_actions(actions)
+    np.testing.assert_array_equal(arms, expected_arms)
+    np.testing.assert_array_equal(grippers, expected_grippers)
+    np.testing.assert_array_equal(runtime.received[0], expected_arms)
+    np.testing.assert_array_equal(runtime.received[1], expected_grippers)
+    assert environment.sample_index == 1
+
+
 def test_project_rollout_scenario_is_strict_and_fingerprinted(tmp_path: Path) -> None:
     project = Path(__file__).resolve().parents[1]
     scenario = load_rollout_scenario(project / "configs/rollout/shirt_flatten.yaml")
+    fold = load_rollout_scenario(project / "configs/rollout/shirt_fold.yaml")
 
     assert scenario.action_horizon == 50
     assert len(scenario.fingerprint) == 64
+    assert fold.task_name == "shirt_fold"
+    assert fold.prompt == "Fold the shirt."
+    assert fold.steps == 3600
 
     invalid = tmp_path / "invalid.yaml"
     invalid.write_text(
@@ -213,6 +255,16 @@ def test_project_rollout_scenario_is_strict_and_fingerprinted(tmp_path: Path) ->
     )
     with pytest.raises(ValueError, match="positive integer"):
         load_rollout_scenario(invalid)
+
+    unsupported = tmp_path / "unsupported.yaml"
+    unsupported.write_text(
+        (project / "configs/rollout/shirt_flatten.yaml")
+        .read_text(encoding="utf-8")
+        .replace("task_name: shirt_flatten", "task_name: shirt_iron"),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="unknown task profile"):
+        load_rollout_scenario(unsupported)
 
 
 def test_runner_rejects_wrong_policy_action_horizon() -> None:

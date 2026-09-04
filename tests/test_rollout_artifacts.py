@@ -135,6 +135,7 @@ def test_accepts_exact_launch_artifacts(tmp_path: Path) -> None:
             (norm / "clothdojo.json").read_bytes()
         ).hexdigest(),
         "training_manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+        "training_dataset_root": "/external/good-v2",
         "dataset_info_sha256": "11" * 32,
         "dataset_sidecar_sha256": "22" * 32,
     }

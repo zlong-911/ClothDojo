@@ -11,7 +11,6 @@ import subprocess
 import sys
 import tempfile
 from contextlib import contextmanager
-from datetime import UTC, datetime
 from pathlib import Path
 
 from clothdojo.teleop.session import SessionPlan, SessionStatusWriter
@@ -81,7 +80,7 @@ def _run_slot(plan: SessionPlan, status: SessionStatusWriter, install_dir: Path)
             media_port=plan.media_port,
             proxy_port=plan.proxy_port,
         )
-        return asyncio.run(_run_services(plan, runtime, logs, status))
+        return asyncio.run(_run_services(plan, runtime, status))
     finally:
         _terminate_sync(runtime)
 
@@ -89,31 +88,12 @@ def _run_slot(plan: SessionPlan, status: SessionStatusWriter, install_dir: Path)
 async def _run_services(
     plan: SessionPlan,
     runtime: subprocess.Popen,
-    logs: Path,
     status: SessionStatusWriter,
 ) -> int:
-    from isaacteleop.cloudxr.wss import run as run_wss
-
     loop = asyncio.get_running_loop()
     stop = asyncio.Event()
     for signal_number in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(signal_number, stop.set)
-    stop_future = loop.create_future()
-    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H%M%SZ")
-    wss = asyncio.create_task(
-        run_wss(
-            log_file_path=logs / f"wss.{stamp}.log",
-            stop_future=stop_future,
-            backend_host="127.0.0.1",
-            backend_port=plan.signaling_port,
-            proxy_port=plan.proxy_port,
-            host_client=True,
-        )
-    )
-    await asyncio.sleep(0.25)
-    if wss.done():
-        await wss
-        raise RuntimeError("CloudXR WSS proxy stopped during startup")
     app = subprocess.Popen(
         [
             sys.executable,
@@ -139,9 +119,6 @@ async def _run_services(
                 return 0
             if runtime.poll() is not None:
                 raise RuntimeError(f"CloudXR runtime exited with code {runtime.returncode}")
-            if wss.done():
-                await wss
-                raise RuntimeError("CloudXR WSS proxy exited unexpectedly")
             if app.poll() is not None:
                 if app.returncode == 0:
                     status.write("stopped", phase="teleop_exit", gpu_id=plan.gpu_id)
@@ -165,13 +142,6 @@ async def _run_services(
             await asyncio.sleep(0.5)
     finally:
         await _terminate(app)
-        if not stop_future.done():
-            stop_future.set_result(None)
-        try:
-            await asyncio.wait_for(wss, timeout=5.0)
-        except TimeoutError:
-            wss.cancel()
-            await asyncio.gather(wss, return_exceptions=True)
 
 
 def _write_overrides(plan: SessionPlan, install_dir: Path) -> Path:

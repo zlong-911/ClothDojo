@@ -190,9 +190,11 @@ def test_isaac_reuses_native_aliased_cameras_without_changing_clipping():
     assert _author_cameras(stage, (), tuple(_camera(name) for name in CAMERA_NAMES)) == tuple(paths)
     assert len([prim for prim in stage.Traverse() if prim.IsA(UsdGeom.Camera)]) == 3
     for path in paths:
-        assert UsdGeom.Camera(stage.GetPrimAtPath(path)).GetClippingRangeAttr().Get() == Gf.Vec2f(
-            0.05, 20.0
-        )
+        reused = UsdGeom.Camera(stage.GetPrimAtPath(path))
+        assert reused.GetFocalLengthAttr().Get() == 20.0
+        assert reused.GetHorizontalApertureAttr().Get() == 30.0
+        assert reused.GetVerticalApertureAttr().Get() == 16.875
+        assert reused.GetClippingRangeAttr().Get() == Gf.Vec2f(0.05, 20.0)
 
 
 def test_isaac_authors_vertical_aperture_from_camera_spec(monkeypatch):

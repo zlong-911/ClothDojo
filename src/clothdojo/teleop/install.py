@@ -49,7 +49,7 @@ class TeleopInstallation:
         return None
 
     def environment(self, *, gpu_id: int, slot_root: Path, source_root: Path) -> dict[str, str]:
-        environment = dict(os.environ)
+        environment = self.gateway_environment(source_root=source_root)
         # Kit must see identical physical indices in CUDA and Vulkan. Newton
         # later adopts Kit's already-current CUDA context on the selected GPU.
         environment.pop("CUDA_VISIBLE_DEVICES", None)
@@ -59,6 +59,14 @@ class TeleopInstallation:
         # a second GPU does not compile the same Newton kernels again.
         environment["WARP_CACHE_PATH"] = str(slot_root.parent / "warp-cache")
         environment["PXR_WORK_THREAD_LIMIT"] = "1"
+        if self.nvenc_filter is not None:
+            environment["CLOUDXR_LD_PRELOAD"] = str(self.nvenc_filter)
+            environment["CLOUDXR_VULKAN_GPU_INDEX"] = "0"
+            environment["NVENC_RM_GPU_ID"] = _nvidia_rm_gpu_id(gpu_id)
+        return environment
+
+    def gateway_environment(self, *, source_root: Path) -> dict[str, str]:
+        environment = dict(os.environ)
         environment["TELEOP_WEB_CLIENT_STATIC_DIR"] = str(self.web_client_dir)
         existing_python_path = environment.get("PYTHONPATH", "").strip()
         environment["PYTHONPATH"] = ":".join(
@@ -67,10 +75,6 @@ class TeleopInstallation:
         library_dir = str(self.cloudxr_library_dir)
         inherited = environment.get("LD_LIBRARY_PATH", "").strip()
         environment["LD_LIBRARY_PATH"] = ":".join(item for item in (library_dir, inherited) if item)
-        if self.nvenc_filter is not None:
-            environment["CLOUDXR_LD_PRELOAD"] = str(self.nvenc_filter)
-            environment["CLOUDXR_VULKAN_GPU_INDEX"] = "0"
-            environment["NVENC_RM_GPU_ID"] = _nvidia_rm_gpu_id(gpu_id)
         _ensure_loopback_no_proxy(environment)
         return environment
 

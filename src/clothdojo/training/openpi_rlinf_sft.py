@@ -11,17 +11,22 @@ from typing import Any
 
 import torch
 from rlinf.workers.sft.fsdp_vla_sft_worker import FSDPVlaSftWorker
+from torch.utils.data import Sampler
 from torch.utils.data.distributed import DistributedSampler
 
 from clothdojo.training.augmentation import install_training_augmentation
 from clothdojo.training.openpi import TrainingPrompt
+from clothdojo.training.training_time_rtc import (
+    install_training_time_rtc,
+    training_time_rtc_spec_from_config,
+)
 from clothdojo.training.worker_environment import apply_worker_environment
 
 
 class _EpochAdvancingSampler:
     """Advance the wrapped OpenPI sampler whenever its infinite loader restarts."""
 
-    def __init__(self, sampler: DistributedSampler[Any]) -> None:
+    def __init__(self, sampler: Sampler[int]) -> None:
         self._sampler = sampler
         self._next_epoch = 0
 
@@ -35,6 +40,23 @@ class _EpochAdvancingSampler:
 
     def set_epoch(self, epoch: int) -> None:
         self._next_epoch = int(epoch)
+
+
+class _MappedSampler(Sampler[int]):
+    """Map positions from a distributed sampler to dataset-global indices."""
+
+    def __init__(self, sampler: DistributedSampler[Any], indices: torch.Tensor) -> None:
+        self._sampler = sampler
+        self._indices = indices
+
+    def __iter__(self) -> Iterator[int]:
+        return (int(self._indices[position]) for position in self._sampler)
+
+    def __len__(self) -> int:
+        return len(self._sampler)
+
+    def set_epoch(self, epoch: int) -> None:
+        self._sampler.set_epoch(epoch)
 
 
 def _select_pyav_backend() -> None:
@@ -53,6 +75,11 @@ class OpenPiRlinfSftWorker(FSDPVlaSftWorker):
         _select_pyav_backend()
         _seed_rank(int(cfg.actor.seed), int(os.environ.get("RANK", 0)))
         self._action_offset_weights = _action_offset_weights_from_config(cfg)
+        self._training_time_rtc = training_time_rtc_spec_from_config(cfg)
+        if self._training_time_rtc is not None and any(
+            weight != 1.0 for weight in self._action_offset_weights
+        ):
+            raise ValueError("training-time RTC cannot be combined with action-offset weighting")
         super().__init__(cfg)
 
     def build_dataloader(self, data_paths: Any, eval_dataset: bool = False):
@@ -66,12 +93,15 @@ class OpenPiRlinfSftWorker(FSDPVlaSftWorker):
                 data_loader,
                 seed=int(self.cfg.actor.seed),
                 rank=int(self._rank),
+                action_horizon=int(self.cfg.actor.model.num_action_chunks),
+                action_chunk_boundary=_action_chunk_boundary_from_config(self.cfg),
             )
         return data_loader, data_config
 
     def init_worker(self) -> None:
         super().init_worker()
         module = getattr(self.model, "module", self.model)
+        install_training_time_rtc(module.model, self._training_time_rtc)
         install_training_augmentation(
             module.model,
             enabled=self.cfg.get("clothdojo", {}).get("image_augmentation", False),
@@ -118,6 +148,11 @@ class OpenPiRlinfSftWorker(FSDPVlaSftWorker):
                         "path": "dcp_checkpoint",
                         "purpose": "online weights and optimizer-update analysis; resume disabled",
                     },
+                    "training_time_rtc": (
+                        {"enabled": False}
+                        if self._training_time_rtc is None
+                        else self._training_time_rtc.to_json_dict()
+                    ),
                 }
                 (Path(save_path) / "clothdojo_weights.json").write_text(
                     json.dumps(contract, indent=2, sort_keys=True) + "\n",
@@ -150,6 +185,15 @@ def _action_offset_weights_from_config(cfg: Any) -> tuple[float, ...]:
     return _action_offset_weights(
         spec,
         action_horizon=int(cfg.actor.model.num_action_chunks),
+    )
+
+
+def _action_chunk_boundary_from_config(cfg: Any) -> str:
+    from clothdojo.training.openpi import validate_action_chunk_boundary
+
+    project = cfg.get("clothdojo", {})
+    return validate_action_chunk_boundary(
+        project.get("action_chunk_boundary", "repeat_last")
     )
 
 
@@ -256,8 +300,19 @@ def _set_training_prompt(data_loader: Any, prompt: str) -> None:
     dataset._transform = transforms.compose([TrainingPrompt(prompt), dataset._transform])
 
 
-def _adapt_official_openpi_loader(data_loader: Any, *, seed: int, rank: int) -> None:
+def _adapt_official_openpi_loader(
+    data_loader: Any,
+    *,
+    seed: int,
+    rank: int,
+    action_horizon: int = 50,
+    action_chunk_boundary: str = "repeat_last",
+) -> None:
     """Bind actor seed and epoch advancement at OpenPI's guarded torch boundary."""
+
+    from clothdojo.training.openpi import validate_action_chunk_boundary
+
+    action_chunk_boundary = validate_action_chunk_boundary(action_chunk_boundary)
 
     torch_loader = _openpi_torch_loader(data_loader)
     batch_sampler = getattr(torch_loader, "batch_sampler", None)
@@ -268,10 +323,62 @@ def _adapt_official_openpi_loader(data_loader: Any, *, seed: int, rank: int) -> 
             f"initialization, got {type(sampler).__name__}"
         )
     sampler.seed = int(seed)
-    batch_sampler.sampler = _EpochAdvancingSampler(sampler)
+    adapted_sampler: Sampler[int] = sampler
+    if action_chunk_boundary == "full_only":
+        valid_indices = _full_only_anchor_indices(
+            torch_loader.dataset,
+            action_horizon=action_horizon,
+        )
+        distributed = DistributedSampler(
+            valid_indices,
+            num_replicas=sampler.num_replicas,
+            rank=sampler.rank,
+            shuffle=sampler.shuffle,
+            seed=int(seed),
+            drop_last=sampler.drop_last,
+        )
+        adapted_sampler = _MappedSampler(distributed, valid_indices)
+    batch_sampler.sampler = _EpochAdvancingSampler(adapted_sampler)
     generator = getattr(torch_loader, "generator", None)
     if generator is not None:
         generator.manual_seed(int(seed) + int(rank))
+
+
+def _full_only_anchor_indices(dataset: Any, *, action_horizon: int) -> torch.Tensor:
+    """Return global frame indices whose H-step chunk stays in one episode."""
+
+    if isinstance(action_horizon, bool) or action_horizon < 1:
+        raise ValueError("action_horizon must be a positive integer")
+    while hasattr(dataset, "_dataset"):
+        dataset = dataset._dataset
+    episode_data_index = getattr(dataset, "episode_data_index", None)
+    if not isinstance(episode_data_index, dict):
+        raise TypeError(
+            "OpenPI full_only requires the underlying LeRobot episode_data_index"
+        )
+    if "from" not in episode_data_index or "to" not in episode_data_index:
+        raise ValueError("LeRobot episode_data_index is missing from/to arrays")
+    starts = torch.as_tensor(episode_data_index["from"], dtype=torch.int64)
+    stops = torch.as_tensor(episode_data_index["to"], dtype=torch.int64)
+    if starts.ndim != 1 or stops.ndim != 1 or starts.shape != stops.shape:
+        raise ValueError("LeRobot episode_data_index must contain aligned 1D from/to arrays")
+    chunks = []
+    previous_stop = 0
+    for start_value, stop_value in zip(starts, stops, strict=True):
+        start = int(start_value)
+        stop = int(stop_value)
+        if start < previous_stop or stop < start:
+            raise ValueError("LeRobot episode ranges overlap or are reversed")
+        previous_stop = stop
+        if stop - start >= action_horizon:
+            chunks.append(
+                torch.arange(start, stop - action_horizon + 1, dtype=torch.int64)
+            )
+    if not chunks:
+        raise ValueError(
+            f"dataset has no full action chunks for action horizon {action_horizon}"
+        )
+    return torch.cat(chunks)
 
 
 def _validate_fp32_training_state(model: Any, optimizer: Any) -> None:

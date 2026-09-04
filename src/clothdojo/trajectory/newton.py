@@ -75,6 +75,20 @@ def capture_actions(
     )
 
 
+def capture_canonical_actions(
+    runtime: ShirtFlattenRuntime,
+    sample_index: int,
+) -> tuple[TrajectoryAction, ...]:
+    """Copy the bounded action actually submitted to Newton's controller."""
+
+    return capture_actions(
+        runtime,
+        sample_index,
+        runtime.canonical_arm_target,
+        runtime.canonical_gripper_open,
+    )
+
+
 def gripper_openness(q, lower, upper) -> np.ndarray:
     """Return normalized left/right openness from each leader finger joint."""
 
@@ -96,6 +110,8 @@ class NewtonTrajectoryRecorder:
     """
 
     def __init__(self, runtime: ShirtFlattenRuntime, *, capacity: int) -> None:
+        import warp as wp
+
         if capacity < 1:
             raise ValueError("trajectory recorder capacity must be positive")
         self.runtime = runtime
@@ -121,12 +137,36 @@ class NewtonTrajectoryRecorder:
         }
         self._state_indices: list[int] = []
         self._action_indices: list[int] = []
-        self._arm_actions = np.empty(
-            (self.capacity, self.world_count, 12), dtype=np.float32
-        )
-        self._gripper_actions = np.empty(
-            (self.capacity, self.world_count, 2), dtype=np.float32
-        )
+        expected_actions = {
+            "joint_target": (self.world_count, 12),
+            "gripper_open_command": (self.world_count, 2),
+        }
+        canonical_sources = {
+            "joint_target": runtime.canonical_arm_target,
+            "gripper_open_command": runtime.canonical_gripper_open,
+        }
+        action_device = canonical_sources["joint_target"].device
+        model_device = getattr(runtime.model, "device", None)
+        if model_device is not None and action_device != wp.get_device(model_device):
+            raise RuntimeError("runtime canonical actions are on the wrong model device")
+        for name, expected_shape in expected_actions.items():
+            source = canonical_sources[name]
+            if tuple(source.shape) != expected_shape or source.dtype != wp.float32:
+                raise RuntimeError(
+                    f"runtime canonical {name} must be float32 with shape {expected_shape}"
+                )
+            if source.device != action_device:
+                raise RuntimeError(f"runtime canonical {name} is on the wrong device")
+        self._action_buffers = {
+            "joint_target": _PinnedWarpBuffer(
+                canonical_sources["joint_target"],
+                capacity=self.capacity,
+            ),
+            "gripper_open_command": _PinnedWarpBuffer(
+                canonical_sources["gripper_open_command"],
+                capacity=self.capacity,
+            ),
+        }
         # Keep temporary articulation-view arrays alive until their queued
         # device-to-host copies have completed.
         self._source_references: list[tuple[Any, ...]] = []
@@ -146,25 +186,22 @@ class NewtonTrajectoryRecorder:
     def capture_action(
         self,
         sample_index: int,
-        arm_target: np.ndarray,
-        gripper_open: np.ndarray,
     ) -> None:
+        """Queue the latest runtime-canonical action without synchronizing."""
+
         slot = len(self._action_indices)
         if slot >= self.capacity:
             raise RuntimeError(
                 "trajectory recorder filled before the rollout synchronization boundary"
             )
-        expected_arm = (self.world_count, 12)
-        expected_gripper = (self.world_count, 2)
-        arms = np.asarray(arm_target, dtype=np.float32)
-        grippers = np.asarray(gripper_open, dtype=np.float32)
-        if arms.shape != expected_arm or grippers.shape != expected_gripper:
-            raise ValueError(
-                "trajectory action shape differs from the Newton world batch: "
-                f"{arms.shape}/{grippers.shape}"
-            )
-        self._arm_actions[slot] = arms
-        self._gripper_actions[slot] = grippers
+        self._action_buffers["joint_target"].copy_from(
+            self.runtime.canonical_arm_target,
+            slot=slot,
+        )
+        self._action_buffers["gripper_open_command"].copy_from(
+            self.runtime.canonical_gripper_open,
+            slot=slot,
+        )
         self._action_indices.append(int(sample_index))
 
     def drain(self, writers) -> None:
@@ -193,8 +230,12 @@ class NewtonTrajectoryRecorder:
                 writer.append_transition(
                     TrajectoryAction(
                         sample_index=sample_index - 1,
-                        joint_target=self._arm_actions[action_slot, world],
-                        gripper_open_command=self._gripper_actions[action_slot, world],
+                        joint_target=self._action_buffers["joint_target"].numpy[
+                            action_slot, world
+                        ],
+                        gripper_open_command=self._action_buffers[
+                            "gripper_open_command"
+                        ].numpy[action_slot, world],
                     ),
                     state,
                 )
@@ -212,6 +253,9 @@ class NewtonTrajectoryRecorder:
         count = len(self._state_indices)
         for buffer in self._buffers.values():
             buffer.enqueue_readback(count=count)
+        action_count = len(self._action_indices)
+        for buffer in self._action_buffers.values():
+            buffer.enqueue_readback(count=action_count)
 
     def discard(self) -> None:
         self._state_indices.clear()

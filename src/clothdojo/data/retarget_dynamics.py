@@ -862,7 +862,7 @@ class RobotDynamicsRetargeter:
                     upper = float(leads[min(len(leads) - 1, best + 1)])
                     if upper == lower or (refinement >= 2 and best_margin > 1.0e-4):
                         break
-                at_preview_limit = best_lead >= frame - start - 1 - 1.0e-6
+                at_preview_limit = _gripper_preview_at_limit(best_lead, frame - start)
                 if best_margin > 0.0 or not at_preview_limit or start == phase_start[side]:
                     break
                 start = max(int(phase_start[side]), frame - 2 * (frame - start))
@@ -1381,6 +1381,16 @@ def _advance_gripper_curve(commands: np.ndarray, lead_frames: float) -> np.ndarr
     values = np.asarray(commands, dtype=np.float64)
     frames = np.arange(len(values), dtype=np.float64)
     return np.interp(frames + float(lead_frames), frames, values)
+
+
+def _gripper_preview_at_limit(lead_frames: float, window_frames: int) -> bool:
+    """Return whether either shift direction exhausted the preview window."""
+
+    if isinstance(window_frames, bool) or not isinstance(window_frames, (int, np.integer)):
+        raise ValueError("gripper preview window must be an integer")
+    if window_frames < 1:
+        raise ValueError("gripper preview window must be positive")
+    return bool(abs(float(lead_frames)) >= window_frames - 1 - 1.0e-6)
 
 
 def _gripper_event_openness(finger_open: np.ndarray) -> np.ndarray:

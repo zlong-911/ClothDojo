@@ -5,7 +5,11 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from clothdojo.teleop.cloudxr_slot import _app_started, _startup_timeout, _write_overrides
+from clothdojo.teleop.cloudxr_slot import (
+    _app_started,
+    _startup_timeout,
+    _write_overrides,
+)
 from clothdojo.teleop.control import (
     BimanualTeleopController,
     TeleopSafetyConfig,
@@ -113,6 +117,20 @@ def test_cloudxr_pacing_targets_the_measured_teleop_rate(tmp_path, monkeypatch) 
 
     assert "NV_MAX_FPS=20\n" in config
     assert "NV_CXR_GPU_INDEX_VULKAN=0\n" in config
+
+
+def test_cloudxr_gateway_routes_only_server_authorized_signaling_ports() -> None:
+    from clothdojo.teleop.cloudxr_gateway import gateway_backend
+
+    allowed = frozenset({44388, 44398})
+
+    assert gateway_backend(
+        "/_clothdojo/44398/33.229.145.114/sign_in?peer_id=test&version=2",
+        allowed,
+    ) == (44398, "/sign_in?peer_id=test&version=2")
+    assert gateway_backend("/_clothdojo/12345/host/sign_in", allowed) is None
+    assert gateway_backend("/_clothdojo/44398/host", allowed) is None
+    assert gateway_backend("/sign_in?peer_id=direct", allowed) is None
 
 
 def test_nonzero_gpu_keeps_physical_cuda_and_vulkan_indices_aligned(tmp_path, monkeypatch) -> None:

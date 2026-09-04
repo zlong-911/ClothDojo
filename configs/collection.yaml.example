@@ -13,15 +13,17 @@ teleoperation:
 
 profiles:
   shirt_flatten:
-    display_name: T 恤展平
+    display_name: 服装展平
     scene: shirt_flatten
     dataset_root: data/collections/shirt_flatten
-    rollout_root: data/rollouts/shirt_flatten
+    hil_dataset_root: data/collections/shirt_flatten/hil
+    rollout_root: data/collections/shirt_flatten/rollouts
     max_actions: 3600
   shirt_fold:
-    display_name: T 恤折叠（从展平终态续采）
+    display_name: 服装折叠
     scene: shirt_fold
     continuation_source_profile: shirt_flatten
     dataset_root: data/collections/shirt_fold
-    rollout_root: data/rollouts/shirt_fold
+    hil_dataset_root: data/collections/shirt_fold/hil
+    rollout_root: data/collections/shirt_fold/rollouts
     max_actions: 3600

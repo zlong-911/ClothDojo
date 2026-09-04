@@ -374,14 +374,16 @@ def test_ur5_has_stable_bases_and_the_complete_legacy_camera_stand() -> None:
         )
 
 
-def test_task_profiles_are_independent_of_robot_profiles() -> None:
+def test_task_profiles_are_independent_of_robot_profiles(monkeypatch) -> None:
     assert task_profile(SHIRT_FLATTEN).scene_available is True
-    assert task_profile(SHIRT_FOLD).scene_available is False
+    assert task_profile(SHIRT_FOLD).scene_available is True
 
-    from clothdojo.sim.scene import build_scene
+    from clothdojo.sim import scene
 
-    with pytest.raises(NotImplementedError, match="assets and randomization"):
-        build_scene("assets", robot_id=PIPER, task_name=SHIRT_FOLD)
+    marker = object()
+    monkeypatch.setattr(scene, "_build_shirt_flatten", lambda *_args, **_kwargs: marker)
+
+    assert scene.build_scene("assets", robot_id=PIPER, task_name=SHIRT_FOLD) is marker
 
 
 def test_x5_profile_uses_the_kai0_integrated_base_with_robodojo_x5() -> None:
@@ -419,8 +421,18 @@ def test_x5_references_complete_robodojo_arms_and_cameras() -> None:
     assert cam_high.GetAttribute("clothdojo:cameraModel").Get() == "RealSense D455"
     np.testing.assert_allclose(
         UsdGeom.Xformable(cam_high).GetLocalTransformation().ExtractTranslation(),
-        (0.3179578738615954, -0.0225080347427568, 1.34981),
+        (0.3179578738615954, -0.0225080347427568, 1.44981),
     )
+    np.testing.assert_allclose(
+        np.asarray(UsdGeom.Xformable(cam_high).GetLocalTransformation())[:3, :3],
+        ((0, -1, 0), (0.8660254037844386, 0, 0.5), (-0.5, 0, 0.8660254037844386)),
+    )
+    assert stand.GetAttribute("clothdojo:columnExtensionMeters").Get() == pytest.approx(0.1)
+    stand_bounds = UsdGeom.BBoxCache(
+        Usd.TimeCode.Default(), (UsdGeom.Tokens.default_, UsdGeom.Tokens.render)
+    ).ComputeWorldBound(stand).ComputeAlignedRange()
+    assert stand_bounds.GetMin()[2] == pytest.approx(0.804, abs=2e-6)
+    assert stand_bounds.GetMax()[2] == pytest.approx(1.48951, abs=2e-6)
     for side in ("left", "right"):
         arm = stage.GetPrimAtPath(f"/Robot/Arms/{side}")
         assert arm

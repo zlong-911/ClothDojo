@@ -2,6 +2,7 @@
 
 from clothdojo.trajectory.reader import TrajectoryReader
 from clothdojo.trajectory.schema import (
+    RUNTIME_ACTION_SEMANTICS,
     SceneMetadata,
     TrajectoryAction,
     TrajectoryManifest,
@@ -11,6 +12,7 @@ from clothdojo.trajectory.schema import (
 from clothdojo.trajectory.writer import TrajectoryWriter
 
 __all__ = [
+    "RUNTIME_ACTION_SEMANTICS",
     "SceneMetadata",
     "TrajectoryAction",
     "TrajectoryManifest",

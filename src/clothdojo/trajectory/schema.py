@@ -10,6 +10,9 @@ import numpy as np
 TRAJECTORY_FORMAT_VERSION = 1
 TRAJECTORY_ALIGNMENT = "states_n_plus_1_actions_n"
 WORLD_LOCAL_FRAME = "world_local"
+RUNTIME_ACTION_SEMANTICS = "runtime_target"
+# joint_target is radians after runtime joint-limit clipping; gripper_open_command
+# remains normalized openness after runtime clipping to [0, 1].
 TrajectoryStatus = Literal["recording", "complete", "aborted"]
 
 SAMPLE_INDEX_DTYPE = np.dtype(np.int64)

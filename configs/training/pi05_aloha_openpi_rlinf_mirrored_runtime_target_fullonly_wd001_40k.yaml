@@ -1,0 +1,9 @@
+defaults:
+  - pi05_aloha_openpi_rlinf_mirrored_noaug_bs256_wd001_40k
+  - _self_
+
+# Exact optimizer/model recipe of the latest 1838 mirrored baseline. The
+# dataset and full_only H50 norm stats are bound by the launch environment.
+runner:
+  logger:
+    experiment_name: nocs1838_runtime_target_fullonly_noaug_wd001_b256_40k_s43_train4_20260901

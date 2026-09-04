@@ -16,9 +16,10 @@ class TaskProfile:
 
 _PROFILES = {
     SHIRT_FLATTEN: TaskProfile(task_name=SHIRT_FLATTEN, scene_available=True),
-    # The identity is reserved now so data can distinguish fold from flatten.
-    # Its assets and randomization contract have not been defined yet.
-    SHIRT_FOLD: TaskProfile(task_name=SHIRT_FOLD, scene_available=False),
+    # Folding has a distinct task identity but intentionally shares the same
+    # garment workstation and physics scene as flattening.  Its initial-state
+    # and target distributions are owned by rollout/evaluation artifacts.
+    SHIRT_FOLD: TaskProfile(task_name=SHIRT_FOLD, scene_available=True),
 }
 
 

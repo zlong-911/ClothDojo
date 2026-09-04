@@ -226,6 +226,11 @@ def test_node_plans_partition_assets_without_shared_metadata_writers(
     assert len(plan["jobs"]) == len({item["asset_id"] for item in plan["jobs"]})
     assert "meta" not in plan
     assert plan["policy_endpoints"] == ["ws://p0:1", "ws://p1:1"]
+    worker_environment = launched[0][2]["environment"]
+    assert worker_environment["HTTP_PROXY"] == ""
+    assert worker_environment["HTTPS_PROXY"] == ""
+    assert worker_environment["ALL_PROXY"] == ""
+    assert worker_environment["NO_PROXY"] == "*"
 
 
 def test_worker_reconstructs_json_replicates(monkeypatch, tmp_path: Path) -> None:

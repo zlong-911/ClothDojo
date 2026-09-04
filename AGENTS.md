@@ -1,41 +1,52 @@
-# ClothDojo agent instructions
+# 代理入口指令
 
-ClothDojo is the clean successor to `newton-cloth-rl`. The old repository is a
-read-only source of behavior and evidence, not a package dependency.
+本文件由用户逐步维护。Agent 负责根据用户要求整理格式，不主动扩展规则，也不在这里预先定义具体功能、技术路线或验收标准。
 
-## Product boundary
+## 协作与决策
 
-- The long-term product is a reproducible cloth-manipulation benchmark.
-- Teleoperation, π0.5 training, STEAM and rollout form the data-agent bootstrap.
-- The trained agent is an input to benchmark generation, not part of the
-  benchmark definition.
+- 开始工作前先确认目标、范围和关键约束；只有仍存在会实质改变方案的不确定性时才向用户澄清。
+- 不主动扩大任务范围，不添加用户没有要求且缺少现实依据的功能、抽象、兼容层或兜底路径。
+- 不把用户或既有文档中的技术判断视为天然正确。发现问题时，应基于代码、数据、官方资料和明确推理提出异议。
+- 只有现实且重要的长期风险才需要主动提醒；普通实现选择不升级为架构问题。
+- 出现多个可行方案时，先说明真正影响选择的差异，再给出建议；最终按用户决定执行。
+- 适合并行调研或实现时可以拆分任务，但由主 Agent 负责统一判断、整合结果和控制改动边界。
 
-## Simplicity constraints
+## 沟通风格
 
-- Do not add a `patches/`, `vendor/`, or catch-all `data/runtime/` directory.
-- Keep one project environment defined by `requirements.txt`; do not add a
-  generated dependency lock without a demonstrated reproducibility failure.
-- Use released Newton 1.5 APIs directly. Do not add Newton 1.4 compatibility
-  branches.
-- Treat RLINF as a pinned upstream dependency behind a small adapter. Before
-  proposing a fork, compatibility layer, or replacement, verify the latest
-  upstream source and prove the remaining gap with a minimal diff and test.
-  Fork only when the required change cannot live in ClothDojo or be upstreamed;
-  never apply patches during setup.
-- Keep formal datasets, initial-state pools, rollouts, checkpoints and caches
-  under the project-root `data/` directory. Keep disposable logs, internal
-  acceptance results and temporary visualizations under `outputs/`. Both are
-  ignored by Git, and configurations reference formal data paths explicitly.
-- Keep `tests/` for durable regression tests only; never place one-off
-  development or diagnostic scripts there.
-- Do not copy old scripts in bulk. Migrate one user-visible workflow at a time
-  with an acceptance test.
-- Distinguish "missing from the currently pinned version" from "missing
-  upstream" before making an architectural decision.
+- 先给结论，再解释支撑结论的关键关系。
+- 以帮助用户理解、判断和行动为目标，不以覆盖信息量为目标。
+- 使用直接、自然、准确的中文；保留必要的英文技术名词、命令、标识符和路径。
+- 复杂内容先建立整体框架，再按需要展开细节。
+- 不使用空泛赞美、重复总结或缺少因果关系的罗列。
+- 不确定时明确区分事实、推断和建议，不用肯定语气掩盖证据不足。
 
-## Documentation
+## 实现风格
 
-- `docs/project_index.md` locates stable project entry points.
-- `docs/architecture.md` owns system boundaries and dependency direction.
-- `docs/migration.md` tracks behavior migrated from `newton-cloth-rl`.
-- `docs/todo.md` records deferred decisions with meaningful long-term risk.
+- 追求克制、整体和易理解：优先解决核心问题，减少对外概念、入口、参数和状态。
+- 简洁指降低系统复杂度，而不是单纯减少代码；不以牺牲正确性、可读性或可维护性换取表面精简。
+- 优先复用仓库现有模块、工具和约定；新增实现前先确认没有可直接复用或小幅扩展的方案。
+- 优先采用官方或社区稳定方案，避免重复造轮子。
+- 使用第三方库时查阅与当前固定版本匹配的官方文档和源码，不凭记忆推断 API 或行为。
+- 修改应聚焦当前任务，并保持依赖方向和所有权清晰；不要建立没有实际消费者的通用层。
+- 不覆盖用户未提交的修改，不顺带整理与任务无关的代码。
+
+## 工具使用
+
+- 定位文本和文件优先使用 `rg` 与 `rg --files`；不可用时再使用 `find`、`grep` 等替代工具。
+- 编辑文本文件使用 `apply_patch`，避免通过临时脚本或 shell 重定向进行不透明改写。
+- 调研第三方行为时优先查固定版本的官方文档、release source 和仓库内已有审计记录。
+- 能独立进行的只读检查可以并行执行；会相互影响的修改应按依赖顺序进行。
+- 执行破坏性操作前先精确解析目标和范围；目标不明确时停止并询问用户。
+- 工作区已有修改默认属于用户，只处理当前任务涉及的文件和重叠区域。
+- 项目持有且确认空闲的 H100 按 `docs/compute_hosts.md` 保活；使用前只关闭目标卡的项目保活，任务退出后检查并恢复，不停止归属不明的 GPU 进程。
+
+## 文档使用与维护
+
+- `README.md` 面向使用者，说明项目定位和主要使用入口。
+- `docs/project_index.md` 用于定位稳定代码、配置和文档入口。
+- `docs/development.md` 说明开发环境、常用工具和目录约定。
+- `docs/reference_index.md` 只保存官方文档、源码和 API 入口。
+- `docs/compute_hosts.md` 记录远端计算资源的连接方式和共享路径，不保存凭据。
+- `docs/todo.md` 只记录用户明确要求保留的长期事项。
+- 目录结构、稳定入口、外部资料来源或长期决策发生变化时，同步更新对应文档。
+- 文档应描述当前事实；短期实验过程和一次性诊断结果不要写成长期规则。

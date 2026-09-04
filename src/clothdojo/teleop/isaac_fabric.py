@@ -16,13 +16,15 @@ def _write_points(
 class NewtonFabricBridge:
     """Project Newton state into Isaac's reliable cloth and rigid paths.
 
-    Cloth points stay GPU-direct through USDRT. Isaac 5's RTX delegate does not
-    reliably publish runtime local-matrix edits for the instanceable ALOHA visual
-    meshes, so the small rigid topology is authored through standard USD xforms.
+    Cloth points stay GPU-direct through USDRT on CUDA device 0. USDRT's Fabric
+    GPU data is not multi-GPU safe, so other devices author the points through
+    Fabric's CPU path. Isaac 5's RTX delegate does not reliably publish runtime
+    local-matrix edits for the instanceable ALOHA visual meshes, so the small
+    rigid topology is authored through standard USD xforms.
     """
 
     def __init__(self, model, usd_context, *, device: str) -> None:
-        from usdrt import Sdf, Usd
+        from usdrt import Sdf, Usd, Vt
 
         if not str(device).startswith("cuda:"):
             raise ValueError("teleop Fabric requires a CUDA device")
@@ -40,6 +42,8 @@ class NewtonFabricBridge:
         self._cloth_attr = None
         self._cloth_points = None
         self._cloth_vt_points = None
+        self._cloth_vt_type = None
+        self._cloth_point_count = 0
         cloth = self._stage.GetPrimAtPath(Sdf.Path("/World/Cloth"))
         if cloth and cloth.IsValid():
             # OmniHydra only consumes runtime Fabric point edits from meshes
@@ -51,38 +55,49 @@ class NewtonFabricBridge:
                 )
             attr = cloth.GetAttribute("points")
             if attr and attr.IsValid():
-                attr.SyncDataToGpu()
                 vt_points = attr.Get()
-                if not vt_points.HasFabricGpuData():
-                    raise RuntimeError("Isaac Fabric cloth points have no GPU mirror")
-                cuda_interface = vt_points.__cuda_array_interface__
-                point_count = int(cuda_interface["shape"][0])
-                pointer = int(cuda_interface["data"][0])
-                if pointer == 0:
-                    raise RuntimeError("Isaac Fabric cloth points have a null GPU pointer")
-                self._cloth_points = wp.types.array(
-                    dtype=wp.vec3f,
-                    shape=(point_count,),
-                    capacity=point_count * wp.types.type_size_in_bytes(wp.vec3f),
-                    ptr=pointer,
-                    device=self._device,
-                    owner=False,
-                    requires_grad=False,
-                )
-                # Keep the VtArray handle alive for the lifetime of the Warp
-                # view into Fabric-owned GPU memory.
-                self._cloth_vt_points = vt_points
+                self._cloth_point_count = len(vt_points)
                 self._cloth_attr = attr
-                if self._cloth_points.shape[0] != int(model.particle_count):
+                if self._cloth_point_count != int(model.particle_count):
                     raise RuntimeError(
                         "Isaac Fabric cloth vertex count does not match Newton particles: "
-                        f"{self._cloth_points.shape[0]} != {int(model.particle_count)}"
+                        f"{self._cloth_point_count} != {int(model.particle_count)}"
                     )
-        if int(model.particle_count) > 0 and self._cloth_points is None:
+                if _fabric_gpu_direct_supported(self._device):
+                    attr.SyncDataToGpu()
+                    vt_points = attr.Get()
+                    if not vt_points.HasFabricGpuData():
+                        raise RuntimeError("Isaac Fabric cloth points have no GPU mirror")
+                    cuda_interface = vt_points.__cuda_array_interface__
+                    pointer = int(cuda_interface["data"][0])
+                    if pointer == 0:
+                        raise RuntimeError("Isaac Fabric cloth points have a null GPU pointer")
+                    self._cloth_points = wp.array(
+                        dtype=wp.vec3f,
+                        shape=(self._cloth_point_count,),
+                        capacity=(
+                            self._cloth_point_count
+                            * wp.types.type_size_in_bytes(wp.vec3f)
+                        ),
+                        ptr=pointer,
+                        device=self._device,
+                        requires_grad=False,
+                    )
+                    # Keep the VtArray handle alive for the lifetime of the Warp
+                    # view into Fabric-owned GPU memory.
+                    self._cloth_vt_points = vt_points
+                else:
+                    self._cloth_vt_type = Vt.Vec3fArray
+        if int(model.particle_count) > 0 and self._cloth_attr is None:
             raise RuntimeError("Isaac Fabric did not map the combined cloth mesh")
+        sync = (
+            "rigid-usd+cloth-gpu"
+            if self._cloth_points is not None
+            else "rigid-usd+cloth-fabric-cpu"
+        )
         print(
             f"Isaac replay bridge ready: rigid={int(model.body_count)}, "
-            f"cloth={self._cloth_points is not None}, sync=rigid-usd+cloth-gpu",
+            f"cloth={self._cloth_attr is not None}, sync={sync}",
             flush=True,
         )
 
@@ -95,8 +110,23 @@ class NewtonFabricBridge:
                 device=self._device,
             )
             self._cloth_attr.InvalidateCpuData()
+        elif self._cloth_attr is not None:
+            # Fabric GPU arrays currently live on CUDA device 0 even when Isaac
+            # physics runs on another device. Writing that pointer from cuda:N
+            # causes an asynchronous illegal-memory-access failure. Set the CPU
+            # value instead; OmniHydra observes it because the prim is Deformable.
+            points = np.asarray(state.particle_q.numpy(), dtype=np.float32)
+            if points.shape != (self._cloth_point_count, 3):
+                raise ValueError("particle_q must have shape [particle, 3]")
+            if not self._cloth_attr.Set(self._cloth_vt_type(points)):
+                raise RuntimeError("Isaac Fabric rejected the cloth point update")
 
         self._rigid_writer.update(state.body_q.numpy())
+
+
+def _fabric_gpu_direct_supported(device: str) -> bool:
+    """USDRT 7.x exposes Fabric GPU arrays only on physical CUDA device 0."""
+    return str(device) == "cuda:0"
 
 
 class _UsdRigidBodyWriter:

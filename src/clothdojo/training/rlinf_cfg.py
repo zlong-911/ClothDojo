@@ -215,6 +215,12 @@ def _worker_type() -> type:
     class ClothDojoCfgWorker(FSDPCfgWorker):
         """Upstream CFG worker with OpenPI data kwargs passed through."""
 
+        def __init__(self, cfg: Any):
+            from clothdojo.training.worker_environment import apply_worker_environment
+
+            apply_worker_environment(cfg)
+            super().__init__(cfg)
+
         def set_global_step(self, global_step: int) -> None:
             # Only actual iterator exhaustion advances the data epoch. Inferring
             # it with floor(len(loader) / grad_accum) drops tail micro-batches.

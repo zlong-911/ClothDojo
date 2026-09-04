@@ -30,6 +30,7 @@ from clothdojo.sim.scene import (
     _joint_indices,
     _nocs_visual_mesh,
     _register_solver_attributes,
+    _restore_authored_mimic_constraints,
     _select_piper_robot,
     _vertex_normals,
     build_scene,
@@ -124,15 +125,17 @@ def test_aloha_action_targets_follow_two_articulation_layout() -> None:
 
     arm = np.arange(12, dtype=np.float32).reshape(1, 12) / 10.0
     arm_target = wp.zeros((1, 2, 6), dtype=wp.float32, device="cpu")
+    canonical_arm_target = wp.zeros((1, 12), dtype=wp.float32, device="cpu")
     arm_limit = wp.array(np.full((1, 2, 6), 100.0, dtype=np.float32), device="cpu")
     wp.launch(
         _write_arm_targets,
         dim=(1, 12),
         inputs=[wp.array(arm, device="cpu"), -arm_limit, arm_limit, 6],
-        outputs=[arm_target],
+        outputs=[arm_target, canonical_arm_target],
         device="cpu",
     )
     np.testing.assert_allclose(arm_target.numpy().reshape(1, 12), arm)
+    np.testing.assert_allclose(canonical_arm_target.numpy(), arm)
 
     gripper_target = wp.zeros((1, 2, 2), dtype=wp.float32, device="cpu")
     wp.launch(
@@ -439,9 +442,30 @@ def test_piper_import_selects_only_expert_collision_envelope(load_visual_shapes:
     particle_bit = int(newton.ShapeFlags.COLLIDE_PARTICLES)
     contact = [index for index in migrated if "/contact_" in labels[index]]
     proxy = [index for index in migrated if "/self_collision_proxy_" in labels[index]]
+    filters = {tuple(sorted(pair)) for pair in builder.shape_collision_filter_pairs}
+    left_proxy = [
+        shape
+        for shape in proxy
+        if str(builder.body_label[int(builder.shape_body[shape])]).startswith("left/")
+    ]
+    right_proxy = [
+        shape
+        for shape in proxy
+        if str(builder.body_label[int(builder.shape_body[shape])]).startswith("right/")
+    ]
 
     assert len(contact) == 99
     assert len(proxy) == 27
+    assert left_proxy and right_proxy
+    assert all(
+        tuple(sorted((left, right))) not in filters
+        for left in left_proxy
+        for right in right_proxy
+        if not (
+            str(builder.body_label[int(builder.shape_body[left])]).endswith("/base_link")
+            and str(builder.body_label[int(builder.shape_body[right])]).endswith("/base_link")
+        )
+    )
     assert Counter(int(builder.shape_type[index]) for index in migrated) == {7: 4, 8: 10, 10: 112}
     assert all(
         int(builder.shape_flags[index]) & (shape_bit | particle_bit) == shape_bit | particle_bit
@@ -618,6 +642,51 @@ def test_piper_usd_authors_control_and_gripper_physics() -> None:
     assert builder.constraint_mimic_coef1 == [-1.0, -1.0]
     assert set(builder.custom_attributes["mujoco:gravcomp"].values) == set(range(21))
     assert set(builder.custom_attributes["mujoco:jnt_actgravcomp"].values) == set(arm_dofs)
+
+
+def test_piper_mimic_rows_recover_when_host_misses_applied_schema() -> None:
+    import newton
+    import warp as wp
+    from pxr import Usd
+
+    root = Path(__file__).parents[1] / "assets" / "robots" / "piper"
+    stage = Usd.Stage.Open(str(root / "piper.usda"))
+    assert stage is not None
+    builder = newton.ModelBuilder()
+    _register_solver_attributes(newton, builder)
+    imported = builder.add_usd(
+        source=str(root / "piper.usda"),
+        floating=False,
+        enable_self_collisions=True,
+        ignore_paths=[".*/root_joint"],
+        load_visual_shapes=False,
+        xform=wp.transform_identity(),
+        load_static_visual_shapes=False,
+        skip_mesh_approximation=True,
+        schema_resolvers=[
+            newton.usd.SchemaResolverNewton(),
+            newton.usd.SchemaResolverPhysx(),
+        ],
+    )
+    for name in (
+        "constraint_mimic_joint0",
+        "constraint_mimic_joint1",
+        "constraint_mimic_coef0",
+        "constraint_mimic_coef1",
+        "constraint_mimic_enabled",
+        "constraint_mimic_label",
+    ):
+        getattr(builder, name).clear()
+
+    _restore_authored_mimic_constraints(stage, imported, builder)
+    _restore_authored_mimic_constraints(stage, imported, builder)
+
+    joints = _joint_indices(builder, GRIPPER_JOINTS)
+    assert builder.constraint_mimic_joint0 == [joints[1], joints[3]]
+    assert builder.constraint_mimic_joint1 == [joints[0], joints[2]]
+    assert builder.constraint_mimic_coef0 == [0.0, 0.0]
+    assert builder.constraint_mimic_coef1 == [-1.0, -1.0]
+    assert builder.constraint_mimic_enabled == [True, True]
 
 
 def test_scene_requires_at_least_one_world() -> None:

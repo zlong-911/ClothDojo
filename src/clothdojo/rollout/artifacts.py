@@ -92,6 +92,9 @@ def validate_sft_norm_binding(
         )
     for name in ("dataset_info_sha256", "dataset_sidecar_sha256"):
         _require_sha256(provenance.get(name), f"norm provenance {name}")
+    training_dataset_root = provenance.get("dataset_root")
+    if not isinstance(training_dataset_root, str) or not training_dataset_root.strip():
+        raise ValueError("norm provenance is missing its training dataset root")
     for name in ("frames", "episodes"):
         value = provenance.get(name)
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -121,6 +124,7 @@ def validate_sft_norm_binding(
         "norm_stats_sha256": stats_sha256,
         "norm_provenance_sha256": provenance_sha256,
         "training_manifest_sha256": _file_sha256(manifest_file),
+        "training_dataset_root": training_dataset_root,
         "dataset_info_sha256": provenance["dataset_info_sha256"],
         "dataset_sidecar_sha256": provenance["dataset_sidecar_sha256"],
     }

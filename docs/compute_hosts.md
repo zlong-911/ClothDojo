@@ -1,9 +1,9 @@
 # 计算节点
 
-当前按用户 2026-08-31 清单登记了 9 台 H100 worker，共 72 GPU：一组四机
-（32 GPU）、一组单机（8 GPU）和两组双机（各 16 GPU）。九台均已连接确认
-各有 8 × H100 80GB；另有五台 RTX 5090 worker。实际可用数量仍需要在每次
-实验前确认，未列入本次清单的旧 H100 worker 不计入当前资源。
+当前按用户 2026-09-04 提供的完整清单登记 5 台 GPU worker：4 台 H100 和
+1 台 RTX 5090。`33.229.141.59` 已连接确认有 8 × RTX 5090 D v2 24GB；
+4 台 H100 均已连接确认有 8 × H100 80GB，并已验证项目自动化 key、共享路径、
+`br0` 和 InfiniBand 设备。未列入本次清单的旧 worker 不计入当前资源。
 
 下列 H100 节点适合 Newton、训练和策略推理，不用于 Isaac RTX 离线导出。H100 没有 RT Core，不满足 Isaac Sim 的渲染要求；离线导出应调度到 Vulkan 可用的 RTX GPU。
 
@@ -45,85 +45,56 @@ scripts/manage-gpu-keepalive.sh start 0 1 2 # 任务结束后恢复
 `CLOTHDOJO_KEEPALIVE_MATRIX_SIZE` 和 `CLOTHDOJO_KEEPALIVE_DUTY_CYCLE`；默认
 值分别为 4096 和 1.0。
 
-## H100 四机互联资源池
+## 当前 H100 资源池
 
-当前任务为 `psxc43fxrr4mwj8c`。用户于 2026-08-31 确认了这组四机互联的
-32-GPU worker 地址，四台均已登录
-确认各有 8 × H100 80GB。调度前仍须逐机检查 GPU 占用。旧组合的
-32-rank NCCL all-reduce 校验不代表新组合已经复测。
+以下 4 台由用户于 2026-09-04 指定为当前 H100 worker，SSH 端口均为 8022。
+四台均已验证 `id_ed25519_clothdojo_h100` key、共享 DolphinFS 项目与 Python
+环境，各有 8 张 H100 80GB，登录 shell 的 memlock 为 `unlimited`。
 
-| SSH alias | Worker | 宿主机／SSH 地址 | 端口 | 用户 | GPU |
-| --- | ---: | --- | ---: | --- | --- |
-| `clothdojo-h100-b` | 0 | `10.68.22.54` | 8022 | `hadoop-aipnlp` | 8 × H100 80GB |
-| `clothdojo-h100-c` | 1 | `10.68.38.178` | 8022 | `hadoop-aipnlp` | 8 × H100 80GB |
-| `clothdojo-h100-a` | 2 | `10.68.30.30` | 8022 | `hadoop-aipnlp` | 8 × H100 80GB |
-| `clothdojo-h100-d` | 3 | `10.68.32.158` | 8022 | `hadoop-aipnlp` | 8 × H100 80GB |
+| SSH 地址 | 端口 | 用户 | 容器 hostname | GPU |
+| --- | ---: | --- | --- | --- |
+| `10.68.0.138` | 8022 | `hadoop-aipnlp` | `hldy-data-k8s-gpu-h800-node0037.mt` | 8 × H100 80GB |
+| `10.68.56.130` | 8022 | `hadoop-aipnlp` | `hldy-data-k8s-gpu-h800-node0390.mt` | 8 × H100 80GB |
+| `10.68.59.186` | 8022 | `hadoop-aipnlp` | `hldy-data-k8s-gpu-h800-node0773.mt` | 8 × H100 80GB |
+| `10.68.39.34` | 8022 | `hadoop-aipnlp` | `hldy-data-k8s-gpu-h800-node1018.mt` | 8 × H100 80GB |
 
 自动化使用 key：
 
 ```bash
 ssh -i ~/.ssh/id_ed25519_clothdojo_h100 -p 8022 \
-  hadoop-aipnlp@10.68.30.30
+  hadoop-aipnlp@10.68.0.138
 ```
 
-四台均已授权并验证上述自动化 key。
-密码登录只作为人工恢复路径：
+四台均已授权并验证上述自动化 key。密码登录只作为人工恢复路径：
 
 ```bash
 ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no \
-  -p 8022 hadoop-aipnlp@10.68.30.30
+  -p 8022 hadoop-aipnlp@10.68.0.138
 ```
 
 密码不得写入 Git、shell 命令、环境文件或本文档，应从用户的外部凭据记录获取。
-
-## H100 单机与双机资源池
-
-以下三个任务共五台 worker，均已通过容器 hostname 与任务 ID、Worker 编号
-核对。**容器 SSH 地址不等于宿主机 IP**；连接使用下表的容器地址和
-`hadoop-aipnlp` 用户，端口均为 `8416`。五台自动化 key 均已配置并验证。
-
-| 任务 | 任务 GPU 总数 | Worker | 容器 SSH 地址 | GPU |
-| --- | ---: | ---: | --- | --- |
-| `psxb0zpxrr7ko5yn` | 8 | 0 | `10.245.103.32` | 8 × H100 80GB |
-| `psxbbb4xrr7ko5yn` | 16 | 0 | `10.245.112.227` | 8 × H100 80GB |
-| `psxbbb4xrr7ko5yn` | 16 | 1 | `10.238.22.76` | 8 × H100 80GB |
-| `psxdadhxrr4mwj8c` | 16 | 0 | `10.238.26.117` | 8 × H100 80GB |
-| `psxdadhxrr4mwj8c` | 16 | 1 | `10.245.116.76` | 8 × H100 80GB |
-
-```bash
-ssh -i ~/.ssh/id_ed25519_clothdojo_h100 -p 8416 \
-  hadoop-aipnlp@10.245.103.32
-```
-
-这三个任务不应被当作上述四机 NCCL 资源池的额外节点。两组双机的 IB 拓扑及
-NCCL 跨机通信尚未验证，不能仅凭同一任务下有两个 worker 推断通信可用。
 
 ## RTX 5090 资源池
 
 RTX 5090 节点适合 Newton 仿真、策略推理和 Isaac RTX 渲染，均已授权同一
 自动化 key：
 
-| SSH alias | 地址 | 端口 | 用户 | GPU |
-| --- | --- | ---: | --- | --- |
-| `clothdojo-5090-a` | `33.229.142.91` | 8022 | `hadoop-aipnlp` | 8 × RTX 5090 D v2 24GB |
-| `clothdojo-5090-b` | `33.229.209.165` | 8022 | `hadoop-aipnlp` | 8 × RTX 5090 D v2 24GB |
-| `clothdojo-5090-c` | `33.229.145.114` | 8022 | `hadoop-aipnlp` | 8 × RTX 5090 D v2 24GB |
-| — | `33.229.206.221` | 8022 | `hadoop-aipnlp` | 8 × RTX 5090 D v2 24GB |
-| — | `33.229.144.150` | 8022 | `hadoop-aipnlp` | 8 × RTX 5090 D v2 24GB |
+| 地址 | 端口 | 用户 | GPU |
+| --- | ---: | --- | --- |
+| `33.229.141.59` | 8022 | `hadoop-aipnlp` | 8 × RTX 5090 D v2 24GB |
 
 ```bash
-ssh clothdojo-5090-a
-ssh clothdojo-5090-b
-ssh clothdojo-5090-c
+ssh -i ~/.ssh/id_ed25519_clothdojo_h100 -p 8022 \
+  hadoop-aipnlp@33.229.141.59
 ```
 
-新增两台同样已验证 `id_ed25519_clothdojo_h100` 密钥，可用上表 IP 和端口直接连接。
+该节点已验证 `id_ed25519_clothdojo_h100` 密钥。
 
 5090 worker 共享项目路径：
 
 - 项目：`/cfs/mlp/training/docker/user/hadoop-aipnlp/huangzilong09/repos/ClothDojo`
 - Python：`/cfs/mlp/training/docker/user/hadoop-aipnlp/huangzilong09/repos/ClothDojo/.venv/bin/python`
-- OpenPI cache：`/cfs/mlp/training/docker/user/hadoop-aipnlp/huangzilong09/repos/ClothDojo/data/cache/openpi`（两台主机的 `~/.cache/openpi` 已指向该共享目录）
+- OpenPI cache：`/cfs/mlp/training/docker/user/hadoop-aipnlp/huangzilong09/repos/ClothDojo/data/cache/openpi`（该主机的 `~/.cache/openpi` 已指向该共享目录）
 
 H100 worker 共享路径：
 
@@ -134,14 +105,14 @@ H100 worker 共享路径：
 
 ## 多机通信
 
-当前四台均已确认 `br0` 使用上表中的容器 IP，可作为 Ray、torch distributed 和
-NCCL 的带外通信接口。每台均有八条状态为 ACTIVE 的 400 Gbit/s 原生 InfiniBand rail：
-`mlx5_0`、`mlx5_1`、`mlx5_2`、`mlx5_3`、`mlx5_6`、`mlx5_7`、
-`mlx5_8`、`mlx5_9`，端口均为 `1`。登录 shell 的 memlock 必须保持
-`unlimited`。
+当前四台 H100 均已确认 `br0` 使用表中的 SSH 地址。每台有八条状态为 ACTIVE
+的 400 Gbit/s 原生 InfiniBand rail：`mlx5_0`、`mlx5_1`、`mlx5_2`、
+`mlx5_3`、`mlx5_6`、`mlx5_7`、`mlx5_8`、`mlx5_9`，端口均为 `1`；另有
+四条 ACTIVE 的 100 Gbit/s 设备 `mlx5_4`、`mlx5_5`、`mlx5_10`、
+`mlx5_11`。四机跨节点 NCCL 尚未复测。
 
-本次集群环境预设的 `NCCL_IB_GID_INDEX=7` 面向 RoCE；使用上述原生 IB
-rail 时应 unset，并显式设置：
+集群环境预设的 `NCCL_IB_GID_INDEX=7` 面向 RoCE；使用上述原生 IB rail 时
+应 unset，并显式设置：
 
 ```bash
 unset NCCL_IB_GID_INDEX

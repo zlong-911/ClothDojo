@@ -1,0 +1,55 @@
+\section{Experiments}
+\label{sec:experiments}
+
+\subsection{Benchmark protocol and baselines}
+
+A useful benchmark must be reproducible, difficult enough to separate methods,
+and rich enough to explain the separation. Representative policies therefore
+operate on the same garments and initial states under the same closed-loop
+budget. Success measures task completion, while distance and difficulty strata
+show whether two policies fail in the same way.
+
+\subsection{Does NOCS produce a better trajectory agent?}
+
+NOCS is justified only if it improves the ability to produce successful
+physical trajectories, rather than merely making training loss smaller. NOCS
+and ordinary-appearance agents therefore share demonstrations, architecture,
+optimization, and evaluation cases. Their success and distance across data
+scales and garments measure the value of the privileged representation.
+
+\subsection{What does generated data add?}
+
+Generated data can add either new behavior or new appearance. Re-rendering a
+fixed trajectory tests visual diversity alone; generating new trajectories
+tests state--action diversity; combining both tests their interaction. Varying
+garment breadth separately from trajectories per garment then reveals whether
+downstream learning benefits from more structural coverage or denser practice
+on familiar structures.
+
+\subsection{Where do current policies fail?}
+
+Aggregate success mixes several causes of failure. Conditioning results on
+initial distance and garment morphology exposes geometric difficulty. Holding
+the physical case fixed while changing texture, background, or lighting exposes
+visual sensitivity. Changing validated physical parameters exposes dynamics
+sensitivity. Together these views turn the task into a diagnostic benchmark
+rather than a single leaderboard number.
+
+\subsection{Do memory and action models help?}
+
+Flattening creates reasons for temporal reasoning that are absent from a
+single-frame task. Earlier views can reveal garment identity before it becomes
+occluded, and the result of a failed dynamic action indicates how the next
+action should change. History, explicit memory, action chunking, RTC, and
+world-action models represent different ways to use this information. Their
+value is determined by where they improve recovery and difficult cases, not by
+their average score alone.
+
+\subsection{Dynamics and real-world transfer}
+
+Dynamic actions couple cloth properties with robot execution. Changes in
+friction, stiffness, damping, tracking bandwidth, or action latency can alter
+the result of an otherwise identical command. Robustness experiments therefore
+test whether a policy observes and corrects physical outcomes instead of
+replaying a fixed motion. Real-data experiments hold human data fixed so that
+any gain can be attributed to the additional simulated trajectories.

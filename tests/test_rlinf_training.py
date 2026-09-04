@@ -16,6 +16,7 @@ from clothdojo.training.openpi_rlinf_sft import (
     _action_offset_weights_from_config,
     _adapt_official_openpi_loader,
     _EpochAdvancingSampler,
+    _full_only_anchor_indices,
     _initialize_ema_state,
     _reduce_action_offset_loss,
     _swap_parameter_data_with_ema,
@@ -23,6 +24,7 @@ from clothdojo.training.openpi_rlinf_sft import (
     _validate_fp32_training_state,
 )
 from clothdojo.training.steam import configure_steam_member
+from clothdojo.training.training_time_rtc import training_time_rtc_manifest_from_config
 from clothdojo.training.worker_environment import apply_worker_environment
 
 
@@ -277,6 +279,7 @@ def test_openpi_rlinf_config_preserves_training_contract(monkeypatch, tmp_path) 
     assert cfg.actor.model.openpi_data.norm_stats_path == str(tmp_path / "norm-stats")
     assert cfg.clothdojo.jax_reference is None
     assert cfg.clothdojo.image_augmentation is False
+    assert cfg.clothdojo.action_chunk_boundary == "full_only"
     assert cfg.actor.model.openpi_data.default_prompt == "flatten the shirt"
 
     from omegaconf import OmegaConf
@@ -359,6 +362,27 @@ def test_openpi_rlinf_execution_focus_changes_only_loss_reduction(monkeypatch, t
     manifest = _action_offset_loss_manifest_from_config(focused)
     assert manifest["profile"] == "fixed_delay_rtc"
     assert manifest["reduction"] == "batch_mean_of_weight_normalized_action_offset_mean"
+
+
+def test_openpi_rlinf_training_time_rtc_recipe_keeps_global_batch(monkeypatch, tmp_path) -> None:
+    for name, value in {
+        "CLOTHDOJO_LEROBOT_DATASET": tmp_path / "dataset",
+        "CLOTHDOJO_PI05_CHECKPOINT": tmp_path / "checkpoint",
+        "CLOTHDOJO_PI05_NORM_STATS": tmp_path / "norm-stats",
+        "CLOTHDOJO_TRAIN_OUTPUT": tmp_path / "outputs",
+        "CLOTHDOJO_OPENPI_CACHE": tmp_path / "openpi-cache",
+    }.items():
+        monkeypatch.setenv(name, str(value))
+    project_root = Path(__file__).resolve().parents[1]
+    cfg = rlinf.compose_config(
+        project_root
+        / "configs/training/"
+        "pi05_aloha_openpi_rlinf_mirrored_training_time_rtc_fullonly_wd001_40k.yaml"
+    )
+    assert cfg.cluster.num_nodes == 2
+    assert cfg.actor.micro_batch_size == 16
+    assert cfg.actor.global_batch_size == 256
+    assert training_time_rtc_manifest_from_config(cfg)["delay_support"] == list(range(10))
 
 
 def test_openpi_rlinf_action_offset_reduction_matches_manual_weighting() -> None:
@@ -525,7 +549,8 @@ def test_openpi_rlinf_preflight_reuses_shared_artifact_contract(
     calls = []
     monkeypatch.setattr(
         "clothdojo.training.openpi_artifacts.inspect_openpi_dataset",
-        lambda path: calls.append(("dataset", path)) or {"root": path},
+        lambda path, **kwargs: calls.append(("dataset", path, kwargs))
+        or {"root": path},
     )
     monkeypatch.setattr(
         "clothdojo.training.openpi_artifacts.inspect_openpi_norm_stats",
@@ -538,21 +563,27 @@ def test_openpi_rlinf_preflight_reuses_shared_artifact_contract(
     assert result["format_version"] == 1
     assert result["compatible"] is True
     assert result["image_augmentation"] is False
+    assert result["action_chunk_boundary"] == "repeat_last"
     assert result["training_prompt"] == "Flatten the shirt."
-    assert calls[0] == ("dataset", "/dataset")
+    assert calls[0] == (
+        "dataset",
+        "/dataset",
+        {"expected_task": "Flatten the shirt."},
+    )
     assert calls[1][0:2] == ("norm", "/norm")
     assert calls[1][2]["data_kwargs"] == {
         "adapt_to_pi": False,
         "extra_delta_transform": True,
         "default_prompt": "Flatten the shirt.",
     }
+    assert calls[1][2]["action_chunk_boundary"] == "repeat_last"
 
     with monkeypatch.context() as patch:
         patch.setattr(rlinf, "_inspect_jax_reference", lambda *_args: {"trial": "reference"})
         source_prompt = "flatten the shirt"
         patch.setattr(
             "clothdojo.training.openpi_artifacts.inspect_openpi_dataset",
-            lambda path: {"root": path, "prompt": source_prompt},
+            lambda path, **_kwargs: {"root": path, "prompt": source_prompt},
         )
         with pytest.raises(ValueError, match="training prompt differs from its JAX dataset prompt"):
             rlinf.inspect_openpi_rlinf_sft(cfg)
@@ -686,6 +717,91 @@ def test_openpi_loader_adapter_uses_actor_seed_and_advances_epoch() -> None:
     assert epoch_zero == list(reference_zero)
     assert epoch_one == list(reference_one)
     assert epoch_zero != epoch_one
+
+
+def test_openpi_loader_full_only_excludes_incomplete_episode_tails() -> None:
+    from openpi.training.data_loader import TransformedDataset
+
+    raw_dataset = TensorDataset(torch.arange(12))
+    raw_dataset.episode_data_index = {
+        "from": torch.tensor([0, 7]),
+        "to": torch.tensor([7, 12]),
+    }
+    dataset = TransformedDataset(raw_dataset, [])
+    sampler = DistributedSampler(
+        dataset,
+        num_replicas=1,
+        rank=0,
+        shuffle=False,
+        drop_last=True,
+    )
+    torch_loader = DataLoader(dataset, batch_size=2, sampler=sampler)
+    data_loader = SimpleNamespace(
+        _data_loader=SimpleNamespace(_data_loader=torch_loader)
+    )
+
+    _adapt_official_openpi_loader(
+        data_loader,
+        seed=42,
+        rank=0,
+        action_horizon=3,
+        action_chunk_boundary="full_only",
+    )
+
+    actual = [int(value) for batch in torch_loader for value in batch[0]]
+    assert actual == [0, 1, 2, 3, 4, 7, 8, 9]
+    assert torch.equal(
+        _full_only_anchor_indices(dataset, action_horizon=3),
+        torch.tensor([0, 1, 2, 3, 4, 7, 8, 9]),
+    )
+
+
+def test_openpi_loader_full_only_keeps_distributed_ranks_equal_and_disjoint() -> None:
+    from openpi.training.data_loader import TransformedDataset
+
+    raw_dataset = TensorDataset(torch.arange(13))
+    raw_dataset.episode_data_index = {
+        "from": torch.tensor([0, 7]),
+        "to": torch.tensor([7, 13]),
+    }
+    dataset = TransformedDataset(raw_dataset, [])
+    rank_indices = []
+    for rank in range(2):
+        sampler = DistributedSampler(
+            dataset,
+            num_replicas=2,
+            rank=rank,
+            shuffle=False,
+            drop_last=True,
+        )
+        torch_loader = DataLoader(dataset, batch_size=2, sampler=sampler)
+        data_loader = SimpleNamespace(
+            _data_loader=SimpleNamespace(_data_loader=torch_loader)
+        )
+        _adapt_official_openpi_loader(
+            data_loader,
+            seed=42,
+            rank=rank,
+            action_horizon=3,
+            action_chunk_boundary="full_only",
+        )
+        rank_indices.append(
+            [int(value) for batch in torch_loader for value in batch[0]]
+        )
+
+    assert len(rank_indices[0]) == len(rank_indices[1]) == 4
+    assert set(rank_indices[0]).isdisjoint(rank_indices[1])
+    assert set(rank_indices[0]) | set(rank_indices[1]) <= {
+        0,
+        1,
+        2,
+        3,
+        4,
+        7,
+        8,
+        9,
+        10,
+    }
 
 
 def test_openpi_rlinf_precision_gate_requires_fp32_masters() -> None:

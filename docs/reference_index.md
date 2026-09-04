@@ -116,6 +116,13 @@
 - [Isaac Sim 5.0 Python 环境安装](https://docs.isaacsim.omniverse.nvidia.com/5.0.0/installation/install_python.html)
 - [Isaac Sim 5.0 系统与 GPU 要求](https://docs.isaacsim.omniverse.nvidia.com/5.0.0/installation/requirements.html)
 - [Isaac Sim 5.0 Replicator snippets](https://docs.isaacsim.omniverse.nvidia.com/5.0.0/replicator_tutorials/tutorial_replicator_isaac_snippets.html)
+- [Isaac Sim 5.0 环境资产目录](https://docs.isaacsim.omniverse.nvidia.com/5.0.0/assets/usd_assets_environments.html)
+- [Isaac Sim 5.0 本地与 S3 资产根配置](https://docs.isaacsim.omniverse.nvidia.com/5.0.0/installation/install_faq.html)
+- [Isaac Sim 附加软件与材质许可](https://docs.isaacsim.omniverse.nvidia.com/5.0.0/common/license-isaac-sim-additional.html)
+- [Genie Sim 官方源码](https://github.com/AgibotTech/genie_sim)
+- [GenieSimAssets 官方数据集](https://huggingface.co/datasets/agibot-world/GenieSimAssets)
+- [项目固定 GenieSimAssets revision](https://huggingface.co/datasets/agibot-world/GenieSimAssets/tree/a0813aad7c16165daffbe6c2737754e0344809ee)
+- [GenieSimAssets CC BY-NC-SA 4.0 许可](https://huggingface.co/datasets/agibot-world/GenieSimAssets/blob/a0813aad7c16165daffbe6c2737754e0344809ee/LICENSE)
 - [USDRT：USD、Fabric 与 GPU 数据](https://docs.omniverse.nvidia.com/kit/docs/usdrt.scenegraph/7.6.1/usd_fabric_usdrt.html)
 - [USDRT Fabric mesh deformation 示例](https://docs.omniverse.nvidia.com/kit/docs/usdrt.scenegraph/7.6.1/whatsinfabric.html)
 - [Omniverse UsdPreviewSurface 材质](https://docs.omniverse.nvidia.com/materials-and-rendering/latest/templates/UsdPreviewSurface.html)
@@ -142,6 +149,13 @@
 - [PyYAML 文档](https://pyyaml.org/wiki/PyYAMLDocumentation)
 - [Hydra 文档](https://hydra.cc/docs/intro/)
 - [OmegaConf 文档](https://omegaconf.readthedocs.io/)
+
+## 论文排版
+
+- [PaperCept LaTeX 模板说明](https://ras.papercept.net/conferences/support/tex.php)
+- [PaperCept 官方 ieeeconf.zip](https://ras.papercept.net/conferences/support/files/ieeeconf.zip)
+- [Tectonic 0.17.0 release](https://github.com/tectonic-typesetting/tectonic/releases/tag/tectonic%400.17.0)
+- [Tectonic 编译命令](https://tectonic-typesetting.github.io/book/latest/ref/v1cli.html)
 
 ## Python 与仓库工具
 

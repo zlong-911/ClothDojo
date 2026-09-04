@@ -26,6 +26,7 @@ from clothdojo.data.retarget_dynamics import (
     _gripper_event_margin,
     _gripper_event_openness,
     _gripper_event_validation,
+    _gripper_preview_at_limit,
     _inverse_position_drive_target,
     _position_drive_search_bounds,
     _select_repair_window,
@@ -632,6 +633,12 @@ def test_gripper_event_preview_replays_overlapping_hand_events_without_retiming(
         np.testing.assert_array_equal(initial[name], original_states[name])
 
 
+def test_gripper_preview_expands_for_saturated_advance_or_delay() -> None:
+    assert _gripper_preview_at_limit(9.0, 10)
+    assert _gripper_preview_at_limit(-9.0, 10)
+    assert not _gripper_preview_at_limit(-8.5, 10)
+
+
 def test_position_drive_search_bounds_remove_flat_saturated_tails():
     lower, upper = _position_drive_search_bounds(
         np.asarray([0.0]), np.asarray([2.0]), np.asarray([0.04]), np.asarray([2.0]),
@@ -1071,17 +1078,16 @@ def test_derived_canonical_trajectory_references_source_cloth(tmp_path: Path) ->
     assert next(reader.iter_actions()).joint_target.shape == (12,)
 
 
-def test_retarget_rejects_task_without_a_physics_scene(tmp_path: Path) -> None:
+def test_retarget_preserves_fold_task_identity(tmp_path: Path) -> None:
     source = _write_source(tmp_path / "source", task_name="shirt_fold")
-
-    with pytest.raises(RuntimeError, match="source task"):
-        _retarget_trajectory(
-            source,
-            tmp_path / "retarget",
-            kinematics=_CartesianKinematics(),
-            dynamics=_ExactDynamics(),
-            position_tolerance_m=1.0e-6,
-        )
+    result = _retarget_trajectory(
+        source,
+        tmp_path / "retarget",
+        kinematics=_CartesianKinematics(),
+        dynamics=_ExactDynamics(),
+        position_tolerance_m=1.0e-6,
+    )
+    assert result["scene"]["task_name"] == "shirt_fold"
 
 
 def test_validation_compares_target_fk_with_source_piper_targets(tmp_path: Path) -> None:

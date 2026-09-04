@@ -4,8 +4,10 @@ import asyncio
 import gzip
 import hashlib
 import json
+import subprocess
 import threading
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlencode
@@ -16,6 +18,10 @@ from clothdojo.collection.assets import AssetCatalog, AssetStatus
 from clothdojo.collection.config import CollectionConfig, load_config
 from clothdojo.collection.hil import HILCatalog
 from clothdojo.collection.review import AnnotationConflictError, ReviewCatalog
+from clothdojo.collection.review_export import (
+    ReviewExportBusyError,
+    ReviewExportManager,
+)
 from clothdojo.collection.supervisor import NoAvailableSlotError, TeleopSupervisor
 from clothdojo.collection.workspace import CollectionWorkspace
 
@@ -130,13 +136,18 @@ class _StaleSnapshotCache:
             self._condition.notify_all()
 
 
-def build_cloudxr_client_url(endpoint: str, device: VRDevice = "pico4ultra") -> str:
+def build_cloudxr_client_url(
+    endpoint: str,
+    signaling_port: int,
+    device: VRDevice = "pico4ultra",
+) -> str:
     """Build a validated device-specific CloudXR client URL."""
     host, port = endpoint.rsplit(":", 1)
     query = urlencode(
         {
             "serverIP": host,
             "port": port,
+            "proxyUrl": f"https://{host}:{port}/_clothdojo/{signaling_port}",
             **_VR_DEVICE_PARAMS[device],
         }
     )
@@ -159,17 +170,22 @@ class SaveAnnotationRequest(BaseModel):
     expected_revision: str | None = None
 
 
-class SetGoodRequest(BaseModel):
-    good: bool
+class SetCompletionRequest(BaseModel):
+    sample_index: int | None = Field(default=None, ge=0)
+
+
+class SetBreakpointRequest(BaseModel):
+    sample_index: int = Field(ge=0)
+    marked: bool
 
 
 class BreakpointRequest(BaseModel):
+    run_id: str = Field(min_length=1, max_length=160)
     episode_id: str = Field(min_length=1, max_length=160)
     sample_index: int = Field(ge=0)
 
 
 class InterventionPlanRequest(BaseModel):
-    run_id: str = Field(min_length=1, max_length=160)
     breakpoints: list[BreakpointRequest] = Field(min_length=1, max_length=128)
 
 
@@ -200,16 +216,34 @@ def create_app(config_path: str | Path):
     }
     hil = {profile_id: HILCatalog(profile) for profile_id, profile in config.profiles.items()}
     supervisor = TeleopSupervisor(config)
+    review_exports = ReviewExportManager(config)
     workspace = CollectionWorkspace(config, assets, reviews, hil, supervisor)
     snapshot_cache = _StaleSnapshotCache(workspace.snapshot)
     hil_cache = _StaleSnapshotCache(workspace.hil_snapshot)
     static_root = Path(__file__).with_name("static")
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        await asyncio.to_thread(supervisor.start_gateway)
+        try:
+            yield
+        finally:
+            await asyncio.to_thread(supervisor.stop_gateway)
+
     app = FastAPI(
         title="ClothDojo Collection Console",
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
+        lifespan=lifespan,
     )
+
+    def require_idle_review_export(kind: str) -> None:
+        if review_exports.status()["status"] in {"starting", "running"}:
+            raise HTTPException(
+                status_code=409,
+                detail=f"cannot delete {kind} during review export",
+            )
 
     def json_response(payload: dict, request: Request):
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
@@ -370,9 +404,27 @@ def create_app(config_path: str | Path):
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return FileResponse(path, media_type="video/mp4")
 
+    @app.delete("/api/tasks/{profile_id}/episodes/{episode_id}")
+    async def workspace_delete_trajectory(profile_id: str, episode_id: str):
+        require_idle_review_export("a trajectory")
+        try:
+            result = await asyncio.to_thread(
+                review_catalog(profile_id).delete_trajectory,
+                episode_id,
+            )
+            snapshot_cache.invalidate()
+            return result
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     @app.get("/api/hil/snapshot")
     async def workspace_hil_snapshot(request: Request):
-        payload = await asyncio.to_thread(hil_cache.get)
+        cached = await asyncio.to_thread(hil_cache.get)
+        payload = {**cached, "review_export": review_exports.status()}
         return json_response(payload, request)
 
     @app.get("/api/hil/profiles/{profile_id}/runs/{run_id}/episodes/{episode_id}/videos/{view}")
@@ -395,19 +447,100 @@ def create_app(config_path: str | Path):
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return FileResponse(path, media_type="video/mp4")
 
-    @app.put("/api/hil/profiles/{profile_id}/episodes/{episode_id}/good")
-    async def workspace_set_hil_good(
+    @app.get(
+        "/api/hil/profiles/{profile_id}/interventions/{trajectory_id}/videos/{view}"
+    )
+    async def workspace_hil_intervention_video(
         profile_id: str,
-        episode_id: str,
-        request: SetGoodRequest,
+        trajectory_id: str,
+        view: str,
     ):
         try:
-            run_id = workspace.rollout_run_for_episode(profile_id, episode_id)
+            catalog = hil_catalog(profile_id)
+            camera = (
+                catalog.primary_intervention_camera(trajectory_id)
+                if view == "primary"
+                else view
+            )
+            path = catalog.intervention_video(trajectory_id, camera)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return FileResponse(path, media_type="video/mp4")
+
+    @app.delete("/api/hil/profiles/{profile_id}/interventions/{trajectory_id}")
+    async def workspace_delete_hil_intervention(
+        profile_id: str,
+        trajectory_id: str,
+    ):
+        require_idle_review_export("an HIL trajectory")
+        try:
             result = await asyncio.to_thread(
-                hil_catalog(profile_id).set_good,
+                hil_catalog(profile_id).delete_intervention,
+                trajectory_id,
+            )
+            hil_cache.invalidate()
+            return result
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/api/review-export")
+    async def workspace_review_export():
+        return review_exports.status()
+
+    @app.post("/api/review-export", status_code=202)
+    async def workspace_start_review_export():
+        try:
+            return await asyncio.to_thread(review_exports.start)
+        except ReviewExportBusyError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.put(
+        "/api/hil/profiles/{profile_id}/runs/{run_id}/episodes/{episode_id}/completion"
+    )
+    async def workspace_set_hil_completion(
+        profile_id: str,
+        run_id: str,
+        episode_id: str,
+        request: SetCompletionRequest,
+    ):
+        try:
+            result = await asyncio.to_thread(
+                hil_catalog(profile_id).set_completion,
                 run_id,
                 episode_id,
-                good=request.good,
+                sample_index=request.sample_index,
+            )
+            hil_cache.invalidate()
+            return result
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.put(
+        "/api/hil/profiles/{profile_id}/runs/{run_id}/episodes/{episode_id}/breakpoint"
+    )
+    async def workspace_set_hil_breakpoint(
+        profile_id: str,
+        run_id: str,
+        episode_id: str,
+        request: SetBreakpointRequest,
+    ):
+        try:
+            result = await asyncio.to_thread(
+                hil_catalog(profile_id).set_breakpoint,
+                run_id,
+                episode_id,
+                sample_index=request.sample_index,
+                marked=request.marked,
             )
             hil_cache.invalidate()
             return result
@@ -421,7 +554,6 @@ def create_app(config_path: str | Path):
         try:
             plan = await asyncio.to_thread(
                 hil_catalog(request.profile_id).intervention_plan,
-                request.run_id,
                 [item.model_dump() for item in request.breakpoints],
             )
             asset_id = str(plan["asset_id"])
@@ -499,7 +631,12 @@ def create_app(config_path: str | Path):
             session = await asyncio.to_thread(supervisor.session, session_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        client_url = build_cloudxr_client_url(str(session["endpoint"]), device)
+        slot = next(item for item in supervisor.slots() if item["id"] == session["slot_id"])
+        client_url = build_cloudxr_client_url(
+            str(session["endpoint"]),
+            int(slot["signaling_port"]),
+            device,
+        )
         image = qrcode.make(client_url, image_factory=SvgPathImage)
         return Response(content=image.to_string(), media_type="image/svg+xml")
 
@@ -508,6 +645,7 @@ def create_app(config_path: str | Path):
     app.state.review_catalogs = reviews
     app.state.hil_catalogs = hil
     app.state.teleop_supervisor = supervisor
+    app.state.review_exports = review_exports
     return app
 
 

@@ -126,6 +126,7 @@ def inspect_openpi_norm_stats(
     config_name: str,
     data_kwargs: dict[str, Any],
     action_horizon: int,
+    action_chunk_boundary: str = "repeat_last",
 ) -> dict[str, Any]:
     """Require normalization statistics to match the exact reviewed dataset."""
 
@@ -144,11 +145,16 @@ def inspect_openpi_norm_stats(
         "config_name": config_name,
         "data_kwargs": data_kwargs,
         "action_horizon": action_horizon,
+        "action_chunk_boundary": action_chunk_boundary,
         "frames": dataset["frames"],
         "episodes": dataset["episodes"],
     }
     for key, expected_value in expected.items():
         actual_value = provenance.get(key)
+        if key == "action_chunk_boundary" and actual_value is None:
+            # Norm-stat artifacts created before boundary supervision was
+            # explicit used LeRobot's historical repeat-last behavior.
+            actual_value = "repeat_last"
         if key == "data_kwargs" and isinstance(actual_value, dict):
             # Text never enters state/action normalization. Keep every other
             # transform setting exact, and retain the original provenance below.

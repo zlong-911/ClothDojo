@@ -7,7 +7,11 @@ import pytest
 
 from clothdojo.data.isaac_render import _author_cameras
 from clothdojo.robots import robot_ids, robot_profile
-from clothdojo.teleop.isaac_fabric import _find_render_body_paths, _UsdRigidBodyWriter
+from clothdojo.teleop.isaac_fabric import (
+    _fabric_gpu_direct_supported,
+    _find_render_body_paths,
+    _UsdRigidBodyWriter,
+)
 from clothdojo.teleop.isaac_stage import _author_robot
 
 
@@ -26,6 +30,12 @@ def _world_matrices(stage):
         for prim in stage.Traverse(Usd.TraverseInstanceProxies())
         if prim.IsA(UsdGeom.Xformable)
     }
+
+
+def test_fabric_gpu_direct_path_is_limited_to_cuda_zero():
+    assert _fabric_gpu_direct_supported("cuda:0")
+    assert not _fabric_gpu_direct_supported("cuda:1")
+    assert not _fabric_gpu_direct_supported("cuda:7")
 
 
 @pytest.mark.parametrize("robot_id", robot_ids())

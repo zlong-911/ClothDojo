@@ -99,8 +99,14 @@ def test_runtime_left_right_gripper_actions_remain_independent(rigid_robot):
     runtime._arm_upper = robot.arms.get_attribute("joint_limit_upper", robot.model)
     runtime._arm_targets = wp.empty_like(runtime._arm_lower)
     runtime._arm_joints_per_articulation = runtime._arm_targets.shape[2]
+    runtime._canonical_arm_target = wp.empty(
+        (robot.worlds, runtime._arm_action_count), dtype=wp.float32, device="cpu"
+    )
     runtime._gripper_targets = wp.empty_like(robot.grippers.get_attribute("joint_q", robot.state))
     runtime._gripper_joints_per_articulation = runtime._gripper_targets.shape[2]
+    runtime._canonical_gripper_open = wp.empty(
+        (robot.worlds, 2), dtype=wp.float32, device="cpu"
+    )
     runtime._gripper_closed_positions = wp.array(
         profile.gripper_closed_positions * 2, dtype=wp.float32, device="cpu"
     )
@@ -110,7 +116,11 @@ def test_runtime_left_right_gripper_actions_remain_independent(rigid_robot):
     home = np.asarray(profile.home_joint_q, dtype=np.float32)
     arm_commands = np.tile(home[list(profile.arm_coord_indices)], (robot.worlds, 1))
     arm_commands += np.linspace(-0.02, 0.02, runtime._arm_action_count, dtype=np.float32)
-    openness = np.asarray(((0.0, 1.0), (1.0, 0.0)), dtype=np.float32)[:robot.worlds]
+    arm_lower = runtime._arm_lower.numpy().reshape(robot.worlds, -1)
+    arm_upper = runtime._arm_upper.numpy().reshape(robot.worlds, -1)
+    arm_commands[:, 0] = arm_lower[:, 0] - 1.0
+    arm_commands[:, -1] = arm_upper[:, -1] + 1.0
+    openness = np.asarray(((-0.25, 1.25), (1.5, -0.5)), dtype=np.float32)[:robot.worlds]
     before = runtime.control.joint_target_q.numpy().reshape(robot.worlds, -1).copy()
     runtime.apply_action(
         wp.array(arm_commands, dtype=wp.float32, device="cpu"),
@@ -119,15 +129,19 @@ def test_runtime_left_right_gripper_actions_remain_independent(rigid_robot):
     actual = runtime.control.joint_target_q.numpy().reshape(robot.worlds, -1)
     expected_arms = np.clip(
         arm_commands,
-        runtime._arm_lower.numpy().reshape(robot.worlds, -1),
-        runtime._arm_upper.numpy().reshape(robot.worlds, -1),
+        arm_lower,
+        arm_upper,
     )
     np.testing.assert_allclose(actual[:, profile.arm_coord_indices], expected_arms)
+    np.testing.assert_array_equal(runtime.canonical_arm_target.numpy(), expected_arms)
     closed = np.asarray(profile.gripper_closed_positions)
     opened = np.asarray(profile.gripper_open_positions)
-    expected_grippers = closed + openness[..., None] * (opened - closed)
+    expected_grippers = closed + np.clip(openness, 0.0, 1.0)[..., None] * (opened - closed)
     np.testing.assert_allclose(
         actual[:, profile.gripper_coord_indices], expected_grippers.reshape(robot.worlds, -1)
+    )
+    np.testing.assert_array_equal(
+        runtime.canonical_gripper_open.numpy(), np.clip(openness, 0.0, 1.0)
     )
     passive = np.setdiff1d(
         np.arange(len(home)), (*profile.arm_coord_indices, *profile.gripper_coord_indices)

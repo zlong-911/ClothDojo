@@ -1,0 +1,17 @@
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.pdf
+*.synctex.gz
+
+# Iteration previews and renderer outputs are reproducible experiment artifacts.
+experiments/**/*.png
+experiments/**/manifest.json
+experiments/**/asset_manifest.json
+experiments_main_*.tex
+figures/clothdojo-teaser-collage-*.png
+figures/teaser_candidates/

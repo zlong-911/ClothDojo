@@ -513,19 +513,19 @@ def _encode_episode_videos(writer: Any, episode_index: int) -> dict[str, str]:
         if video_path.is_file():
             return
         if VIDEO_ENCODER == "h264_nvenc":
-            _encode_nvenc_video_frames(image_dirs[key], video_path, writer.fps)
-        else:
-            from lerobot.common.datasets.video_utils import encode_video_frames
+            import av
 
-            encode_video_frames(
-                image_dirs[key],
-                video_path,
-                writer.fps,
-                vcodec=VIDEO_CODEC,
-                crf=VIDEO_CRF,
-                log_level=None,
-                overwrite=True,
-            )
+            try:
+                _encode_nvenc_video_frames(image_dirs[key], video_path, writer.fps)
+                return
+            except (av.error.FFmpegError, OSError):
+                logging.warning(
+                    "NVENC failed for %s; retrying with software H.264",
+                    video_path,
+                    exc_info=True,
+                )
+                video_path.unlink(missing_ok=True)
+        _encode_software_video_frames(image_dirs[key], video_path, writer.fps)
 
     with ThreadPoolExecutor(
         max_workers=min(VIDEO_ENCODER_WORKERS, len(video_paths))
@@ -534,6 +534,20 @@ def _encode_episode_videos(writer: Any, episode_index: int) -> dict[str, str]:
     for path in video_paths.values():
         _validate_video(path, expected_frames)
     return {key: str(path) for key, path in video_paths.items()}
+
+
+def _encode_software_video_frames(image_dir: Path, video_path: Path, fps: int) -> None:
+    from lerobot.common.datasets.video_utils import encode_video_frames
+
+    encode_video_frames(
+        image_dir,
+        video_path,
+        fps,
+        vcodec=VIDEO_CODEC,
+        crf=VIDEO_CRF,
+        log_level=None,
+        overwrite=True,
+    )
 
 
 def _encode_nvenc_video_frames(image_dir: Path, video_path: Path, fps: int) -> None:

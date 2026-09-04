@@ -110,6 +110,16 @@ def test_openpi_artifacts_validate_current_dataset_and_norm_stats(tmp_path: Path
 
     assert dataset["frames"] == 65
     assert norm["dataset_info_sha256"] == dataset["info_sha256"]
+    assert norm["action_chunk_boundary"] == "repeat_last"
+    with pytest.raises(ValueError, match="action_chunk_boundary"):
+        inspect_openpi_norm_stats(
+            norm_path,
+            dataset=dataset,
+            config_name="pi05_aloha_robotwin",
+            data_kwargs={"default_prompt": "Flatten the shirt."},
+            action_horizon=50,
+            action_chunk_boundary="full_only",
+        )
 
 
 def test_openpi_artifacts_accept_equivalent_prompt_formatting(tmp_path: Path) -> None:

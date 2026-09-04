@@ -48,14 +48,14 @@ def inspect_cfg_pipeline(
     )
     cfg_entries = list(cfg.data.train_data_paths)
     cfg_roles = [str(entry.type) for entry in cfg_entries]
-    if cfg_roles.count("sft") != 1 or cfg_roles.count("rollout") < 1:
+    if cfg_roles.count("sft") != 1:
         raise ValueError(
-            "CFG pipeline requires exactly one sft and at least one rollout entry"
+            "CFG pipeline requires exactly one sft and optional rollout entries"
         )
     spec_roles = [dataset.role for dataset in spec.datasets]
-    if spec_roles.count("sft") != 1 or spec_roles.count("rollout") < 1:
+    if spec_roles.count("sft") != 1:
         raise ValueError(
-            "CFG pipeline requires exactly one STEAM sft and at least one rollout dataset"
+            "CFG pipeline requires exactly one STEAM sft and optional rollout datasets"
         )
     cfg_by_identity = {
         (
@@ -158,7 +158,7 @@ def run_cfg_pipeline(
     cfg_config: str | Path,
     cfg_overrides: tuple[str, ...] | list[str] = (),
 ) -> dict[str, Any]:
-    """Label both datasets, run the exact data gate, then launch CFG."""
+    """Label the configured datasets, run the exact data gate, then launch CFG."""
 
     from clothdojo.training.cfg import inspect_cfg_training
     from clothdojo.training.rlinf import compose_config, run_config

@@ -30,11 +30,12 @@ from clothdojo.robots import (
     X5,
     robot_profile,
 )
-from clothdojo.tasks import SHIRT_FLATTEN
+from clothdojo.tasks import SHIRT_FLATTEN, SHIRT_FOLD
 from clothdojo.trajectory import TrajectoryManifest, TrajectoryReader
 
 RETARGET_COLLECTION_SCHEMA = "clothdojo_retarget_collection"
 RETARGET_SCHEMA_VERSION = 1
+_SUPPORTED_SOURCE_TASKS = frozenset((SHIRT_FLATTEN, SHIRT_FOLD))
 
 _IK_POSITION_WEIGHT = 100.0
 _IK_APPROACH_MARKER_M = 0.1
@@ -42,8 +43,7 @@ _ROLL_PREFERENCE_RATE_RAD_S = 1.0
 _PIPER_PROFILE = robot_profile(PIPER)
 _SOURCE_EE_BODY_INDICES = np.asarray(
     tuple(
-        _PIPER_PROFILE.body_names.index(frame.parent_body)
-        for frame in _PIPER_PROFILE.attach_frames
+        _PIPER_PROFILE.body_names.index(frame.parent_body) for frame in _PIPER_PROFILE.attach_frames
     ),
     dtype=np.int64,
 )
@@ -217,19 +217,24 @@ def retarget(
     staging.mkdir(parents=True)
     try:
         tasks = [
-            (index, trajectory, staging / (
-                trajectory.relative_to(source_root) if is_collection else Path(".")
-            ))
+            (
+                index,
+                trajectory,
+                staging / (trajectory.relative_to(source_root) if is_collection else Path(".")),
+            )
             for index, trajectory in enumerate(trajectories)
         ]
         worker_options = {
-            "assets_root": assets_root, "target_robot": target_robot,
+            "assets_root": assets_root,
+            "target_robot": target_robot,
             "target_asset_metadata": target_asset_metadata,
             "position_tolerance_m": position_tolerance_m,
         }
         if len(worker_devices) == 1 or len(tasks) == 1:
             indexed_results = _retarget_partition(
-                tasks, device=worker_devices[0], **worker_options,
+                tasks,
+                device=worker_devices[0],
+                **worker_options,
             )
         else:
             partitions = _retarget_partitions(tasks, len(worker_devices))
@@ -237,11 +242,15 @@ def retarget(
             # CUDA contexts must be created in spawned children, never forked.
             # Each worker owns its engines; multiple workers may share a GPU.
             with ProcessPoolExecutor(
-                max_workers=len(partitions), mp_context=multiprocessing.get_context("spawn"),
+                max_workers=len(partitions),
+                mp_context=multiprocessing.get_context("spawn"),
             ) as pool:
                 futures = [
                     pool.submit(
-                        _retarget_partition, partition, device=worker_device, **worker_options,
+                        _retarget_partition,
+                        partition,
+                        device=worker_device,
+                        **worker_options,
                     )
                     for partition, worker_device in zip(partitions, worker_devices, strict=False)
                 ]
@@ -316,9 +325,7 @@ def retarget(
 
 def _retarget_partitions(tasks: list[tuple[int, Path, Path]], count: int) -> list[list]:
     """Balance independent trajectories by action count, longest first."""
-    weighted = [
-        (TrajectoryReader(task[1]).manifest.action_count, task) for task in tasks
-    ]
+    weighted = [(TrajectoryReader(task[1]).manifest.action_count, task) for task in tasks]
     partitions = [[] for _ in range(min(count, len(tasks)))]
     loads = [0] * len(partitions)
     for weight, task in sorted(weighted, key=lambda item: (-item[0], item[1][0])):
@@ -354,28 +361,46 @@ def _retarget_partition(
         current_timing = None
         results = []
         for completed, (timing, (index, source, destination), manifest) in enumerate(
-            sorted(timed_tasks, key=lambda item: item[0]), start=1,
+            sorted(timed_tasks, key=lambda item: item[0]),
+            start=1,
         ):
-            if manifest.scene.task_name != SHIRT_FLATTEN:
-                raise RuntimeError(f"retarget source task must be {SHIRT_FLATTEN!r}")
+            if manifest.scene.task_name not in _SUPPORTED_SOURCE_TASKS:
+                raise RuntimeError(
+                    "retarget source task must be shirt_flatten or shirt_fold"
+                )
             asset_id = manifest.metadata.get("asset_id")
             if not isinstance(asset_id, str) or not asset_id:
                 raise RuntimeError("retarget source trajectory asset_id is missing")
             started = perf_counter()
             if timing != current_timing:
                 dynamics = RobotDynamicsRetargeter(
-                    assets_root, garment_id=asset_id, control_fps=timing[0],
-                    sim_substeps=timing[1], device=device, target_robot=target_robot,
+                    assets_root,
+                    garment_id=asset_id,
+                    control_fps=timing[0],
+                    sim_substeps=timing[1],
+                    device=device,
+                    target_robot=target_robot,
                 )
                 current_timing = timing
-            results.append((index, _retarget_trajectory(
-                source, destination, kinematics=kinematics, dynamics=dynamics,
-                position_tolerance_m=position_tolerance_m, target_robot=target_robot,
-                target_asset_metadata=target_asset_metadata,
-            )))
+            results.append(
+                (
+                    index,
+                    _retarget_trajectory(
+                        source,
+                        destination,
+                        kinematics=kinematics,
+                        dynamics=dynamics,
+                        position_tolerance_m=position_tolerance_m,
+                        target_robot=target_robot,
+                        target_asset_metadata=target_asset_metadata,
+                    ),
+                )
+            )
             print(
                 f"[retarget {device}] {completed}/{len(tasks)} {source.name}: "
-                f"{perf_counter() - started:.1f}s", file=sys.stderr, flush=True,
+                f"{perf_counter() - started:.1f}s",
+                file=sys.stderr,
+                flush=True,
             )
         return results
 
@@ -395,8 +420,8 @@ def _retarget_trajectory(
     if source_robot != PIPER:
         raise RuntimeError(f"retarget source robot must be {PIPER!r}")
     source_task = reader.manifest.scene.task_name
-    if source_task != SHIRT_FLATTEN:
-        raise RuntimeError(f"retarget source task must be {SHIRT_FLATTEN!r}")
+    if source_task not in _SUPPORTED_SOURCE_TASKS:
+        raise RuntimeError("retarget source task must be shirt_flatten or shirt_fold")
     target_profile = robot_profile(target_robot)
     if float(reader.manifest.control_fps) != float(dynamics.control_fps) or int(
         reader.manifest.sim_substeps
@@ -439,9 +464,7 @@ def _retarget_trajectory(
     kinematic_approach_errors = _direction_angle(
         kinematic_approach, motion.target_approach_directions
     ).astype(np.float32)
-    active_kinematic_approach_errors = kinematic_approach_errors[
-        motion.approach_validation_mask
-    ]
+    active_kinematic_approach_errors = kinematic_approach_errors[motion.approach_validation_mask]
     reference_joint_qd = _robot_velocity(motion.joint_q, target_profile, fps)
     dynamics_result = dynamics.reconstruct(
         motion.joint_q,
@@ -458,10 +481,12 @@ def _retarget_trajectory(
     max_approach_error = float(active_kinematic_approach_errors.max(initial=0.0))
     up_error = 0.0
     if motion.target_up_directions is not None:
-        up_error = float(_direction_angle(
-            _quat_rotate(kinematic_poses[..., 3:7], np.asarray((0.0, 1.0, 0.0))),
-            motion.target_up_directions,
-        )[motion.approach_validation_mask].max(initial=0.0))
+        up_error = float(
+            _direction_angle(
+                _quat_rotate(kinematic_poses[..., 3:7], np.asarray((0.0, 1.0, 0.0))),
+                motion.target_up_directions,
+            )[motion.approach_validation_mask].max(initial=0.0)
+        )
     kinematic_valid = bool(max_error <= position_tolerance_m)
     dynamics_poses = _attach_poses_from_body(
         dynamics_result.body_q,
@@ -477,9 +502,7 @@ def _retarget_trajectory(
     dynamics_approach_errors = _direction_angle(
         dynamics_approach, motion.target_approach_directions
     ).astype(np.float32)
-    active_dynamics_approach_errors = dynamics_approach_errors[
-        motion.approach_validation_mask
-    ]
+    active_dynamics_approach_errors = dynamics_approach_errors[motion.approach_validation_mask]
     max_dynamics_approach_error = float(active_dynamics_approach_errors.max(initial=0.0))
     dynamics_valid = bool(dynamics_result.validation["dynamics_valid"])
     validation = {
@@ -564,7 +587,9 @@ def _retarget_trajectory(
             "source_robot": source_robot,
             "target_robot": target_robot,
             "attach_alignment": "position_with_soft_roll",
-            "target_asset": target_asset_metadata if target_asset_metadata is not None else {
+            "target_asset": target_asset_metadata
+            if target_asset_metadata is not None
+            else {
                 "format": "usd",
                 "asset": target_profile.asset,
             },
@@ -639,6 +664,7 @@ def _retarget_motion(
     kinematics: _Kinematics,
     position_tolerance_m: float,
     control_fps: float = 50.0,
+    initial_joint_q: np.ndarray | None = None,
 ) -> _Motion:
     source_poses = np.asarray(source_attach_poses, dtype=np.float32)
     grippers = np.asarray(gripper_open_state, dtype=np.float32)
@@ -663,20 +689,27 @@ def _retarget_motion(
     target_up = np.empty_like(target_approach)
     frame_count = len(targets)
     joint_q = np.empty((frame_count, len(kinematics.home)), dtype=np.float32)
-    seed = np.asarray(kinematics.home, dtype=np.float32).copy()
+    seed = np.asarray(
+        kinematics.home if initial_joint_q is None else initial_joint_q,
+        dtype=np.float32,
+    ).copy()
+    if seed.shape != np.asarray(kinematics.home).shape or not np.isfinite(seed).all():
+        raise ValueError("initial_joint_q must match the finite kinematic home layout")
     for index in range(frame_count):
         positioned = kinematics.solve(seed, targets[index])
         achieved = kinematics.attach_poses_batch(positioned[None])[0]
         target_rotations = _upright_rotations(achieved[None, :, 3:7])[0]
         seed = _prefer_upright_roll(
-            kinematics, positioned, targets[index], achieved, target_rotations,
+            kinematics,
+            positioned,
+            targets[index],
+            achieved,
+            target_rotations,
             max_step_rad=_ROLL_PREFERENCE_RATE_RAD_S / control_fps,
             position_tolerance_m=position_tolerance_m,
         )
-        target_approach[index] = _quat_rotate(
-            target_rotations, np.asarray((0., 0., 1.))
-        )
-        target_up[index] = _quat_rotate(target_rotations, np.asarray((0., 1., 0.)))
+        target_approach[index] = _quat_rotate(target_rotations, np.asarray((0.0, 0.0, 1.0)))
+        target_up[index] = _quat_rotate(target_rotations, np.asarray((0.0, 1.0, 0.0)))
         joint_q[index] = seed
     _set_gripper_positions(
         joint_q,
@@ -721,9 +754,7 @@ def _prefer_upright_roll(
     if np.all(angle < 1e-6):
         return positioned.copy()
     fraction = np.minimum(1, max_step_rad / np.maximum(angle, 1e-8))
-    preferred = _upright_rotations(
-        current[None], alignment_fraction=fraction[None]
-    )[0]
+    preferred = _upright_rotations(current[None], alignment_fraction=fraction[None])[0]
     proposal = kinematics.solve(positioned, targets, preferred, align_roll=True)
     arms = np.asarray(kinematics.arm_indices).reshape(2, -1)
     step = proposal[arms] - positioned[arms]
@@ -735,10 +766,10 @@ def _prefer_upright_roll(
     poses = kinematics.attach_poses_batch(candidate[None])[0]
     baseline_error = np.linalg.norm(achieved[:, :3] - targets, axis=-1)
     error = np.linalg.norm(poses[:, :3] - targets, axis=-1)
-    old_y = _quat_rotate(current, np.asarray((0., 1., 0.)))[:, 2]
-    new_y = _quat_rotate(poses[:, 3:7], np.asarray((0., 1., 0.)))[:, 2]
-    old_z = _quat_rotate(current, np.asarray((0., 0., 1.)))
-    new_z = _quat_rotate(poses[:, 3:7], np.asarray((0., 0., 1.)))
+    old_y = _quat_rotate(current, np.asarray((0.0, 1.0, 0.0)))[:, 2]
+    new_y = _quat_rotate(poses[:, 3:7], np.asarray((0.0, 1.0, 0.0)))[:, 2]
+    old_z = _quat_rotate(current, np.asarray((0.0, 0.0, 1.0)))
+    new_z = _quat_rotate(poses[:, 3:7], np.asarray((0.0, 0.0, 1.0)))
     step_size = np.max(np.abs(candidate[arms] - positioned[arms]), axis=1)
     accept = (
         (error <= np.minimum(position_tolerance_m, baseline_error + 1e-5))
@@ -769,7 +800,14 @@ def _set_gripper_positions(
 
 
 class _RobotKinematics:
-    def __init__(self, profile, asset: Path, *, device: str, iterations: int = 40) -> None:
+    def __init__(
+        self,
+        profile,
+        asset: Path,
+        *,
+        device: str,
+        iterations: int = 40,
+    ) -> None:
         import newton
         import newton.ik as ik
         import warp as wp
@@ -819,8 +857,7 @@ class _RobotKinematics:
                 np.asarray((0.0, 0.0, 1.0), dtype=np.float64),
             )
             approach_offsets.append(
-                np.asarray(frame.position, dtype=np.float64)
-                + _IK_APPROACH_MARKER_M * local_axis
+                np.asarray(frame.position, dtype=np.float64) + _IK_APPROACH_MARKER_M * local_axis
             )
 
         self._orientation_objectives = {False: [], True: []}
@@ -841,22 +878,29 @@ class _RobotKinematics:
                 ),
             ]
             if include_approach:
-                for side, target in enumerate((
-                    self._left_approach_targets, self._right_approach_targets,
-                )):
+                for side, target in enumerate(
+                    (
+                        self._left_approach_targets,
+                        self._right_approach_targets,
+                    )
+                ):
                     objective = ik.IKObjectivePosition(
-                        self.end_effectors[side], wp.vec3(*approach_offsets[side]),
-                        target, _IK_POSITION_WEIGHT,
+                        self.end_effectors[side],
+                        wp.vec3(*approach_offsets[side]),
+                        target,
+                        _IK_POSITION_WEIGHT,
                     )
                     values.append(objective)
                     self._orientation_objectives[include_up].append((side, objective))
             if include_up:
                 for side, frame in enumerate(profile.attach_frames):
-                    up = _quat_rotate(np.asarray(frame.rotation_xyzw), np.asarray((0., 1., 0.)))
+                    up = _quat_rotate(np.asarray(frame.rotation_xyzw), np.asarray((0.0, 1.0, 0.0)))
                     offset = np.asarray(frame.position) + _IK_APPROACH_MARKER_M * up
                     objective = ik.IKObjectivePosition(
-                        self.end_effectors[side], wp.vec3(*offset),
-                        self._up_targets[side], _IK_POSITION_WEIGHT,
+                        self.end_effectors[side],
+                        wp.vec3(*offset),
+                        self._up_targets[side],
+                        _IK_POSITION_WEIGHT,
                     )
                     values.append(objective)
                     self._orientation_objectives[include_up].append((side, objective))
@@ -889,9 +933,11 @@ class _RobotKinematics:
             lambda_initial=0.1,
         )
         self._upright_solver = ik.IKSolver(
-            model=self.model, n_problems=1,
+            model=self.model,
+            n_problems=1,
             objectives=objectives(include_approach=True, include_up=True),
-            jacobian_mode=ik.IKJacobianType.MIXED, lambda_initial=0.1,
+            jacobian_mode=ik.IKJacobianType.MIXED,
+            lambda_initial=0.1,
         )
         self._fk_q = wp.zeros(self.q_count, dtype=wp.float32, device=self.model.device)
         if int(self.model.joint_dof_count) != int(profile.joint_dof_count):
@@ -916,8 +962,10 @@ class _RobotKinematics:
         solver = self._position_solver
         graph_key = ("position",)
         if target_rotations is not None:
-            active = np.ones(2, dtype=bool) if orientation_mask is None else np.asarray(
-                orientation_mask, dtype=bool
+            active = (
+                np.ones(2, dtype=bool)
+                if orientation_mask is None
+                else np.asarray(orientation_mask, dtype=bool)
             )
             if active.shape != (2,):
                 raise ValueError("orientation mask must contain one flag per hand")
@@ -936,7 +984,7 @@ class _RobotKinematics:
             solver = self._pose_solver
             graph_key = ("upright" if align_roll else "pose", *active.tolist())
             if align_roll:
-                up = _quat_rotate(rotations, np.asarray((0., 1., 0.)))
+                up = _quat_rotate(rotations, np.asarray((0.0, 1.0, 0.0)))
                 for side in range(2):
                     self._up_targets[side].assign(
                         (targets[side] + _IK_APPROACH_MARKER_M * up[side])[None]
@@ -950,7 +998,8 @@ class _RobotKinematics:
                 solver.step(self._q_in, self._q_out, iterations=self.iterations)
                 self.wp.synchronize_device(self.model.device)
                 with self.wp.ScopedCapture(
-                    device=self.model.device, force_module_load=False,
+                    device=self.model.device,
+                    force_module_load=False,
                 ) as capture:
                     solver.reset()
                     solver.step(self._q_in, self._q_out, iterations=self.iterations)
@@ -961,11 +1010,11 @@ class _RobotKinematics:
             solver.step(self._q_in, self._q_out, iterations=self.iterations)
         result = self._q_out.numpy()[0].astype(np.float32)
         if not np.isfinite(result).all():
-            raise RuntimeError(
-                f"Newton IK returned non-finite {self.profile.robot_id} coordinates"
-            )
+            raise RuntimeError(f"Newton IK returned non-finite {self.profile.robot_id} coordinates")
         result[self.arm_indices] = np.clip(
-            result[self.arm_indices], self._arm_lower, self._arm_upper,
+            result[self.arm_indices],
+            self._arm_lower,
+            self._arm_upper,
         )
         result[self.gripper_indices] = seed[self.gripper_indices]
         return result
@@ -1036,31 +1085,37 @@ def _upright_rotations(
     if not np.isfinite(values).all() or np.any(np.linalg.norm(values, axis=-1) < 1e-8):
         raise ValueError("upright rotations must be finite nonzero quaternions")
     values = values / np.linalg.norm(values, axis=-1, keepdims=True)
-    fractions = np.ones(values.shape[:2]) if alignment_fraction is None else np.asarray(
-        alignment_fraction, dtype=np.float64
+    fractions = (
+        np.ones(values.shape[:2])
+        if alignment_fraction is None
+        else np.asarray(alignment_fraction, dtype=np.float64)
     )
     if fractions.shape != values.shape[:2] or not np.isfinite(fractions).all():
         raise ValueError("upright alignment fractions must match frames and hands")
     result = np.empty_like(values)
-    previous = values[0].copy() if initial_rotations is None else np.asarray(
-        initial_rotations, dtype=np.float64
-    ).copy()
-    if previous.shape != (2, 4) or not np.isfinite(previous).all() or np.any(
-        np.linalg.norm(previous, axis=-1) < 1e-8
+    previous = (
+        values[0].copy()
+        if initial_rotations is None
+        else np.asarray(initial_rotations, dtype=np.float64).copy()
+    )
+    if (
+        previous.shape != (2, 4)
+        or not np.isfinite(previous).all()
+        or np.any(np.linalg.norm(previous, axis=-1) < 1e-8)
     ):
         raise ValueError("initial upright rotations must contain two nonzero quaternions")
     previous /= np.linalg.norm(previous, axis=-1, keepdims=True)
     for index, current in enumerate(values):
-        z = _quat_rotate(current, np.asarray((0., 0., 1.)))
+        z = _quat_rotate(current, np.asarray((0.0, 0.0, 1.0)))
         transported = _align_quaternion_axis(previous, z)
-        y = _quat_rotate(transported, np.asarray((0., 1., 0.)))
-        projected = np.asarray((0., 0., 1.)) - z[:, 2, None] * z
+        y = _quat_rotate(transported, np.asarray((0.0, 1.0, 0.0)))
+        projected = np.asarray((0.0, 0.0, 1.0)) - z[:, 2, None] * z
         strength = np.linalg.norm(projected, axis=-1)
         up = projected / np.maximum(strength[:, None], 1e-8)
         angle = np.arctan2(np.sum(z * np.cross(y, up), axis=-1), np.sum(y * up, axis=-1))
-        blend = np.clip((strength - .1) / .1, 0., 1.)
-        blend = blend * blend * (3. - 2. * blend)
-        half_angle = .5 * blend * angle * np.clip(fractions[index], 0., 1.)
+        blend = np.clip((strength - 0.1) / 0.1, 0.0, 1.0)
+        blend = blend * blend * (3.0 - 2.0 * blend)
+        half_angle = 0.5 * blend * angle * np.clip(fractions[index], 0.0, 1.0)
         delta = np.concatenate(
             (z * np.sin(half_angle)[:, None], np.cos(half_angle)[:, None]), axis=-1
         )

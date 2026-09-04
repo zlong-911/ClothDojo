@@ -1,0 +1,43 @@
+\section{Introduction}
+\label{sec:introduction}
+
+Generalist visuomotor policies should reliably complete tasks across unseen
+objects and complex states, adjusting subsequent actions based on observed
+outcomes. Garment flattening and folding are well suited for evaluating these
+capabilities. Garments vary widely in structure and appearance. Severe
+crumpling causes self-occlusion, making the current configuration difficult to
+infer. Completing the task requires both dynamic actions, such as flinging, and
+precise local adjustments during flattening and folding.
+
+Garment manipulation has been used to evaluate generalist policies on real
+robots, but large-scale, reproducible comparisons remain difficult: data
+collection, scene setup, and task resets require sustained human effort, and
+garment initial configurations are difficult to reproduce precisely.
+Simulation provides controlled experimental conditions and supports both data
+reuse and scalable evaluation. However, existing simulation benchmarks provide
+limited coverage of diverse garments and complex initial states, and their
+datasets contain few successful trajectories that complete both flattening and
+folding.
+
+We present ClothDojo, a platform for data generation and policy evaluation in
+garment flattening and folding. ClothDojo supports real-time dynamic
+interaction between multiple bimanual robot embodiments and diverse garments.
+Starting from severely crumpled states, closed-loop policies use flinging and
+local adjustments to flatten garments, then continue to fold them. Unified
+metrics measure task progress and final outcomes.
+
+To scale the successful trajectories needed for downstream policy training,
+ClothDojo decouples physical trajectory generation from appearance
+randomization. A trajectory agent uses privileged visual information and is
+initialized from human demonstrations. It is continually improved through
+autonomous rollouts and human interventions. The resulting agent generates
+successful closed-loop trajectories on new garments and initial states. We
+then re-render these trajectories with randomized appearances while preserving
+the underlying behavior, producing diverse RGB observations.
+
+We use ClothDojo to study what enables generalist visuomotor policies to
+complete this task. Paired experiments separate the effects of new physical
+trajectories and appearance re-renderings, while controlled policy comparisons
+test the roles of observation history, memory, and real-time control. We
+evaluate all policies in closed loop on held-out initial states across seen and
+unseen garments, reporting both stage-wise and end-to-end performance.

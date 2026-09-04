@@ -11,6 +11,7 @@ from typing import Any
 import numpy as np
 
 OPENPI_CONFIG = "pi05_aloha_robotwin"
+ACTION_CHUNK_BOUNDARIES = frozenset({"repeat_last", "full_only"})
 
 
 @dataclass(frozen=True)
@@ -32,11 +33,13 @@ def compute_norm_stats(
     output_root: str | Path,
     *,
     block_size: int = 4096,
+    action_chunk_boundary: str = "repeat_last",
 ) -> dict[str, Any]:
     """Compute exact state/action stats with the same transforms as training."""
 
     if isinstance(block_size, bool) or block_size < 1:
         raise ValueError("block_size must be positive")
+    action_chunk_boundary = validate_action_chunk_boundary(action_chunk_boundary)
     dataset = Path(dataset_root).expanduser().resolve()
     output = Path(output_root).expanduser().resolve()
     info_path = dataset / "meta/info.json"
@@ -115,19 +118,31 @@ def compute_norm_stats(
     data_config = data_factory.create(output.parent, model_config)
     horizon = int(model_config.action_horizon)
     action_offsets = np.arange(horizon, dtype=np.int64)
+    if action_chunk_boundary == "full_only":
+        anchor_indices = np.flatnonzero(
+            np.arange(len(states), dtype=np.int64) + horizon <= episode_ends
+        )
+    else:
+        anchor_indices = np.arange(len(states), dtype=np.int64)
+    if not len(anchor_indices):
+        raise ValueError(
+            f"dataset has no {action_chunk_boundary} anchors for action horizon {horizon}"
+        )
     dummy_images = {"cam_high": np.zeros((3, 1, 1), dtype=np.uint8)}
     running = {
         "state": normalize.RunningStats(),
         "actions": normalize.RunningStats(),
     }
-    for start in range(0, len(states), block_size):
-        end = min(start + block_size, len(states))
-        action_indices = np.minimum(
-            np.arange(start, end, dtype=np.int64)[:, None] + action_offsets,
-            episode_ends[start:end, None] - 1,
-        )
+    for start in range(0, len(anchor_indices), block_size):
+        anchors = anchor_indices[start : start + block_size]
+        action_indices = anchors[:, None] + action_offsets
+        if action_chunk_boundary == "repeat_last":
+            action_indices = np.minimum(
+                action_indices,
+                episode_ends[anchors, None] - 1,
+            )
         transformed: dict[str, Any] = {
-            "state": states[start:end],
+            "state": states[anchors],
             "actions": actions[action_indices],
             "images": dummy_images,
         }
@@ -148,6 +163,8 @@ def compute_norm_stats(
         "config_name": OPENPI_CONFIG,
         "data_kwargs": data_contract,
         "action_horizon": horizon,
+        "action_chunk_boundary": action_chunk_boundary,
+        "sampled_anchors": len(anchor_indices),
         "frames": len(states),
         "episodes": episode_count,
     }
@@ -156,6 +173,17 @@ def compute_norm_stats(
         encoding="utf-8",
     )
     return {**provenance, "output_root": str(output)}
+
+
+def validate_action_chunk_boundary(value: Any) -> str:
+    """Validate the supervision policy used at LeRobot episode boundaries."""
+
+    if not isinstance(value, str) or value not in ACTION_CHUNK_BOUNDARIES:
+        raise ValueError(
+            "action_chunk_boundary must be one of "
+            f"{sorted(ACTION_CHUNK_BOUNDARIES)}, got {value!r}"
+        )
+    return value
 
 
 def _dataset_prompt(sidecar_path: Path) -> str:

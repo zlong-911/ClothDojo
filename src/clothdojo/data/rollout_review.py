@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 from collections.abc import Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ from typing import Any
 import av
 import numpy as np
 
+from clothdojo.rendering import DATASET_CAMERA_NAMES
 from clothdojo.robots import PIPER
 
 REVIEW_CAMERA = "cam_high"
@@ -34,8 +36,10 @@ def render_review(
     device: str = "cuda:0",
     fps: int = 10,
     trajectory_ids: Sequence[str] | None = None,
+    camera_name: str = REVIEW_CAMERA,
+    output: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Incrementally render the high camera used by trajectory review."""
+    """Incrementally render one native camera used by trajectory review."""
 
     from clothdojo.data.rollout import (
         _restore_render_state,
@@ -48,10 +52,14 @@ def render_review(
     from clothdojo.trajectory import TrajectoryReader
 
     root = Path(source).expanduser().resolve()
+    if not isinstance(camera_name, str) or not camera_name:
+        raise ValueError("review camera name must be a non-empty string")
     all_trajectories = _review_trajectories(root)
     trajectories = _select_review_trajectories(all_trajectories, trajectory_ids)
-    destination = root / "review"
-    videos = destination / "videos" / REVIEW_CAMERA
+    destination = (
+        Path(output).expanduser().resolve() if output is not None else root / "review"
+    )
+    videos = destination / "videos" / camera_name
     videos.mkdir(parents=True, exist_ok=True)
     previous = _review_records(destination / "meta.json")
 
@@ -112,7 +120,15 @@ def render_review(
                     robot_id=robot_id,
                 )
                 runtime = _TrajectoryRenderState(scene)
-                camera = ShirtFlattenCameraObservation(scene, camera_names=(REVIEW_CAMERA,))
+                render_camera_names = (
+                    (REVIEW_CAMERA,)
+                    if camera_name == REVIEW_CAMERA
+                    else DATASET_CAMERA_NAMES
+                )
+                camera = ShirtFlattenCameraObservation(
+                    scene,
+                    camera_names=render_camera_names,
+                )
                 active_scene = scene_identity
 
             _set_camera_cloth_surface_winding_reversed(
@@ -130,7 +146,7 @@ def render_review(
             try:
                 for sample_index in range(0, action_count, stride):
                     _restore_render_state(runtime, reader.state_at(sample_index))
-                    image = camera(runtime)[f"observation.images.{REVIEW_CAMERA}"][0]
+                    image = camera(runtime)[f"observation.images.{camera_name}"][0]
                     encoder.write(image)
                     video_frames += 1
                 encoder.close()
@@ -142,19 +158,13 @@ def render_review(
     finally:
         _close_camera(camera)
 
-    records = [
-        records_by_id[trajectory.id]
-        for trajectory in all_trajectories
-        if trajectory.id in records_by_id
-    ]
-
-    _atomic_json(
+    records = _merge_review_metadata(
         destination / "meta.json",
-        {
-            "source": str(root),
-            "camera": REVIEW_CAMERA,
-            "episodes": records,
-        },
+        source=root,
+        camera=camera_name,
+        trajectories=all_trajectories,
+        selected_ids=selected_ids,
+        records=records_by_id,
     )
     return {
         "source": str(root),
@@ -165,7 +175,7 @@ def render_review(
         "source_frames": sum(int(item["source_frames"]) for item in records),
         "video_frames": sum(int(item["video_frames"]) for item in records),
         "video_fps": fps,
-        "camera_names": [REVIEW_CAMERA],
+        "camera_names": [camera_name],
     }
 
 
@@ -258,6 +268,60 @@ def _review_records(path: Path) -> dict[str, dict[str, Any]]:
         for item in episodes
         if isinstance(item, dict) and isinstance(item.get("trajectory_id"), str)
     }
+
+
+def _merge_review_metadata(
+    path: Path,
+    *,
+    source: Path,
+    camera: str,
+    trajectories: Sequence[_ReviewTrajectory],
+    selected_ids: set[str],
+    records: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Merge one render shard without losing metadata written by another GPU."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with _exclusive_lock(path.with_name(f".{path.name}.lock")):
+        latest = _review_records(path)
+        merged = {
+            trajectory.id: latest[trajectory.id]
+            for trajectory in trajectories
+            if trajectory.id not in selected_ids and trajectory.id in latest
+        }
+        merged.update(
+            {
+                trajectory_id: record
+                for trajectory_id, record in records.items()
+                if trajectory_id in selected_ids
+            }
+        )
+        ordered = [
+            merged[trajectory.id]
+            for trajectory in trajectories
+            if trajectory.id in merged
+        ]
+        _atomic_json(
+            path,
+            {
+                "source": str(source),
+                "camera": camera,
+                "episodes": ordered,
+            },
+        )
+    return ordered
+
+
+@contextmanager
+def _exclusive_lock(path: Path):
+    import fcntl
+
+    with path.open("a+b") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 
 def _close_camera(camera: Any | None) -> None:

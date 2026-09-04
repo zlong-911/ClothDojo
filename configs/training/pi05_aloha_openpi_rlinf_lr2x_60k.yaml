@@ -9,6 +9,9 @@ hydra:
 clothdojo:
   jax_reference: null
   image_augmentation: false
+  # Train only anchors with a complete H50 future action chunk. Historical
+  # checkpoints and norm stats used repeat_last instead.
+  action_chunk_boundary: full_only
 
 cluster:
   num_nodes: 1

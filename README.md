@@ -63,6 +63,20 @@ ClothDojo 是基于 Newton 1.5 的布料操作研究项目，统一管理仿真�
   --config configs/evaluation/runs/cfg_expert822_balanced200.yaml
 ```
 
+折叠使用同一个 runner 和同一套 Piper、桌面、布料物理场景，但以独立的
+`shirt_fold` task identity 写入 rollout 与 trajectory provenance。折叠初态必须由
+显式的已展平 state pool 提供；`rollout make-states` 的随机散乱初态不作为折叠入口：
+
+```bash
+.venv/bin/clothdojo rollout run \
+  --scenario configs/rollout/shirt_fold.yaml \
+  --states /path/to/reviewed_flattened_states \
+  --policy ws://127.0.0.1:8080 \
+  --execution chunk --exec-horizon 10 \
+  --gpus 0 --batch-size 4 \
+  --output data/collections/shirt_fold/rollouts/<run>
+```
+
 `benchmark run` 固定使用 `balanced200_20260901` 的 100 个 seen、100 个 unseen
 资产及每资产 4 个初态，共 800 个配对 case；资产、初态、模板、协议和划分均由
 冻结 hash 约束。正式入口只接受一份严格 run config，由它引用模型和 deployment；
@@ -95,6 +109,36 @@ Coordinator 自动启动独占策略服务、本机或远端仿真 worker、补�
 .venv/bin/clothdojo collect serve --config configs/collection.yaml
 ```
 
+网页 HIL 审查在 rollout 视频上分别记录介入点和任务完成点；完成点保存审核人员
+判定成功时的精确帧号，再次点击 `Good` 会取消该点。两类标注都会立即原子写入对应
+rollout 的 `hil_review.json`，不依赖浏览器缓存。审核阶段可跨 rollout、轨迹和
+资产连续标记介入点。已采集的 HIL 结果可在审查区与来源 rollout 切换；“一键导出
+全部 Review”覆盖配置中的普通采集、HIL 介入结果和 rollout，排除
+`teleoperation.gpu_ids` 后分配到本机其余 NVIDIA GPU。启动阶段在 GPU worker
+选择“服装展平 HIL”或“服装折叠 HIL”
+及目标资产，该资产的全部介入点会组成恢复队列。HIL 与普通折叠共用恢复采集流程：
+恢复后先等待 trigger 对齐，按 `A` 开始录制，再按 `A` 停止并保存；保存后会自动恢复
+当前点，允许继续对齐并重新录制。按 `X` 重置并切换到下一个恢复点；如果正在录制或
+保存，则先保存本次结果再切换。同一个恢复点只保留最后一次成功录制，先前版本会从
+`trajectories/` 原子移动到相邻的 `rejected/` 目录，并记录
+`superseded_by_rerecording`。普通折叠的恢复点来自展平轨迹终态，HIL 的恢复点来自
+审核员标记的 rollout 介入帧。
+
+网页删除 HIL 结果时，轨迹会从正式 `trajectories/` 原子归档到相邻的 `rejected/`，
+清除其派生 Review 视频，并将来源 rollout 介入点恢复为待采状态。
+
+每个采集 profile 的三类轨迹使用独立根目录：`dataset_root` 保存普通遥操轨迹，
+`hil_dataset_root` 保存 HIL 介入轨迹，`rollout_root` 保存 policy rollout。HIL manifest
+仍保留来源 rollout、episode 和 sample index，用于追溯，但三类数据不会物理混放。
+普通遥操与 HIL 位于同一任务目录，例如 `data/collections/shirt_flatten/trajectories`
+和 `data/collections/shirt_flatten/hil/trajectories`；对应 rollout 位于
+`data/collections/shirt_flatten/rollouts/<run>`。
+
+新生成的 rollout `meta.json` 在 policy identity 中保存 checkpoint SHA-256、训练数据集
+根目录及其 info/sidecar SHA-256；训练数据集 sidecar 再指向普通遥操 collection。
+每条 HIL manifest 保存来源 rollout 根目录、rollout `meta.json` SHA-256、episode、
+介入 sample 和源 trajectory manifest SHA-256，形成可校验的完整 lineage。
+
 Piper 原始 collection 可以离线扩充为“原轨迹 + 双臂中轴镜像轨迹”的独立
 canonical collection。转换完整复制原轨迹和 annotation，并对状态与动作做确定性
 代数变换，不调用 FK、IK 或物理 solver：
@@ -103,6 +147,39 @@ canonical collection。转换完整复制原轨迹和 annotation，并对状态�
 .venv/bin/clothdojo data augment-mirror \
   --source data/collections/shirt_flatten \
   --output data/collections/shirt_flatten_mirrored
+```
+
+`shirt_fold` 的前后镜像使用更严格的四变体入口：每条源轨迹生成原轨迹、前后镜像、
+左右镜像，以及“前后镜像后再左右镜像”。前后镜像以初始布料 XY 包围盒中心反射 world X，
+再按 seed 在默认 X ±15 cm、Y ±5 cm 的窗口内搜索整条轨迹都可达且布料留在桌内的固定 XY
+微调，并要求初态布料距离左右底座至少 10 cm；机器人用 position-only IK 和 action-only
+刚体动力学重放，松手区间通过局部换抓、侧向让行和交错时序避让，并在释放边界保持速度连续；
+动力学实际轨迹受源 episode 的速度/加速度包络约束，左右臂实体间隙不得小于 3 cm；布料状态
+通过空间 overlay 直接回放。不可达、关节跳变、碰撞或动力学
+重放失败的源轨迹不会进入四变体输出：
+
+```bash
+.venv/bin/clothdojo data augment-front-back \
+  --source data/collections/shirt_fold \
+  --output data/collections/shirt_fold_front_back_seed17 \
+  --seed 17 --device cuda:0
+```
+
+输出是依赖源轨迹绝对路径和 manifest hash 的轻量 overlay，不会复制四份布料状态；归档时需
+同时保留源 collection。完整语义和验收边界见
+[`docs/front_back_augmentation.md`](docs/front_back_augmentation.md)。
+
+历史 collection 中裁剪前的 action 可以复制成一套完整的新 collection，并把 action
+替换为 runtime 实际采用的关节限位 target。源轨迹始终只读；新 collection 独立复制
+`states.npz`，轨迹格式不变，只在 manifest 中标记 `action_semantics=runtime_target`。
+这个转换不处理力矩限幅；训练数据集和 norm stats 由训练配置显式选择：
+
+```bash
+.venv/bin/clothdojo data canonicalize-actions \
+  --source /path/to/shirt_flatten/000004 --plan-only
+.venv/bin/clothdojo data canonicalize-actions \
+  --source /path/to/shirt_flatten/000004 \
+  --output /path/to/shirt_flatten/000005
 ```
 
 需要训练数据时，同一入口直接读取 canonical trajectory 和审查标注，回放四路视角并导出标准 LeRobot v2.1；审查视频不是训练输入：

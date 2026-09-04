@@ -446,6 +446,7 @@ def test_canonical_export_owns_backend_camera_lifecycle(monkeypatch, tmp_path) -
         manifest = SimpleNamespace(
             control_fps=50,
             action_count=1,
+            metadata={},
             scene=SimpleNamespace(
                 robot_id="piper",
                 task_name="shirt_flatten",

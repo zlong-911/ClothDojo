@@ -29,6 +29,7 @@ class CollectionProfile:
     display_name: str
     scene: str
     dataset_root: Path
+    hil_dataset_root: Path
     rollout_root: Path
     max_actions: int
     continuation_source_profile: str | None = None
@@ -36,6 +37,10 @@ class CollectionProfile:
     @property
     def trajectory_root(self) -> Path:
         return self.dataset_root / "trajectories"
+
+    @property
+    def hil_trajectory_root(self) -> Path:
+        return self.hil_dataset_root / "trajectories"
 
     @property
     def review_root(self) -> Path:
@@ -105,6 +110,7 @@ def load_config(path: str | Path) -> CollectionConfig:
                 "display_name",
                 "scene",
                 "dataset_root",
+                "hil_dataset_root",
                 "rollout_root",
                 "max_actions",
             },
@@ -120,6 +126,7 @@ def load_config(path: str | Path) -> CollectionConfig:
             display_name=display_name,
             scene=scene,
             dataset_root=_path(profile["dataset_root"], project_root),
+            hil_dataset_root=_path(profile["hil_dataset_root"], project_root),
             rollout_root=_path(profile["rollout_root"], project_root),
             max_actions=_positive_integer(
                 profile["max_actions"], f"profiles.{profile_id}.max_actions"

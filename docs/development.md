@@ -16,6 +16,8 @@
 
 Isaac RTX 离线导出在这个主环境内运行。它在同一进程中直接读取 Newton trajectory state，通过 Fabric bridge 交给 Isaac Replicator；导出时不重建或推进物理场景。安装的 extension cache 使 RTX 与 Replicator 扩展不依赖首次运行时再从 registry 下载。Isaac 6 的 Python 3.12 应用环境仍是现有 OpenXR 遥操作的外部应用运行时，不属于项目 `.venv`。
 
+USDRT 7.x 的 Fabric GPU array 只支持物理 `cuda:0`。因此 Fabric bridge 在 GPU 0 上使用 GPU-direct 布料点同步，在其他物理 GPU 上通过 Fabric CPU authoring 同步；不要把 Fabric 返回的 GPU 指针按当前 Newton device 重新包装，否则非 0 号卡会触发异步 CUDA illegal-memory-access。
+
 离线 RTX 导出还要求具备 RT Core 且 Vulkan 可用的 RTX GPU。H100/A100 没有 RT Core，不满足 Isaac Sim 官方要求；这些节点继续用于 Newton、训练和策略推理，不作为 Isaac 离线渲染节点。
 
 ## 命令行
@@ -147,6 +149,8 @@ checkpoint 继续保留 EMA 推理权重及 online/optimizer 状态用于分析�
 新 OpenPI_RLinf SFT/CFG 默认文本为 `flatten the shirt`，数据入口在 tokenize 前应用 `actor.model.openpi_data.default_prompt`，覆盖旧数据中的大小写/句号，不修改数据集文件。launch manifest 的 `training_prompt` 记录实际训练文本，dataset 的 `prompt` 保留数据原文。state/action norm stats 与文本无关，可复用；其余归一化契约仍严格校验。JAX 配方和历史实验记录不变，新默认不再自动绑定旧 JAX 输入对齐实验。
 
 SFT/CFG 默认不做图像随机增强，也绕过上游 `train=True, rng=None` 的错误固定左上裁剪；flow noise/time、数据 shuffle 和模型训练模式不变。SFT 的 `clothdojo.image_augmentation` 缺省为 `false`，显式设为 `true` 才复用固定版 RLinf 的随机裁剪、旋转和颜色扰动，使用已播种、可保存的 CPU RNG。修正只作用于模型实例，不修改安装包或 checkpoint 布局。新模型部署使用相同文本与 `--image-preprocessing none`；模型数值精度及 resize 逻辑不变。
+
+当前 OpenPI_RLinf SFT 配方使用 `clothdojo.action_chunk_boundary: full_only`，只采样未来 H50 action 完整位于同一 episode 的 anchor；`repeat_last` 仅用于复现历史训练。归一化统计必须以 `data compute-norm-stats --action-chunk-boundary full_only` 重新生成，preflight 会拒绝 boundary 策略不一致的 stats。数据集文件本身不被裁切或改写。
 
 对确认使用上游 `train=True, rng=None` 训练的历史原生 RLinf 权重，开发用
 `policy serve-sft` / `serve-cfg` 显式传 `--image-preprocessing training_fixed_crop`；正式评测在

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import shutil
 import uuid
 from collections.abc import Mapping
@@ -14,12 +16,13 @@ from threading import Event, Thread
 
 from clothdojo.teleop.session import SessionPlan
 from clothdojo.trajectory import (
+    RUNTIME_ACTION_SEMANTICS,
     SceneMetadata,
     TrajectoryAction,
     TrajectoryState,
     TrajectoryWriter,
 )
-from clothdojo.trajectory.newton import capture_actions, capture_states
+from clothdojo.trajectory.newton import capture_canonical_actions, capture_states
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,6 +209,7 @@ class TeleopRecorder:
             "asset_id": self.plan.asset_id,
             "mode": self.plan.mode,
             "training_eligible": self.plan.mode == "collection",
+            "action_semantics": RUNTIME_ACTION_SEMANTICS,
         }
         if origin is not None:
             protected = set(metadata) & set(origin)
@@ -244,7 +248,7 @@ class TeleopRecorder:
         return output
 
     def step(self, arm_command, gripper_open) -> bool:
-        """Record exactly the command passed to Newton and its resulting state."""
+        """Record Newton's bounded controller target and its resulting state."""
 
         worker = self._worker
         if worker is None:
@@ -252,13 +256,8 @@ class TeleopRecorder:
             return False
         sample_index = self._sample_index
         try:
-            actions = capture_actions(
-                self.runtime,
-                sample_index,
-                arm_command,
-                gripper_open,
-            )
             self.runtime.step(arm_command, gripper_open)
+            actions = capture_canonical_actions(self.runtime, sample_index)
             states = capture_states(self.runtime, sample_index + 1)
             if len(actions) != 1 or len(states) != 1:
                 raise RuntimeError("teleoperation requires exactly one Newton world")
@@ -316,6 +315,37 @@ class TeleopRecorder:
         if self._worker is not None:
             self.stop()
         return self.wait_for_finalization()
+
+    def reject_completed(self, path: str | Path, *, reason: str) -> Path:
+        """Atomically archive one completed attempt outside the accepted trajectory root."""
+
+        source = Path(path)
+        root = self.plan.output_root.resolve()
+        if source.is_symlink() or source.resolve().parent != root:
+            raise ValueError("rejected trajectory is outside this session output root")
+        if not (source / "manifest.json").is_file():
+            raise FileNotFoundError(f"completed trajectory does not exist: {source}")
+        rejected_root = root.parent / "rejected"
+        rejected_root.mkdir(parents=True, exist_ok=True)
+        destination = rejected_root / source.name
+        if destination.exists():
+            raise FileExistsError(f"rejected trajectory already exists: {destination}")
+        os.replace(source, destination)
+        record = {
+            "schema": "clothdojo_rejected_teleop_attempt",
+            "format_version": 1,
+            "reason": str(reason),
+            "session_id": self.plan.session_id,
+            "rejected_at": datetime.now(UTC).isoformat(),
+            "original_path": str(source),
+        }
+        temporary = destination / ".rejection.json.tmp"
+        temporary.write_text(
+            json.dumps(record, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, destination / "rejection.json")
+        return destination
 
     def _detach_worker(
         self,

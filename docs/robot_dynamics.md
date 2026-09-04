@@ -49,6 +49,7 @@ FR3 每侧臂 drive 阻尼为 `[180,170,145,130,20,23,5] Nm·s/rad`，同样基�
 - X5 四个相机/支架刚体、FR3 部分相机/转接件及空 frame 尚缺独立可信的惯性依据；保留已有值，没有猜填或宣称全部校准。
 - UR5e 已加入实体 PickNik/D415 腕部相机，但附件负载尚未计入：转接件无完整惯性，RealSense 示例 tensor 明确不可靠；不猜填，原42个刚体惯性保留。
 - 当前 `SolverMuJoCo` 不执行 `joint_velocity_limit` 硬限速；字段存在不代表已实现速度控制器。
+- MuJoCo Warp inverse-dynamics 适配会解码 Newton 对 velocity target actuator 使用的负号 DOF 编码；这用于读取 Piper 从动夹指所在 DOF 的 generalized force，不把 velocity actuator 改成 position actuator，也不改变其 drive。
 - 普通 runtime 与 retarget 均直接使用 USD effort 的 1×，包括 arm 和 gripper；不在 retarget 内另设放大比例。历史 2× 轨迹不代表当前 1× 参数下可行，需要重新求解和回放验收。
 - 基础保持/运动/夹爪空载检查不替代含布料、自碰撞、桌面接触的集成验证，也不构成真机动力学或安装安全认证。
 

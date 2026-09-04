@@ -16,6 +16,13 @@
     "crepe_satin": "ed195e55fe094dcf7d4e58ebafb8f8e57af9ee19",
     "cotton_jersey": "de468d9c53b8a1aaa40a37664f778bb44f9effdf",
     "rough_linen": "4e637f8a844f5100c96dc1b33d4d63fd7309797a",
+    "denim_fabric_03": "8b690e4eb5ac56316f9e211272ed85e9e2e00a77",
+    "poly_wool_herringbone": "4ef2868d578f407e6aa9c761d7743b5d0a9c3918",
+    "quatrefoil_jacquard_fabric": "289ec1d471e918d27f469f0247b40cc6894f7204",
+    "curly_teddy_checkered": "873ed9432a90121b582a7c3d50f2a7432da63d40",
+    "faux_fur_geometric": "af81173163b5623e138cfb51cde90a57958ef946",
+    "floral_jacquard": "85ce792736452bdf8f584d4dbc2dc559b3160018",
+    "wool_boucle": "8b639b50e18a7d4c14f2fcf28340d37448bd35b1",
     "plywood": "71277f7973f476845a1464810f133500691c2e43",
     "wood_table_001": "141bbae9092a1169e3060de60359d9631592e6a4",
     "oak_veneer_01": "a443b579da009eae524d5d318fc999faf964671a",
@@ -87,6 +94,48 @@
       "role": "cloth",
       "color_channels": ["Diffuse"],
       "size_mm": [270.708, 271.3]
+    },
+    {
+      "id": "denim_fabric_03",
+      "role": "cloth",
+      "color_channels": ["Diffuse"],
+      "size_mm": [271.42801281852286, 270.9999978542328]
+    },
+    {
+      "id": "poly_wool_herringbone",
+      "role": "cloth",
+      "color_channels": ["Diffuse"],
+      "size_mm": [270.0788548673393, 275.70000290870667]
+    },
+    {
+      "id": "quatrefoil_jacquard_fabric",
+      "role": "cloth",
+      "color_channels": ["Diffuse"],
+      "size_mm": [280.11855714681565, 283.80000591278076]
+    },
+    {
+      "id": "curly_teddy_checkered",
+      "role": "cloth",
+      "color_channels": ["Diffuse"],
+      "size_mm": [561.8443344798735, 474.0999639034271]
+    },
+    {
+      "id": "faux_fur_geometric",
+      "role": "cloth",
+      "color_channels": ["Diffuse"],
+      "size_mm": [301.9999563694, 301.9766083948956]
+    },
+    {
+      "id": "floral_jacquard",
+      "role": "cloth",
+      "color_channels": ["Diffuse"],
+      "size_mm": [252.9498182468769, 383.59999656677246]
+    },
+    {
+      "id": "wool_boucle",
+      "role": "cloth",
+      "color_channels": ["Diffuse"],
+      "size_mm": [314.78237097288206, 390.10000228881836]
     },
     {
       "id": "plywood",

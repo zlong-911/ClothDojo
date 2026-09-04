@@ -82,8 +82,8 @@ def deterministic_capture(monkeypatch):
     )
     monkeypatch.setattr(
         recording,
-        "capture_actions",
-        lambda _runtime, sample_index, _arm, _gripper: (_action(sample_index),),
+        "capture_canonical_actions",
+        lambda _runtime, sample_index: (_action(sample_index),),
     )
 
 
@@ -117,6 +117,7 @@ def test_teleop_finalization_does_not_block_the_control_thread(
     assert not recorder.is_finalizing
     reader = TrajectoryReader(path)
     assert reader.manifest.action_count == 1
+    assert reader.manifest.metadata["action_semantics"] == "runtime_target"
     assert reader.manifest.metadata["stop_reason"] == "operator_stop"
 
 
@@ -170,3 +171,47 @@ def test_empty_teleop_recording_is_removed(tmp_path, deterministic_capture) -> N
     assert recorder.stop() is None
     assert not path.exists()
     assert not recorder.is_finalizing
+
+
+def test_completed_attempt_can_be_archived_for_operator_retry(
+    tmp_path, deterministic_capture
+) -> None:
+    recorder = recording.TeleopRecorder(_Runtime(), _plan(tmp_path))
+    path = recorder.start(origin={"source": "task_continuation"})
+    recorder.step(object(), object())
+    recorder.stop()
+    assert recorder.close() == path
+
+    rejected = recorder.reject_completed(path, reason="operator_retry")
+
+    assert not path.exists()
+    assert rejected == tmp_path / "rejected" / path.name
+    assert (rejected / "manifest.json").is_file()
+    record = json.loads((rejected / "rejection.json").read_text(encoding="utf-8"))
+    assert record["reason"] == "operator_retry"
+    assert record["original_path"] == str(path)
+
+
+def test_rerecording_replaces_the_previous_valid_attempt(
+    tmp_path, deterministic_capture
+) -> None:
+    recorder = recording.TeleopRecorder(_Runtime(), _plan(tmp_path))
+    first = recorder.start(origin={"source": "task_continuation"})
+    recorder.step(object(), object())
+    recorder.stop()
+    assert recorder.wait_for_finalization() == first
+
+    second = recorder.start(origin={"source": "task_continuation"})
+    recorder.step(object(), object())
+    recorder.stop()
+    assert recorder.wait_for_finalization() == second
+    rejected = recorder.reject_completed(
+        first,
+        reason="superseded_by_rerecording",
+    )
+
+    assert not first.exists()
+    assert second.is_dir()
+    assert [path.name for path in recorder.plan.output_root.iterdir()] == [second.name]
+    record = json.loads((rejected / "rejection.json").read_text(encoding="utf-8"))
+    assert record["reason"] == "superseded_by_rerecording"

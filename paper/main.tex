@@ -1,0 +1,78 @@
+% Preserve the template's Times fonts with pdfLaTeX and XeTeX/Tectonic.
+\RequirePackage[T1]{fontenc}
+\documentclass[letterpaper,10pt,conference]{ieeeconf}
+
+\IEEEoverridecommandlockouts
+\overrideIEEEmargins
+
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{cite}
+\usepackage{graphicx}
+\usepackage{url}
+
+\title{ClothDojo: A Benchmark and Scalable Data Pipeline for Garment
+Flattening and Folding}
+
+% Keep the review draft anonymous until the target venue is fixed.
+\author{Anonymous Authors}
+
+\IEEEaftertitletext{%
+  \vspace{-1.0em}
+  \begin{center}
+    \includegraphics[width=\textwidth]{figures/clothdojo-teaser.png}
+    \vspace{0.2em}
+    \begin{minipage}{0.98\textwidth}
+      \footnotesize
+      \refstepcounter{figure}\label{fig:teaser}%
+      Fig.~\thefigure. ClothDojo supports topologically diverse garments at a
+      shared metric scale (left) and contact-rich bimanual manipulation across
+      five robot embodiments (right). The two rows select action-revealing
+      keyframes from flattening and folding trajectories; each column preserves
+      the complete robot workcell and a consistent third-person camera.
+      Background scenes and studio lighting are adapted from GenieSimAssets
+      (AgibotTech, CC BY-NC-SA 4.0) and NVIDIA Isaac Sim assets.
+    \end{minipage}
+  \end{center}
+  \vspace{0.4em}
+}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+\pagestyle{empty}
+
+\begin{abstract}
+Flattening and then folding a severely crumpled garment is a challenging test
+of generalist visuomotor policies. Real-robot experiments are costly and
+difficult to reproduce, while existing simulation studies provide limited
+evaluation across diverse garments and complex initial states. We present
+ClothDojo, a simulation benchmark and data pipeline for garment flattening and
+folding. ClothDojo supports real-time bimanual interaction and closed-loop
+policy evaluation on a shared test set spanning diverse garments and complex
+initial states. To reduce reliance on hand-designed manipulation rules for data
+collection, we decouple physical trajectory generation from appearance
+randomization. A trajectory agent uses privileged visual information and is
+initialized from human demonstrations. It is continually improved through
+autonomous rollouts and human interventions, then generates successful
+trajectories on new garments and initial states. These trajectories are
+re-rendered with randomized appearances to provide diverse RGB observations for
+downstream policy training. We use ClothDojo to study how additional
+manipulation experience and visual diversity each affect generalization, and to
+assess the roles of memory and real-time control in handling occlusion and
+dynamic manipulation.
+\end{abstract}
+
+\input{sections/introduction}
+\input{sections/related_work}
+\input{sections/benchmark}
+\input{sections/data_engine}
+\input{sections/experiments}
+\input{sections/conclusion}
+
+% Enable once verified bibliography entries and citations have been added.
+% \bibliographystyle{IEEEtran}
+% \bibliography{references}
+
+\end{document}

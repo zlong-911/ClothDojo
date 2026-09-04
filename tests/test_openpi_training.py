@@ -4,7 +4,12 @@ import numpy as np
 import pyarrow as pa
 import pytest
 
-from clothdojo.training.openpi import _dataset_prompt, _episode_ends, _float_matrix
+from clothdojo.training.openpi import (
+    _dataset_prompt,
+    _episode_ends,
+    _float_matrix,
+    validate_action_chunk_boundary,
+)
 
 
 def test_float_matrix_keeps_fixed_size_list_layout() -> None:
@@ -39,3 +44,10 @@ def test_norm_stats_reads_task_prompt_from_dataset_sidecar(tmp_path) -> None:
     sidecar.write_text('{"scenario":{}}', encoding="utf-8")
     with pytest.raises(ValueError, match="no task prompt"):
         _dataset_prompt(sidecar)
+
+
+def test_action_chunk_boundary_is_explicit() -> None:
+    assert validate_action_chunk_boundary("repeat_last") == "repeat_last"
+    assert validate_action_chunk_boundary("full_only") == "full_only"
+    with pytest.raises(ValueError, match="action_chunk_boundary"):
+        validate_action_chunk_boundary("mask")

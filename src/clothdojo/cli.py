@@ -225,6 +225,38 @@ def main(argv: Sequence[str] | None = None) -> None:
         result = augment_mirror(args.source, args.output)
         print(json.dumps(result, indent=2, sort_keys=True))
         return
+    if args.command == "data" and args.data_command == "augment-front-back":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.data.front_back import augment_front_back
+
+        result = augment_front_back(
+            args.source,
+            args.output,
+            seed=args.seed,
+            assets=args.assets,
+            device=args.device,
+            placement_candidates=args.placement_candidates,
+            table_margin_m=args.table_margin_m,
+            max_placement_shift_x_m=args.max_placement_shift_x_m,
+            max_placement_shift_y_m=args.max_placement_shift_y_m,
+            min_base_clearance_m=args.min_base_clearance_m,
+            min_inter_arm_clearance_m=args.min_inter_arm_clearance_m,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return
+    if args.command == "data" and args.data_command == "canonicalize-actions":
+        if passthrough:
+            parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
+        from clothdojo.data.action_canonicalization import canonicalize_action_collection
+
+        result = canonicalize_action_collection(
+            args.source,
+            args.output,
+            plan_only=args.plan_only,
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return
     if args.command == "data" and args.data_command == "merge-lerobot-shards":
         if passthrough:
             parser.error(f"unrecognized arguments: {' '.join(passthrough)}")
@@ -245,8 +277,11 @@ def main(argv: Sequence[str] | None = None) -> None:
             assets=args.assets,
             device=args.device,
             **({"devices": tuple(args.devices)} if args.devices is not None else {}),
-            **({"workers_per_device": args.workers_per_device}
-               if args.workers_per_device != 1 else {}),
+            **(
+                {"workers_per_device": args.workers_per_device}
+                if args.workers_per_device != 1
+                else {}
+            ),
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return
@@ -392,6 +427,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             "assets_root": args.assets,
             "device": args.device,
             "fps": args.fps,
+            "camera_name": args.camera,
+            "output": args.output,
         }
         if args.trajectory is not None:
             review_options["trajectory_ids"] = args.trajectory
@@ -407,6 +444,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             args.dataset,
             args.output,
             block_size=args.block_size,
+            action_chunk_boundary=args.action_chunk_boundary,
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return
@@ -548,8 +586,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         selected = robot_ids() if args.robot == "all" else (args.robot,)
         reports = [
             render_workstation_review(
-                robot, assets_root=args.assets, output_dir=args.output,
-                device=args.device, egl_device=args.egl_device,
+                robot,
+                assets_root=args.assets,
+                output_dir=args.output,
+                device=args.device,
+                egl_device=args.egl_device,
                 views=tuple(args.views),
             )
             for robot in selected
@@ -611,7 +652,8 @@ def _parser() -> argparse.ArgumentParser:
     render_workstations.add_argument("--device", default="cpu")
     render_workstations.add_argument("--egl-device", type=int, default=0)
     render_workstations.add_argument(
-        "--views", nargs="+",
+        "--views",
+        nargs="+",
         choices=("overall", "left", "right", "left_wrist", "right_wrist"),
         default=("overall", "left", "right"),
         help="overall, attach close-ups, or wrist-camera installation close-ups",
@@ -956,6 +998,62 @@ def _parser() -> argparse.ArgumentParser:
     )
     mirror.add_argument("--source", required=True, help="canonical Piper collection root")
     mirror.add_argument("--output", required=True, help="new independent collection root")
+    front_back = data_commands.add_parser(
+        "augment-front-back",
+        help="build reachable front/back and bilateral Piper trajectory overlays",
+    )
+    front_back.add_argument("--source", required=True, help="canonical shirt_fold collection")
+    front_back.add_argument("--output", required=True, help="new four-variant overlay collection")
+    front_back.add_argument("--seed", required=True, type=int, help="deterministic placement seed")
+    front_back.add_argument("--assets", default="assets", help="project asset directory")
+    front_back.add_argument("--device", default="cuda:0", help="Newton IK/dynamics device")
+    front_back.add_argument(
+        "--placement-candidates",
+        type=int,
+        default=64,
+        help="seeded stratified XY placements per source trajectory",
+    )
+    front_back.add_argument(
+        "--table-margin-m",
+        type=float,
+        default=0.01,
+        help="minimum transformed-cloth XY margin inside the table",
+    )
+    front_back.add_argument(
+        "--max-placement-shift-x-m",
+        type=float,
+        default=0.15,
+        help="maximum front/back placement adjustment along world X",
+    )
+    front_back.add_argument(
+        "--max-placement-shift-y-m",
+        type=float,
+        default=0.05,
+        help="maximum front/back placement adjustment along world Y",
+    )
+    front_back.add_argument(
+        "--min-base-clearance-m",
+        type=float,
+        default=0.10,
+        help="minimum initial cloth-particle clearance from either robot base",
+    )
+    front_back.add_argument(
+        "--min-inter-arm-clearance-m",
+        type=float,
+        default=0.03,
+        help="minimum physical surface clearance between the two robot arms",
+    )
+    canonicalize = data_commands.add_parser(
+        "canonicalize-actions",
+        help="copy a collection and replace actions with runtime targets",
+    )
+    canonicalize.add_argument("--source", required=True, help="canonical Piper collection root")
+    canonicalize.add_argument("--output", help="new action-overlay collection root")
+    canonicalize.add_argument(
+        "--plan-only",
+        action="store_true",
+        help="inspect contracts and changes without writing an overlay",
+    )
     retarget = data_commands.add_parser(
         "retarget",
         help="retarget Piper trajectories to another robot",
@@ -980,13 +1078,19 @@ def _parser() -> argparse.ArgumentParser:
     )
     retarget_devices = retarget.add_mutually_exclusive_group()
     retarget_devices.add_argument(
-        "--device", default="cuda:0", help="Newton IK and rigid-dynamics device",
+        "--device",
+        default="cuda:0",
+        help="Newton IK and rigid-dynamics device",
     )
     retarget_devices.add_argument(
-        "--devices", nargs="+", help="retarget GPUs, e.g. cuda:0 cuda:1",
+        "--devices",
+        nargs="+",
+        help="retarget GPUs, e.g. cuda:0 cuda:1",
     )
     retarget.add_argument(
-        "--workers-per-device", type=int, default=1,
+        "--workers-per-device",
+        type=int,
+        default=1,
         help="persistent processes per GPU (default: 1); use NVIDIA MPS for same-GPU concurrency",
     )
     review = data_commands.add_parser(
@@ -996,6 +1100,16 @@ def _parser() -> argparse.ArgumentParser:
     review.add_argument("--source", required=True, help="collection or rollout root")
     review.add_argument("--assets", default="assets", help="assets used for replay")
     review.add_argument("--device", default="cuda:0", help="Newton render device")
+    review.add_argument(
+        "--camera",
+        choices=("cam_high", "cam_low"),
+        default="cam_high",
+        help="native workstation camera to render",
+    )
+    review.add_argument(
+        "--output",
+        help="independent review output root; defaults to SOURCE/review",
+    )
     review.add_argument(
         "--trajectory",
         action="append",
@@ -1014,6 +1128,12 @@ def _parser() -> argparse.ArgumentParser:
     norm_stats.add_argument("--dataset", required=True, help="good-only LeRobot root")
     norm_stats.add_argument("--output", required=True, help="new external stats directory")
     norm_stats.add_argument("--block-size", type=int, default=4096)
+    norm_stats.add_argument(
+        "--action-chunk-boundary",
+        choices=("repeat_last", "full_only"),
+        default="repeat_last",
+        help="episode-boundary supervision policy; must match the training config",
+    )
     collect = commands.add_parser(
         "collect",
         help="run teleoperation, review, HIL and asset-curation workflows",

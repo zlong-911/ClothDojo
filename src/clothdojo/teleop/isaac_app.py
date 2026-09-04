@@ -90,10 +90,22 @@ def _build_newton_runtime(plan: SessionPlan):
     with wp.ScopedDevice(device):
         scene = build_scene(
             plan.assets_root,
+            task_name=plan.scene,
             spec=ShirtFlattenSpec(garment_id=plan.asset_id, world_count=1),
             device=device,
         )
-        return ShirtFlattenRuntime(scene)
+        runtime = ShirtFlattenRuntime(scene)
+        expected_mimics = 2
+        if runtime.model.constraint_mimic_count != expected_mimics:
+            raise RuntimeError(
+                "Piper gripper mimic constraints are incomplete: "
+                f"expected {expected_mimics}, got {runtime.model.constraint_mimic_count}"
+            )
+        print(
+            f"Piper gripper mimic constraints ready: {expected_mimics}",
+            flush=True,
+        )
+        return runtime
 
 
 def _simulation_app_config(plan: SessionPlan, isaac_root: Path) -> dict:
@@ -217,24 +229,18 @@ def _run(
     last_right_target = right_home.copy()
     left_input_valid = False
     right_input_valid = False
-    intervention_phase = "waiting" if plan.mode == "intervention" else None
-    continuation_phase = "active" if plan.continuation_plan is not None else None
-    continuation_consumed = False
-    continuation_advance_after_finalize = False
+    restoration_phase = "waiting" if restore_queue is not None else None
     current_origin = None
+    completed_attempt = None
+    advance_after_finalize = False
 
-    def restore_next(*, requeue_current: bool = False) -> bool:
-        nonlocal arm_command, current_origin, intervention_phase, continuation_phase
-        nonlocal continuation_consumed, last_left_target, last_right_target, last_step
-        if restore_queue is None:
-            return False
-        point = restore_queue.restore_next(runtime, requeue_current=requeue_current)
+    def prepare_restored_point(point, *, preserve_completed: bool = False) -> bool:
+        nonlocal arm_command, current_origin, restoration_phase, completed_attempt
+        nonlocal last_left_target, last_right_target, last_step
         if point is None:
-            if plan.mode == "intervention":
-                intervention_phase = "complete"
-            else:
-                continuation_phase = "exhausted"
+            restoration_phase = "complete"
             current_origin = None
+            completed_attempt = None
             backend.set_grasp_haptics(False, False)
             return False
         ik.reset_from_state()
@@ -251,27 +257,69 @@ def _run(
         grasp_probe.discard()
         backend.set_grasp_haptics(False, False)
         current_origin = point.recording_metadata()
-        continuation_consumed = False
+        if not preserve_completed:
+            completed_attempt = None
+        restoration_phase = "waiting"
         last_step = time.monotonic()
-        if plan.mode == "intervention":
-            intervention_phase = "waiting"
-            print("  [HIL] restored breakpoint; waiting for safe takeover", flush=True)
-        else:
-            continuation_phase = "active"
-            backend.pulse_reset_complete()
-            print(
-                f"  [CONTINUE] restored {point.source_episode_id}; "
-                f"remaining={restore_queue.remaining}",
-                flush=True,
-            )
+        backend.pulse_reset_complete()
+        label = "HIL" if point.kind == "human_intervention" else "CONTINUE"
+        print(
+            f"  [{label}] restored {point.source_episode_id}; "
+            f"remaining={restore_queue.remaining}; waiting for safe takeover",
+            flush=True,
+        )
         return True
+
+    def restore_next(*, requeue_current: bool = False) -> bool:
+        if restore_queue is None:
+            return False
+        return prepare_restored_point(
+            restore_queue.restore_next(
+                runtime,
+                requeue_current=requeue_current,
+            )
+        )
+
+    def restore_current(*, preserve_completed: bool = False) -> bool:
+        if restore_queue is None:
+            return False
+        return prepare_restored_point(
+            restore_queue.restore_current(runtime),
+            preserve_completed=preserve_completed,
+        )
+
+    def accept_completed_attempt(completed) -> None:
+        nonlocal completed_attempt
+        previous_attempt = completed_attempt
+        completed_attempt = completed
+        if previous_attempt is None or previous_attempt == completed:
+            return
+        rejected = recorder.reject_completed(
+            previous_attempt,
+            reason="superseded_by_rerecording",
+        )
+        print(f"  [RESTORE] replaced previous attempt {rejected}", flush=True)
+
+    def restoration_status() -> dict[str, object]:
+        continuation_phase = None
+        if plan.continuation_plan is not None:
+            continuation_phase = "exhausted" if restoration_phase == "complete" else "active"
+        return {
+            "restoration_phase": restoration_phase,
+            "intervention_phase": restoration_phase if plan.mode == "intervention" else None,
+            "continuation_phase": continuation_phase,
+            "continuation_remaining": (
+                None if restore_queue is None else restore_queue.remaining
+            ),
+        }
 
     if restore_queue is not None:
         restore_next()
     frame_index = 0
+    reset_action = "save/next scene" if restore_queue is not None else "reset"
     print(
-        "XR controls: squeeze=clutch, trigger=gripper, A=record, X=reset/next, "
-        "Y/B=left/right Home, both sticks=reset view",
+        "XR controls: squeeze=clutch, trigger=gripper, A=start/save recording, "
+        f"X={reset_action}, Y/B=left/right Home, both sticks=reset view",
         flush=True,
     )
     try:
@@ -282,17 +330,17 @@ def _run(
             completed = recorder.poll_finalization()
             if completed is not None:
                 print(f"  [REC] saved {completed}", flush=True)
-                if intervention_phase == "finalizing":
-                    intervention_phase = "locked"
-                if plan.continuation_plan is not None:
-                    continuation_consumed = True
-                    if continuation_advance_after_finalize:
-                        continuation_advance_after_finalize = False
+                if restoration_phase == "finalizing":
+                    accept_completed_attempt(completed)
+                    if advance_after_finalize:
+                        advance_after_finalize = False
+                        completed_attempt = None
                         restore_next()
+                    else:
+                        restore_current(preserve_completed=True)
             elif had_finalization and not recorder.is_finalizing:
-                # An abort completed.  It must never consume or advance a
-                # continuation source selected while cleanup was pending.
-                continuation_advance_after_finalize = False
+                if restoration_phase == "aborting":
+                    restore_current(preserve_completed=True)
             frame = backend.poll()
             graspable = grasp_probe.poll()
             if graspable is not None:
@@ -303,8 +351,8 @@ def _run(
                 backend.pulse_connected()
             elif previous_connected and not connected and recorder.is_recording:
                 recorder.abort("xr_connection_lost")
-                if intervention_phase == "recording":
-                    intervention_phase = "aborted"
+                if restoration_phase == "recording":
+                    restoration_phase = "aborting"
                 print("  [REC] aborted after XR disconnect", flush=True)
             previous_connected = connected
 
@@ -320,32 +368,47 @@ def _run(
             right_home_pressed = edges.rising("right_home", _button(frame.right, "b"))
 
             frozen = False
-            if intervention_phase is not None:
-                if intervention_phase in {"waiting", "ready"}:
+            if restoration_phase is not None:
+                if restoration_phase in {"waiting", "ready"}:
                     ready = controller.ready_for_restored_takeover(frame, now_s=now)
-                    intervention_phase = "ready" if ready else "waiting"
-                    if ready and record_pressed:
+                    restoration_phase = "ready" if ready else "waiting"
+                    if reset_pressed:
+                        requeue_current = completed_attempt is None
+                        completed_attempt = None
+                        restore_next(requeue_current=requeue_current)
+                        frozen = True
+                    elif ready and record_pressed:
                         path = recorder.start(origin=current_origin)
-                        intervention_phase = "recording"
+                        restoration_phase = "recording"
                         backend.pulse_recording_start()
-                        print(f"  [HIL] recording {path}", flush=True)
+                        print(f"  [RESTORE] recording {path}", flush=True)
                     else:
                         frozen = True
-                elif intervention_phase == "recording" and record_pressed:
-                    path = recorder.stop()
-                    backend.pulse_recording_stop()
-                    if path is None:
-                        intervention_phase = "ready"
-                        print("  [HIL] discarded empty recording; ready to retry", flush=True)
-                    else:
-                        intervention_phase = "finalizing"
-                        print(f"  [HIL] finalizing {path}", flush=True)
-                    frozen = True
-                elif intervention_phase == "locked":
+                elif restoration_phase == "recording":
+                    if record_pressed or reset_pressed:
+                        path = recorder.stop()
+                        backend.pulse_recording_stop()
+                        if path is None:
+                            if reset_pressed:
+                                completed_attempt = None
+                                restore_next(requeue_current=True)
+                            else:
+                                restore_current(preserve_completed=True)
+                                print(
+                                    "  [RESTORE] discarded empty recording; restored current point",
+                                    flush=True,
+                                )
+                        else:
+                            advance_after_finalize = reset_pressed
+                            restoration_phase = "finalizing"
+                            suffix = "; next scene after save" if reset_pressed else ""
+                            print(f"  [RESTORE] finalizing {path}{suffix}", flush=True)
+                        frozen = True
+                elif restoration_phase == "finalizing":
                     if reset_pressed:
-                        restore_next()
+                        advance_after_finalize = True
                     frozen = True
-                elif intervention_phase in {"finalizing", "aborted", "complete"}:
+                elif restoration_phase in {"aborting", "complete"}:
                     frozen = True
             else:
                 if record_pressed:
@@ -358,7 +421,7 @@ def _run(
                             print(f"  [REC] finalizing {path}", flush=True)
                     elif recorder.is_finalizing:
                         print("  [REC] waiting for trajectory finalization", flush=True)
-                    elif continuation_phase != "exhausted" and not continuation_consumed:
+                    else:
                         path = recorder.start(origin=current_origin)
                         backend.pulse_recording_start()
                         print(f"  [REC] recording {path}", flush=True)
@@ -377,45 +440,23 @@ def _run(
                     controller.reset_targets(right_pose=right_home)
                     print("  [HOME] right arm resumed VR control", flush=True)
                 if reset_pressed:
-                    if plan.continuation_plan is not None:
-                        if recorder.is_recording:
-                            path = recorder.stop(reason="continuation_advance")
-                            backend.pulse_recording_stop()
-                            if path is not None:
-                                continuation_advance_after_finalize = True
-                                print(
-                                    f"  [CONTINUE] finalizing {path}; "
-                                    "next source will load automatically",
-                                    flush=True,
-                                )
-                            else:
-                                restore_next(requeue_current=True)
-                        elif recorder.is_finalizing:
-                            continuation_advance_after_finalize = True
-                            print(
-                                "  [CONTINUE] waiting for finalization before advancing",
-                                flush=True,
-                            )
-                        else:
-                            restore_next(requeue_current=not continuation_consumed)
-                    else:
-                        if recorder.is_recording:
-                            path = recorder.stop(reason="operator_reset")
-                            if path is not None:
-                                print(f"  [REC] finalizing {path}", flush=True)
-                        grasp_probe.discard()
-                        backend.set_grasp_haptics(False, False)
-                        runtime.reset()
-                        ik.reset_from_state()
-                        left_home, right_home = ik.measured_pose_matrices()
-                        controller.reset(left_home, right_home)
-                        arm_command = ik.solve()
-                        last_left_target = left_home.copy()
-                        last_right_target = right_home.copy()
-                        left_return.clear()
-                        right_return.clear()
-                        backend.pulse_reset_complete()
-                        print("  [RESET] environment reset", flush=True)
+                    if recorder.is_recording:
+                        path = recorder.stop(reason="operator_reset")
+                        if path is not None:
+                            print(f"  [REC] finalizing {path}", flush=True)
+                    grasp_probe.discard()
+                    backend.set_grasp_haptics(False, False)
+                    runtime.reset()
+                    ik.reset_from_state()
+                    left_home, right_home = ik.measured_pose_matrices()
+                    controller.reset(left_home, right_home)
+                    arm_command = ik.solve()
+                    last_left_target = left_home.copy()
+                    last_right_target = right_home.copy()
+                    left_return.clear()
+                    right_return.clear()
+                    backend.pulse_reset_complete()
+                    print("  [RESET] environment reset", flush=True)
 
             both_sticks = _button(frame.left, "thumbstick_click") and _button(
                 frame.right, "thumbstick_click"
@@ -445,11 +486,7 @@ def _run(
                         recording_finalizing=recorder.is_finalizing,
                         recording_frames=recorder.frame_count,
                         frame=frame_index,
-                        intervention_phase=intervention_phase,
-                        continuation_phase=continuation_phase,
-                        continuation_remaining=(
-                            None if restore_queue is None else restore_queue.remaining
-                        ),
+                        **restoration_status(),
                     )
                     next_status = time.monotonic() + 1.0
                 continue
@@ -481,8 +518,8 @@ def _run(
             report_seconds["physics_submit"] += time.perf_counter() - physics_started
             if reached_limit:
                 backend.pulse_recording_stop()
-                if intervention_phase == "recording":
-                    intervention_phase = "finalizing"
+                if restoration_phase == "recording":
+                    restoration_phase = "finalizing"
                 print("  [REC] maximum action count reached; finalizing", flush=True)
             grasp_probe.submit(runtime.state_0)
             fabric_started = time.perf_counter()
@@ -518,11 +555,7 @@ def _run(
                     physics_submit_ms=1000.0 * report_seconds["physics_submit"] / divisor,
                     fabric_submit_ms=1000.0 * report_seconds["fabric_submit"] / divisor,
                     app_ms=1000.0 * report_seconds["app"] / divisor,
-                    intervention_phase=intervention_phase,
-                    continuation_phase=continuation_phase,
-                    continuation_remaining=(
-                        None if restore_queue is None else restore_queue.remaining
-                    ),
+                    **restoration_status(),
                 )
                 next_status = status_now + 1.0
                 report_started = status_now
@@ -533,13 +566,15 @@ def _run(
     finally:
         try:
             if recorder.is_recording:
-                if intervention_phase == "recording":
+                if restoration_phase == "recording":
                     recorder.abort("session_stop")
                 else:
                     recorder.stop(reason="session_stop")
             completed = recorder.close()
             if completed is not None:
                 print(f"  [REC] saved {completed}", flush=True)
+                if restoration_phase == "finalizing":
+                    accept_completed_attempt(completed)
         finally:
             backend.set_grasp_haptics(False, False)
             backend.close()

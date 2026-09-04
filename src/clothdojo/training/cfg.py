@@ -77,9 +77,9 @@ def inspect_cfg_training(
     balance_dataset_weights = bool(data_cfg.get("balance_dataset_weights", True))
     entries = list(data_cfg.get("train_data_paths", ()))
     roles = [str(entry.get("type", "")) for entry in entries]
-    if roles.count("sft") != 1 or roles.count("rollout") < 1:
+    if roles.count("sft") != 1:
         raise ValueError(
-            f"CFG requires exactly one sft dataset and at least one rollout dataset, got {roles}"
+            f"CFG requires exactly one sft dataset and optional rollout datasets, got {roles}"
         )
     unsupported = sorted(set(roles) - set(CFG_ROLES))
     if unsupported:
@@ -99,8 +99,9 @@ def inspect_cfg_training(
     _require_compatible_datasets(reports)
     expert = next(report for report in reports if report.role == "sft")
     expert_info = Path(expert.dataset_path) / "meta" / "info.json"
-    if norm_provenance.get("dataset_info_sha256") != _sha256(expert_info):
-        raise ValueError("CFG norm stats were not computed from the expert dataset")
+    norm_binding = _validate_norm_binding(
+        model_path, norm_root, norm_provenance, expert_info, cfg.actor.model
+    )
     if sum(report.positive_frames for report in reports) == 0:
         raise ValueError("CFG mixture has no positive advantage labels")
     if sum(report.negative_frames for report in reports) == 0:
@@ -135,6 +136,7 @@ def inspect_cfg_training(
         "model_path": str(model_path),
         "init_checkpoint_weights_sha256": init_weights_sha256,
         "norm_stats_path": str(norm_root),
+        "norm_binding": norm_binding,
         "norm_stats": {
             "stats_sha256": _sha256(norm_file),
             "provenance_sha256": _sha256(provenance_file),
@@ -457,8 +459,8 @@ def _validate_sidecar(root: Path) -> None:
 
 
 def _require_compatible_datasets(reports: list[CfgDatasetReport]) -> None:
-    if len(reports) < 2:
-        raise ValueError("CFG compatibility checks require at least two datasets")
+    if not reports:
+        raise ValueError("CFG compatibility checks require at least one dataset")
     reference = reports[0]
     for report in reports[1:]:
         if reference.fps != report.fps:
@@ -495,6 +497,38 @@ def _require_compatible_datasets(reports: list[CfgDatasetReport]) -> None:
         if report.role in role_thresholds and role_thresholds[report.role] != threshold:
             raise ValueError(f"CFG {report.role} shards use different STEAM label thresholds")
         role_thresholds[report.role] = threshold
+
+
+def _validate_norm_binding(
+    checkpoint: Path,
+    norm_root: Path,
+    provenance: dict[str, Any],
+    expert_info: Path,
+    model: Any,
+) -> dict[str, Any]:
+    """Keep a continuation in its initialization checkpoint's action coordinates.
+
+    Released/converted checkpoints without a project launch manifest retain the
+    original dataset-bound gate. A project SFT continuation must use its exact
+    saved normalization artifacts, even when training on a newly labeled subset.
+    """
+    from clothdojo.rollout.artifacts import find_training_manifest, validate_sft_norm_binding
+
+    try:
+        find_training_manifest(checkpoint)
+    except FileNotFoundError:
+        if provenance.get("dataset_info_sha256") != _sha256(expert_info):
+            raise ValueError(
+                "CFG norm stats match neither the expert dataset nor a recorded SFT checkpoint"
+            ) from None
+        return {"source": "expert_dataset"}
+    binding = validate_sft_norm_binding(
+        checkpoint,
+        norm_root,
+        openpi_config=str(model.openpi.config_name),
+        action_horizon=int(model.num_action_chunks),
+    )
+    return {"source": "sft_initialization", **binding}
 
 
 def _read_object(path: Path, context: str) -> dict[str, Any]:
