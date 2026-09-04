@@ -392,7 +392,7 @@ def _run(
     if restore_queue is not None:
         restore_next()
     frame_index = 0
-    reset_action = "save/next scene" if restore_queue is not None else "reset"
+    reset_action = "next scene" if restore_queue is not None else "reset"
     print(
         "XR controls: squeeze=clutch, trigger=gripper, A=start/save recording, "
         f"X={reset_action}, Y/B=left/right Home, both sticks=reset view",
@@ -701,24 +701,19 @@ def _run(
                     else:
                         frozen = True
                 elif restoration_phase == "recording":
-                    if record_pressed or reset_pressed:
+                    if record_pressed:
                         path = recorder.stop()
                         backend.pulse_recording_stop()
                         if path is None:
-                            if reset_pressed:
-                                completed_attempt = None
-                                restore_next(requeue_current=True)
-                            else:
-                                restore_current(preserve_completed=True)
-                                print(
-                                    "  [RESTORE] discarded empty recording; restored current point",
-                                    flush=True,
-                                )
+                            restore_current(preserve_completed=True)
+                            print(
+                                "  [RESTORE] discarded empty recording; restored current point",
+                                flush=True,
+                            )
                         else:
-                            advance_after_finalize = reset_pressed
+                            advance_after_finalize = False
                             restoration_phase = "finalizing"
-                            suffix = "; next scene after save" if reset_pressed else ""
-                            print(f"  [RESTORE] finalizing {path}{suffix}", flush=True)
+                            print(f"  [RESTORE] finalizing {path}", flush=True)
                         frozen = True
                 elif restoration_phase == "finalizing":
                     if reset_pressed:
