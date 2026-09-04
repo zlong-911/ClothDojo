@@ -653,11 +653,7 @@ def _run(
                         completed_attempt = None
                         restore_next()
                     else:
-                        # A completed HIL attempt stays frozen until the operator
-                        # explicitly advances with X.  Returning to the ready state
-                        # here lets a second A press create a duplicate trajectory
-                        # for the same intervention point.
-                        restoration_phase = "saved"
+                        restore_current(preserve_completed=True)
             elif had_finalization and not recorder.is_finalizing:
                 if restoration_phase == "aborting":
                     restore_current(preserve_completed=True)
@@ -727,11 +723,6 @@ def _run(
                 elif restoration_phase == "finalizing":
                     if reset_pressed:
                         advance_after_finalize = True
-                    frozen = True
-                elif restoration_phase == "saved":
-                    if reset_pressed:
-                        completed_attempt = None
-                        restore_next()
                     frozen = True
                 elif restoration_phase == "switch_failed":
                     if reset_pressed:
