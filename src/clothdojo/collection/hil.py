@@ -338,6 +338,11 @@ class HILCatalog:
     ) -> dict[str, Any]:
         if not isinstance(breakpoints, list) or not breakpoints:
             raise ValueError("an intervention requires at least one breakpoint")
+        completed = {
+            (run_id, episode_id, int(result["sample_index"]))
+            for (run_id, episode_id), results in self.interventions().items()
+            for result in results
+        }
         run_cache: dict[str, tuple[Path, dict[str, Any], dict[str, dict[str, Any]]]] = {}
         run_provenance: dict[str, dict[str, str]] = {}
         normalized = []
@@ -354,6 +359,8 @@ class HILCatalog:
             sample_index = raw["sample_index"]
             if isinstance(sample_index, bool) or not isinstance(sample_index, int):
                 raise ValueError("breakpoint sample_index must be an integer")
+            if (run_id, episode_id, sample_index) in completed:
+                continue
             if run_id not in run_cache:
                 root = self._run_root(run_id)
                 metadata = self._metadata(root)
@@ -397,6 +404,8 @@ class HILCatalog:
                     "manifest_sha256": _sha256(trajectory / "manifest.json"),
                 }
             )
+        if not normalized:
+            raise ValueError("all requested intervention points already have completed HIL")
         asset_order = {asset_id: index for index, asset_id in enumerate(asset_runtime)}
         normalized.sort(key=lambda item: asset_order[str(item["asset_id"])])
         return {

@@ -324,6 +324,23 @@ def test_hil_plan_binds_rollout_and_trajectory_hashes(tmp_path: Path) -> None:
     assert catalog.interventions()[("run_a", "shirt_a_000000")][0]["cameras"] == [
         "cam_high"
     ]
+    pending_plan = catalog.intervention_plan(
+        [
+            {"run_id": "run_a", "episode_id": "shirt_a_000000", "sample_index": 3},
+            {"run_id": "run_a", "episode_id": "shirt_a_000000", "sample_index": 4},
+        ]
+    )
+    assert [point["source_sample_index"] for point in pending_plan["breakpoints"]] == [4]
+    with pytest.raises(ValueError, match="already have completed HIL"):
+        catalog.intervention_plan(
+            [
+                {
+                    "run_id": "run_a",
+                    "episode_id": "shirt_a_000000",
+                    "sample_index": 3,
+                }
+            ]
+        )
     deleted = catalog.delete_intervention("teleop_branch")
     archived = profile.hil_dataset_root / "rejected" / "teleop_branch"
     assert deleted["archived_path"] == str(archived)
