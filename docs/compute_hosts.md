@@ -1,7 +1,7 @@
 # 计算节点
 
-当前按用户 2026-09-04 提供的完整清单登记 5 台 GPU worker：4 台 H100 和
-1 台 RTX 5090。`33.229.141.59` 已连接确认有 8 × RTX 5090 D v2 24GB；
+当前按用户 2026-09-04 提供的完整清单登记 7 台 GPU worker：4 台 H100 和
+3 台 RTX 5090。三台 RTX 5090 均已连接确认有 8 × RTX 5090 D v2 24GB；
 4 台 H100 均已连接确认有 8 × H100 80GB，并已验证项目自动化 key、共享路径、
 `br0` 和 InfiniBand 设备。未列入本次清单的旧 worker 不计入当前资源。
 
@@ -82,19 +82,24 @@ RTX 5090 节点适合 Newton 仿真、策略推理和 Isaac RTX 渲染，均已�
 | 地址 | 端口 | 用户 | GPU |
 | --- | ---: | --- | --- |
 | `33.229.141.59` | 8022 | `hadoop-aipnlp` | 8 × RTX 5090 D v2 24GB |
+| `33.229.219.50` | 8022 | `hadoop-aipnlp` | 8 × RTX 5090 D v2 24GB |
+| `33.229.151.171` | 8022 | `hadoop-aipnlp` | 8 × RTX 5090 D v2 24GB |
 
 ```bash
 ssh -i ~/.ssh/id_ed25519_clothdojo_h100 -p 8022 \
   hadoop-aipnlp@33.229.141.59
 ```
 
-该节点已验证 `id_ed25519_clothdojo_h100` 密钥。
+三台节点均已验证 `id_ed25519_clothdojo_h100` 密钥。
+两台新增节点均已确认共享项目、项目 `.venv` 和 teleop app runtime 可用；
+Vulkan/Isaac RTX smoke test 尚未执行。
 
-5090 worker 共享项目路径：
+三台 5090 worker 共享项目路径：
 
 - 项目：`/cfs/mlp/training/docker/user/hadoop-aipnlp/huangzilong09/repos/ClothDojo`
 - Python：`/cfs/mlp/training/docker/user/hadoop-aipnlp/huangzilong09/repos/ClothDojo/.venv/bin/python`
-- OpenPI cache：`/cfs/mlp/training/docker/user/hadoop-aipnlp/huangzilong09/repos/ClothDojo/data/cache/openpi`（该主机的 `~/.cache/openpi` 已指向该共享目录）
+- Teleop app Python：`/cfs/mlp/training/docker/user/hadoop-aipnlp/huangzilong09/tools/clothdojo-teleop-runtime/bin/python`
+- OpenPI cache：`/cfs/mlp/training/docker/user/hadoop-aipnlp/huangzilong09/repos/ClothDojo/data/cache/openpi`（`33.229.141.59` 的 `~/.cache/openpi` 已准备；两台新增节点尚未建立该入口）
 
 H100 worker 共享路径：
 
