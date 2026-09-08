@@ -323,6 +323,7 @@ def test_hil_plan_queues_breakpoints_across_rollout_runs(tmp_path) -> None:
         [
             {"run_id": "run_a", "episode_id": "episode_a", "sample_index": 0},
             {"run_id": "run_b", "episode_id": "episode_b", "sample_index": 0},
+            {"run_id": "run_a", "episode_id": "episode_a", "sample_index": 0},
         ]
     )
     assert [run["run_id"] for run in value["runs"]] == ["run_a", "run_b"]
@@ -351,7 +352,8 @@ def test_hil_plan_queues_breakpoints_across_rollout_runs(tmp_path) -> None:
     assert queue.remaining == 0
 
 
-def test_hil_plan_switches_runtime_before_cross_asset_breakpoint(tmp_path) -> None:
+@pytest.mark.parametrize("leased", [False, True])
+def test_hil_plan_switches_runtime_before_cross_asset_breakpoint(tmp_path, leased) -> None:
     assets, garment_a, fingerprints_a = _context(tmp_path)
     garment_b = assets / "garments/converted/shirt_b/shirt_b.usdc"
     garment_b.parent.mkdir(parents=True)
@@ -421,6 +423,26 @@ def test_hil_plan_switches_runtime_before_cross_asset_breakpoint(tmp_path) -> No
         intervention_plan=plan_path,
     )
     runtime = _Runtime()
+    if leased:
+        import sqlite3
+
+        database_path = tmp_path / "leases.sqlite3"
+        value["allocation"] = {"database_path": str(database_path),
+                               "session_id": session.session_id,
+                               "initial_points": [value["breakpoints"][0]]}
+        plan_path.write_text(json.dumps(value))
+        session_file = session.write(tmp_path / "session.json")
+        with sqlite3.connect(database_path) as database:
+            database.executescript("""
+                CREATE TABLE sessions (id TEXT, status TEXT, profile_id TEXT, mode TEXT,
+                                       plan_path TEXT);
+                CREATE TABLE intervention_leases (profile_id TEXT, asset_id TEXT,
+                    session_id TEXT, PRIMARY KEY(profile_id,asset_id));
+            """)
+            database.execute("INSERT INTO sessions VALUES (?, 'collecting', ?, 'intervention', ?)",
+                             (session.session_id, session.profile_id, str(session_file)))
+            database.execute("INSERT INTO intervention_leases VALUES (?, 'shirt_a', ?)",
+                             (session.profile_id, session.session_id))
     queue = RestorationQueue.load(session, runtime)
     assert queue is not None
 
@@ -439,6 +461,8 @@ def test_hil_plan_switches_runtime_before_cross_asset_breakpoint(tmp_path) -> No
     queue.activate(candidate_plan, candidate_runtime)
     assert queue.restore_next(candidate_runtime).asset_id == "shirt_b"
     assert queue.remaining == 0
+    assert queue.restore_next(candidate_runtime) is None
+    assert queue.prepare_next() is None
 
 
 def test_continuation_plan_uses_only_terminal_unconsumed_sources(tmp_path) -> None:

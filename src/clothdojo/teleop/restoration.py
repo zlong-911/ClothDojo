@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 import numpy as np
 
+from clothdojo.collection.intervention_leases import assert_owned, claim_next, point_key
 from clothdojo.teleop.session import SessionPlan
 from clothdojo.trajectory import TrajectoryReader
 
@@ -71,6 +72,7 @@ class RestorationQueue:
         self._active_asset_id = active_asset_id
         self.current: RestorationPoint | None = None
         self.current_gripper_open: np.ndarray | None = None
+        self._allocation = None
 
     @classmethod
     def load(cls, plan: SessionPlan, runtime) -> RestorationQueue | None:
@@ -88,6 +90,9 @@ class RestorationQueue:
 
     @classmethod
     def _load_intervention(cls, plan, runtime, value) -> RestorationQueue:
+        allocation = value.get("allocation")
+        if allocation is not None:
+            value = {key: item for key, item in value.items() if key != "allocation"}
         if value.get("schema") == LEGACY_INTERVENTION_PLAN_SCHEMA:
             return cls._load_legacy_intervention(plan, runtime, value)
         if value.get("schema") == SINGLE_ASSET_INTERVENTION_PLAN_SCHEMA:
@@ -197,12 +202,24 @@ class RestorationQueue:
             if point.asset_id not in asset_runtime:
                 raise ValueError("intervention breakpoint references an unknown garment asset")
             points.append(point)
-        return cls(
+        queue = cls(
             points,
             _readers(points, runtime, source_task=plan.scene),
             asset_runtime,
             active_asset_id=plan.asset_id,
         )
+        if allocation is not None:
+            if allocation["session_id"] != plan.session_id:
+                raise ValueError("HIL allocation belongs to another session")
+            queue._allocation = allocation
+            queue._pool = value["breakpoints"]
+            queue._pool_points = {point_key(p.recording_metadata()): p for p in points}
+            queue._profile_id = plan.profile_id
+            queue._output_root = plan.output_root
+            queue._visited_assets = {plan.asset_id}
+            queue._points = deque(queue._pool_points[point_key(p)]
+                                  for p in allocation["initial_points"])
+        return queue
 
     @classmethod
     def _load_legacy_intervention(cls, plan, runtime, value) -> RestorationQueue:
@@ -306,8 +323,17 @@ class RestorationQueue:
     def prepare_next(self, *, requeue_current: bool = False) -> str | None:
         """Return the next asset without consuming its restoration point."""
 
-        if requeue_current and self.current is not None:
+        if requeue_current and self.current is not None and self.current not in self._points:
             self._points.append(self.current)
+        if not self._points and self._allocation is not None:
+            claimed = claim_next(
+                Path(self._allocation["database_path"]), profile_id=self._profile_id,
+                session_id=self._allocation["session_id"], points=self._pool,
+                output_root=self._output_root, visited=self._visited_assets,
+            )
+            if claimed:
+                self._visited_assets.add(claimed[0]["asset_id"])
+                self._points.extend(self._pool_points[point_key(p)] for p in claimed)
         return None if not self._points else self._points[0].asset_id
 
     def validate_runtime(self, plan: SessionPlan, runtime) -> None:
@@ -362,11 +388,17 @@ class RestorationQueue:
         return self._restore(runtime, self.current)
 
     def _restore(self, runtime, point: RestorationPoint) -> RestorationPoint:
+        self.assert_ownership(point.asset_id)
         state = self._readers[point.trajectory].state_at(point.source_sample_index)
         runtime.restore_state(state)
         self.current = point
         self.current_gripper_open = np.asarray(state.gripper_open_state, dtype=np.float32).copy()
         return point
+
+    def assert_ownership(self, asset_id: str | None = None) -> None:
+        if self._allocation is not None:
+            assert_owned(Path(self._allocation["database_path"]), self._profile_id,
+                         self._allocation["session_id"], asset_id or self._active_asset_id)
 
 
 def _point(

@@ -346,6 +346,7 @@ class HILCatalog:
         run_cache: dict[str, tuple[Path, dict[str, Any], dict[str, dict[str, Any]]]] = {}
         run_provenance: dict[str, dict[str, str]] = {}
         normalized = []
+        seen = set()
         asset_runtime: dict[str, dict[str, Any]] = {}
         for raw in breakpoints:
             if not isinstance(raw, dict) or set(raw) != {
@@ -361,6 +362,10 @@ class HILCatalog:
                 raise ValueError("breakpoint sample_index must be an integer")
             if (run_id, episode_id, sample_index) in completed:
                 continue
+            key = (run_id, episode_id, sample_index)
+            if key in seen:
+                continue
+            seen.add(key)
             if run_id not in run_cache:
                 root = self._run_root(run_id)
                 metadata = self._metadata(root)

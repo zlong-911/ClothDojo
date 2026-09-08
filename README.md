@@ -134,6 +134,14 @@ rollout 的 `hil_review.json`，不依赖浏览器缓存。审核阶段可跨 ro
 和 `data/collections/shirt_flatten/hil/trajectories`；对应 rollout 位于
 `data/collections/shirt_flatten/rollouts/<run>`。
 
+普通服装展平遥操可为每个长期运行实例配置一对 GPU：`teleoperation.gpu_ids`
+列出主 GPU，等长的 `teleoperation.standby_gpu_ids` 列出备用 GPU。操作者停止录制并
+选中另一件衣服后，可在同一个控制台实例中请求切换；系统冻结当前画面，在备用 GPU
+构建并验证新环境，成功后才切换并释放旧环境。Kit、CloudXR 和头显连接在此过程中
+保持运行。HIL 队列按资产依次推进，按 `X` 走完当前资产后，会使用备用 GPU
+自动切换到下一资产；跨资产 HIL 必须配置备用 GPU。当前配置为主 GPU 0、1
+分别配对备用 GPU 2、3。普通折叠连续采集仍不支持跨资产切换。
+
 新生成的 rollout `meta.json` 在 policy identity 中保存 checkpoint SHA-256、训练数据集
 根目录及其 info/sidecar SHA-256；训练数据集 sidecar 再指向普通遥操 collection。
 每条 HIL manifest 保存来源 rollout 根目录、rollout `meta.json` SHA-256、episode、

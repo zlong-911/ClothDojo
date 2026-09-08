@@ -689,11 +689,11 @@ def _run(
                     ready = controller.ready_for_restored_takeover(frame, now_s=now)
                     restoration_phase = "ready" if ready else "waiting"
                     if reset_pressed:
-                        requeue_current = completed_attempt is None
                         completed_attempt = None
-                        restore_next(requeue_current=requeue_current)
+                        restore_next()
                         frozen = True
                     elif ready and record_pressed:
+                        restore_queue.assert_ownership()
                         path = recorder.start(origin=current_origin)
                         restoration_phase = "recording"
                         backend.pulse_recording_start()
@@ -701,17 +701,21 @@ def _run(
                     else:
                         frozen = True
                 elif restoration_phase == "recording":
-                    if record_pressed:
+                    if record_pressed or reset_pressed:
                         path = recorder.stop()
                         backend.pulse_recording_stop()
                         if path is None:
-                            restore_current(preserve_completed=True)
+                            if reset_pressed:
+                                completed_attempt = None
+                                restore_next()
+                            else:
+                                restore_current(preserve_completed=True)
                             print(
                                 "  [RESTORE] discarded empty recording; restored current point",
                                 flush=True,
                             )
                         else:
-                            advance_after_finalize = False
+                            advance_after_finalize = reset_pressed
                             restoration_phase = "finalizing"
                             print(f"  [RESTORE] finalizing {path}", flush=True)
                         frozen = True

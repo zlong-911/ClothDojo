@@ -20,6 +20,7 @@ from typing import Any
 from clothdojo.assets import GarmentLibrary
 from clothdojo.collection.config import CollectionConfig
 from clothdojo.collection.continuation import build_continuation_plan
+from clothdojo.collection.intervention_leases import claim_asset, reserve_legacy_sessions
 from clothdojo.teleop.install import TeleopInstallation
 from clothdojo.teleop.session import AssetSwitchRequest, SessionPlan
 
@@ -194,6 +195,21 @@ class TeleopSupervisor:
             with closing(self._connect()) as database:
                 database.execute("BEGIN IMMEDIATE")
                 slot = self._select_slot(database, slot_id)
+                if intervention_plan is not None:
+                    reserve_legacy_sessions(database, profile_id)
+                    claimed = claim_asset(
+                        database, profile_id=profile_id, session_id=session_id,
+                        points=intervention_plan["breakpoints"],
+                        output_root=profile.hil_trajectory_root, visited=set(),
+                    )
+                    if not claimed:
+                        raise NoAvailableSlotError("HIL points are already claimed or completed")
+                    asset_id = claimed[0]["asset_id"]
+                    asset_path = GarmentLibrary(self.config.assets_root).converted(asset_id)
+                    intervention_plan = {**intervention_plan, "asset_id": asset_id,
+                        "allocation": {"database_path": str(self.database_path.resolve()),
+                                       "session_id": session_id,
+                                       "initial_points": claimed}}
                 if (
                     intervention_plan is not None
                     and len(intervention_plan.get("assets", ())) > 1
@@ -619,6 +635,8 @@ class TeleopSupervisor:
                 "DELETE FROM continuation_leases WHERE session_id = ?",
                 (session_id,),
             )
+            database.execute("DELETE FROM intervention_leases WHERE session_id = ?",
+                             (session_id,))
             database.commit()
 
     def _initialize_database(self) -> None:
@@ -657,6 +675,12 @@ class TeleopSupervisor:
                     session_id TEXT NOT NULL,
                     PRIMARY KEY (source_profile_id, source_episode_id),
                     FOREIGN KEY (session_id) REFERENCES sessions(id)
+                );
+                CREATE TABLE IF NOT EXISTS intervention_leases (
+                    profile_id TEXT NOT NULL,
+                    asset_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    PRIMARY KEY (profile_id, asset_id)
                 );
                 """
             )

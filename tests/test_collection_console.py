@@ -68,6 +68,22 @@ def _profile(tmp_path: Path) -> CollectionProfile:
     )
 
 
+def test_hil_claim_completion_scan_ignores_empty_and_unfinished_results(tmp_path):
+    from clothdojo.collection.intervention_leases import completed_points
+
+    for name, actions, status in (("saved", 5, "complete"), ("empty", 0, "complete"),
+                                   ("aborted", 5, "aborted")):
+        path = tmp_path / name
+        _manifest(path, actions=actions)
+        manifest_path = path / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["status"] = status
+        manifest["metadata"].update(source="human_intervention", source_run_id="run",
+                                     source_episode_id=name, source_sample_index=10)
+        manifest_path.write_text(json.dumps(manifest))
+    assert completed_points(tmp_path) == {("run", "saved", 10)}
+
+
 def test_collection_config_exposes_workflow_choices_not_runtime_paths(
     tmp_path: Path,
 ) -> None:
@@ -1128,13 +1144,17 @@ def test_local_supervisor_leases_gpu_and_stops_process(tmp_path: Path) -> None:
         asset_id="shirt_a",
         slot_id="gpu-0",
         mode="intervention",
-        intervention_plan={"source": "fold-test"},
+        intervention_plan={"breakpoints": [{"asset_id": "shirt_a", "source_run_id": "run",
+            "source_episode_id": "a", "source_sample_index": 1}]},
     )
     fold_plan = launched_plans[-1]
     assert fold_plan.mode == "intervention"
     assert fold_plan.scene == "shirt_fold"
     assert fold_plan.intervention_plan is not None
     assert fold_plan.continuation_plan is None
+    with supervisor._connect() as database:
+        assert database.execute("SELECT asset_id FROM intervention_leases").fetchone()[0] \
+            == "shirt_a"
     supervisor.stop_session(fold_intervention["id"])
     deadline = time.monotonic() + 5.0
     while time.monotonic() < deadline:
@@ -1145,12 +1165,16 @@ def test_local_supervisor_leases_gpu_and_stops_process(tmp_path: Path) -> None:
     assert result["status"] == "stopped"
     assert supervisor.slots()[0]["status"] == "available"
 
+    with supervisor._connect() as database:
+        assert database.execute("SELECT COUNT(*) FROM intervention_leases").fetchone()[0] == 0
+
     intervention = supervisor.start_session(
         profile_id=profile.id,
         asset_id="shirt_a",
         slot_id="gpu-0",
         mode="intervention",
-        intervention_plan={"source": "test"},
+        intervention_plan={"breakpoints": [{"asset_id": "shirt_a", "source_run_id": "run",
+            "source_episode_id": "a", "source_sample_index": 1}]},
     )
     assert launched_plans[-1].mode == "intervention"
     assert launched_plans[-1].output_root == profile.hil_trajectory_root
@@ -1162,6 +1186,21 @@ def test_local_supervisor_leases_gpu_and_stops_process(tmp_path: Path) -> None:
             break
         time.sleep(0.05)
     assert result["status"] == "stopped"
+
+
+    def fail_launch(*_args):
+        raise RuntimeError("launch failed")
+
+    supervisor._launcher = fail_launch
+    with pytest.raises(RuntimeError, match="launch failed"):
+        supervisor.start_session(
+            profile_id=profile.id, asset_id="shirt_a", slot_id="gpu-0", mode="intervention",
+            intervention_plan={"breakpoints": [{"asset_id": "shirt_a", "source_run_id": "run",
+                "source_episode_id": "a", "source_sample_index": 1}]},
+        )
+    with supervisor._connect() as database:
+        assert database.execute("SELECT COUNT(*) FROM intervention_leases").fetchone()[0] == 0
+    assert supervisor.slots()[0]["status"] == "available"
 
 
 def test_local_supervisor_ports_are_stable_for_physical_gpu_ids(tmp_path: Path) -> None:
