@@ -1,0 +1,212 @@
+{
+  "sources": [
+    {
+      "plan": "paper/experiments/event_four_by_eight_20260908.json",
+      "manifest": "outputs/paper/event_four_by_eight_20260908/manifest.json"
+    }
+  ],
+  "phases": [
+    [
+      [
+        0,
+        5,
+        "Regrasp in midair"
+      ],
+      [
+        5,
+        7,
+        "Fling open"
+      ],
+      [
+        7,
+        8,
+        "Adjust sleeve"
+      ]
+    ],
+    [
+      [
+        0,
+        2,
+        "Lift & fling"
+      ],
+      [
+        2,
+        4,
+        "Unroll & stretch"
+      ],
+      [
+        4,
+        5,
+        "Reposition"
+      ],
+      [
+        5,
+        8,
+        "Reveal, regrasp & toss"
+      ]
+    ],
+    [
+      [
+        0,
+        2,
+        "Fold hood"
+      ],
+      [
+        2,
+        4,
+        "Fold sleeves & sides"
+      ],
+      [
+        4,
+        6,
+        "Switch hands to adjust"
+      ],
+      [
+        6,
+        8,
+        "Adjust after folding"
+      ]
+    ],
+    [
+      [
+        0,
+        2,
+        "Bring hem upward"
+      ],
+      [
+        2,
+        4,
+        "Fold hood"
+      ],
+      [
+        4,
+        5,
+        "Rotate"
+      ],
+      [
+        5,
+        6,
+        "Fold body"
+      ],
+      [
+        6,
+        8,
+        "Adjust after folding"
+      ]
+    ]
+  ],
+  "row_indices": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "frame_indices_within_nine": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "physical_size_mm": [
+    178.0,
+    92.91875
+  ],
+  "frame_width_mm": 20.90625,
+  "crop": null,
+  "rows": [
+    {
+      "name": "rand_24XNTUDUZ1_000001",
+      "trajectory": "data/rollouts/hil_sft40k_rtc_n5_h10_w5_exp_200assets_4states_20260902/trajectories/rand_24XNTUDUZ1_000001",
+      "frames": [
+        75,
+        150,
+        325,
+        450,
+        660,
+        705,
+        720,
+        975
+      ]
+    },
+    {
+      "name": "rand_20JUZJXU1F_000001",
+      "trajectory": "data/rollouts/hil_sft40k_rtc_n5_h10_w5_exp_200assets_4states_20260902/trajectories/rand_20JUZJXU1F_000001",
+      "frames": [
+        650,
+        865,
+        1670,
+        1800,
+        2200,
+        3350,
+        3400,
+        3435
+      ]
+    },
+    {
+      "name": "rand_0EXG3ISQ34_000000",
+      "trajectory": "data/collections/shirt_fold/rollouts/fold_clean30k_standard2000_rtc30s_20260906/trajectories/rand_0EXG3ISQ34_000000",
+      "frames": [
+        125,
+        200,
+        275,
+        550,
+        725,
+        810,
+        925,
+        975
+      ]
+    },
+    {
+      "name": "rand_0TKY8IYX0W_000003",
+      "trajectory": "data/collections/shirt_fold/rollouts/fold_clean30k_standard2000_rtc30s_20260906/trajectories/rand_0TKY8IYX0W_000003",
+      "frames": [
+        100,
+        325,
+        695,
+        750,
+        865,
+        1005,
+        1050,
+        1100
+      ]
+    }
+  ],
+  "layout": {
+    "font": "Arial",
+    "column_gap_mm": 0.9,
+    "row_gap_mm": 1.5,
+    "group_gap_mm": 4.0,
+    "right_margin_mm": 0.35,
+    "group_border_colors": [
+      "#000000"
+    ],
+    "group_color_order": "uniform",
+    "group_border_pt": 0.7,
+    "group_top_edge": "broken_around_title",
+    "title_edge_gap_mm": 0.8,
+    "title_color": "matches_group_border",
+    "title_size_pt": 8.008998875140607,
+    "title_weight": "normal",
+    "axis_text_color": "#000000",
+    "axis_text_size_pt": 8.008998875140607,
+    "task_text_size_pt": 9.010123734533183,
+    "axis_text_weight": "normal",
+    "paper_width_mm": 177.8,
+    "paper_text_size_pt": {
+      "title": 8.0,
+      "axis": 8.0,
+      "task": 9.0
+    },
+    "title_band_height_mm": 4.8,
+    "axis_linewidth_pt": 0.7,
+    "axis_to_image_gap_mm": 2.2,
+    "separator_pt": 0.25,
+    "task_separator_pt": 0.7,
+    "task_separator_style": "dashed"
+  },
+  "note": "Top two rows show flattening event excerpts; remaining rows show folding sequences. Each row is independently chronological; rows are not synchronized. Original cam_high pose, focal length 6.5, uncropped 4:3 Isaac renders."
+}

@@ -1,0 +1,625 @@
+{
+  "case_pairing": {
+    "checks": {
+      "exact_case_keys": true,
+      "exact_initial_and_policy_seeds": true,
+      "shared_evaluation_protocol": true,
+      "shared_policy_runtime_fields": true
+    },
+    "supported": true
+  },
+  "comparison": "NOCS-919 minus White-919",
+  "condition_summaries": {
+    "nocs": {
+      "all": {
+        "assets": 200,
+        "cases": 800,
+        "ever_success": [
+          511,
+          0.63875
+        ],
+        "means": {
+          "airborne_seconds": 33.9125625,
+          "best_combined_distance": 0.05984866107814014,
+          "best_deformable_distance": 0.08202000900637359,
+          "best_rigid_distance": 0.018673300885645575,
+          "terminal_combined_distance": 0.10552676696097478,
+          "terminal_deformable_distance": 0.14073178312915843,
+          "terminal_rigid_distance": 0.040146022506796726
+        },
+        "terminal_success": [
+          399,
+          0.49875
+        ]
+      },
+      "seen": {
+        "assets": 100,
+        "cases": 400,
+        "ever_success": [
+          280,
+          0.7
+        ],
+        "means": {
+          "airborne_seconds": 32.049749999999996,
+          "best_combined_distance": 0.05587699563242495,
+          "best_deformable_distance": 0.07719646186102182,
+          "best_rigid_distance": 0.016283701524027947,
+          "terminal_combined_distance": 0.09488033358706162,
+          "terminal_deformable_distance": 0.1275116954825353,
+          "terminal_rigid_distance": 0.034279232661465354
+        },
+        "terminal_success": [
+          234,
+          0.585
+        ]
+      },
+      "unseen": {
+        "assets": 100,
+        "cases": 400,
+        "ever_success": [
+          231,
+          0.5775
+        ],
+        "means": {
+          "airborne_seconds": 35.775375,
+          "best_combined_distance": 0.06382032652385533,
+          "best_deformable_distance": 0.08684355615172536,
+          "best_rigid_distance": 0.021062900247263202,
+          "terminal_combined_distance": 0.11617320033488795,
+          "terminal_deformable_distance": 0.15395187077578157,
+          "terminal_rigid_distance": 0.04601281235212809
+        },
+        "terminal_success": [
+          165,
+          0.4125
+        ]
+      }
+    },
+    "white": {
+      "all": {
+        "assets": 200,
+        "cases": 800,
+        "ever_success": [
+          205,
+          0.25625
+        ],
+        "means": {
+          "airborne_seconds": 37.63125,
+          "best_combined_distance": 0.08849792485358193,
+          "best_deformable_distance": 0.12318174954038114,
+          "best_rigid_distance": 0.024085107329422612,
+          "terminal_combined_distance": 0.15905662338482215,
+          "terminal_deformable_distance": 0.2164942302671261,
+          "terminal_rigid_distance": 0.05238678195511966
+        },
+        "terminal_success": [
+          126,
+          0.1575
+        ]
+      },
+      "seen": {
+        "assets": 100,
+        "cases": 400,
+        "ever_success": [
+          114,
+          0.285
+        ],
+        "means": {
+          "airborne_seconds": 38.989625000000004,
+          "best_combined_distance": 0.08668067201040686,
+          "best_deformable_distance": 0.12026902762241662,
+          "best_rigid_distance": 0.02430229723590628,
+          "terminal_combined_distance": 0.15869658289011568,
+          "terminal_deformable_distance": 0.21998100180644542,
+          "terminal_rigid_distance": 0.04488266275244314
+        },
+        "terminal_success": [
+          79,
+          0.1975
+        ]
+      },
+      "unseen": {
+        "assets": 100,
+        "cases": 400,
+        "ever_success": [
+          91,
+          0.2275
+        ],
+        "means": {
+          "airborne_seconds": 36.272875,
+          "best_combined_distance": 0.09031517769675702,
+          "best_deformable_distance": 0.12609447145834565,
+          "best_rigid_distance": 0.023867917422938943,
+          "terminal_combined_distance": 0.15941666387952863,
+          "terminal_deformable_distance": 0.2130074587278068,
+          "terminal_rigid_distance": 0.05989090115779618
+        },
+        "terminal_success": [
+          47,
+          0.1175
+        ]
+      }
+    }
+  },
+  "integrity": {
+    "nocs": {
+      "checks": {
+        "complete_800": true,
+        "four_state_indices_each": true,
+        "manifest_case_and_seeds_match_results": true,
+        "split_100_seen_100_unseen": true,
+        "unique_200_assets_x4": true
+      },
+      "passed": true
+    },
+    "white": {
+      "checks": {
+        "complete_800": true,
+        "four_state_indices_each": true,
+        "manifest_case_and_seeds_match_results": true,
+        "split_100_seen_100_unseen": true,
+        "unique_200_assets_x4": true
+      },
+      "passed": true
+    }
+  },
+  "limits": [
+    "Single training seed and one EVAL-800 round per White/NOCS condition.",
+    "Bootstrap conditions on observed runs and fixed seed identities; it excludes training-seed and future-run/host variation.",
+    "Distance/airborne means are descriptive; multiple-comparison adjustment: none.",
+    "This is a data-agent panel, not downstream RGB evaluation."
+  ],
+  "paired_deltas_nocs_minus_white": {
+    "all": {
+      "ever_success_rate": 0.3825,
+      "means": {
+        "airborne_seconds": -3.7186874999999997,
+        "best_combined_distance": -0.028649263775441795,
+        "best_deformable_distance": -0.04116174053400755,
+        "best_rigid_distance": -0.0054118064437770385,
+        "terminal_combined_distance": -0.053529856423847375,
+        "terminal_deformable_distance": -0.07576244713796769,
+        "terminal_rigid_distance": -0.012240759448322933
+      },
+      "terminal_success_rate": 0.34125
+    },
+    "seen": {
+      "ever_success_rate": 0.415,
+      "means": {
+        "airborne_seconds": -6.939875,
+        "best_combined_distance": -0.0308036763779819,
+        "best_deformable_distance": -0.0430725657613948,
+        "best_rigid_distance": -0.008018595711878334,
+        "terminal_combined_distance": -0.06381624930305406,
+        "terminal_deformable_distance": -0.09246930632391014,
+        "terminal_rigid_distance": -0.010603430090977781
+      },
+      "terminal_success_rate": 0.3875
+    },
+    "unseen": {
+      "ever_success_rate": 0.35,
+      "means": {
+        "airborne_seconds": -0.49750000000000005,
+        "best_combined_distance": -0.02649485117290169,
+        "best_deformable_distance": -0.0392509153066203,
+        "best_rigid_distance": -0.0028050171756757434,
+        "terminal_combined_distance": -0.04324346354464069,
+        "terminal_deformable_distance": -0.059055587952025236,
+        "terminal_rigid_distance": -0.013878088805668085
+      },
+      "terminal_success_rate": 0.295
+    }
+  },
+  "repeatability_800_three_rounds": {
+    "by_round": {
+      "r1": {
+        "all": {
+          "assets": 200,
+          "cases": 800,
+          "ever_success": [
+            476,
+            0.595
+          ],
+          "means": {
+            "airborne_seconds": 38.3164375,
+            "best_combined_distance": 0.06316639948345255,
+            "best_deformable_distance": 0.08703381115570664,
+            "best_rigid_distance": 0.01884120611474234,
+            "terminal_combined_distance": 0.11408424345136155,
+            "terminal_deformable_distance": 0.15459733796305955,
+            "terminal_rigid_distance": 0.038845639553028374
+          },
+          "terminal_success": [
+            391,
+            0.48875
+          ]
+        },
+        "seen": {
+          "assets": 100,
+          "cases": 400,
+          "ever_success": [
+            268,
+            0.67
+          ],
+          "means": {
+            "airborne_seconds": 34.488875,
+            "best_combined_distance": 0.05728184553678148,
+            "best_deformable_distance": 0.07992493029683828,
+            "best_rigid_distance": 0.015230402054176721,
+            "terminal_combined_distance": 0.10075634306878783,
+            "terminal_deformable_distance": 0.13676522544119507,
+            "terminal_rigid_distance": 0.03388270476780235
+          },
+          "terminal_success": [
+            232,
+            0.58
+          ]
+        },
+        "unseen": {
+          "assets": 100,
+          "cases": 400,
+          "ever_success": [
+            208,
+            0.52
+          ],
+          "means": {
+            "airborne_seconds": 42.144,
+            "best_combined_distance": 0.06905095343012363,
+            "best_deformable_distance": 0.09414269201457501,
+            "best_rigid_distance": 0.02245201017530796,
+            "terminal_combined_distance": 0.12741214383393526,
+            "terminal_deformable_distance": 0.17242945048492403,
+            "terminal_rigid_distance": 0.0438085743382544
+          },
+          "terminal_success": [
+            159,
+            0.3975
+          ]
+        }
+      },
+      "r2": {
+        "all": {
+          "assets": 200,
+          "cases": 800,
+          "ever_success": [
+            495,
+            0.61875
+          ],
+          "means": {
+            "airborne_seconds": 36.048249999999996,
+            "best_combined_distance": 0.060610684072598814,
+            "best_deformable_distance": 0.08360833990154788,
+            "best_rigid_distance": 0.017900751398259446,
+            "terminal_combined_distance": 0.11049609858659096,
+            "terminal_deformable_distance": 0.15024930943385698,
+            "terminal_rigid_distance": 0.03666870634288443
+          },
+          "terminal_success": [
+            416,
+            0.52
+          ]
+        },
+        "seen": {
+          "assets": 100,
+          "cases": 400,
+          "ever_success": [
+            284,
+            0.71
+          ],
+          "means": {
+            "airborne_seconds": 33.106750000000005,
+            "best_combined_distance": 0.05446593915345147,
+            "best_deformable_distance": 0.07548770872643218,
+            "best_rigid_distance": 0.015425509716369561,
+            "terminal_combined_distance": 0.09693700268864631,
+            "terminal_deformable_distance": 0.1322914596553892,
+            "terminal_rigid_distance": 0.031278724726626024
+          },
+          "terminal_success": [
+            249,
+            0.6225
+          ]
+        },
+        "unseen": {
+          "assets": 100,
+          "cases": 400,
+          "ever_success": [
+            211,
+            0.5275
+          ],
+          "means": {
+            "airborne_seconds": 38.98975,
+            "best_combined_distance": 0.06675542899174616,
+            "best_deformable_distance": 0.09172897107666358,
+            "best_rigid_distance": 0.020375993080149327,
+            "terminal_combined_distance": 0.1240551944845356,
+            "terminal_deformable_distance": 0.16820715921232476,
+            "terminal_rigid_distance": 0.042058687959142846
+          },
+          "terminal_success": [
+            167,
+            0.4175
+          ]
+        }
+      },
+      "r3": {
+        "all": {
+          "assets": 200,
+          "cases": 800,
+          "ever_success": [
+            477,
+            0.59625
+          ],
+          "means": {
+            "airborne_seconds": 37.83125,
+            "best_combined_distance": 0.06317074046935886,
+            "best_deformable_distance": 0.08734071160200983,
+            "best_rigid_distance": 0.018283651133210163,
+            "terminal_combined_distance": 0.11472883538110182,
+            "terminal_deformable_distance": 0.1562528019049205,
+            "terminal_rigid_distance": 0.037612897253470695
+          },
+          "terminal_success": [
+            411,
+            0.51375
+          ]
+        },
+        "seen": {
+          "assets": 100,
+          "cases": 400,
+          "ever_success": [
+            261,
+            0.6525
+          ],
+          "means": {
+            "airborne_seconds": 34.947,
+            "best_combined_distance": 0.05924743195530027,
+            "best_deformable_distance": 0.08220924052875489,
+            "best_rigid_distance": 0.016604073341735626,
+            "terminal_combined_distance": 0.10499087984208018,
+            "terminal_deformable_distance": 0.14319736075121908,
+            "terminal_rigid_distance": 0.03403598606785636
+          },
+          "terminal_success": [
+            232,
+            0.58
+          ]
+        },
+        "unseen": {
+          "assets": 100,
+          "cases": 400,
+          "ever_success": [
+            216,
+            0.54
+          ],
+          "means": {
+            "airborne_seconds": 40.7155,
+            "best_combined_distance": 0.06709404898341745,
+            "best_deformable_distance": 0.09247218267526477,
+            "best_rigid_distance": 0.0199632289246847,
+            "terminal_combined_distance": 0.12446679092012346,
+            "terminal_deformable_distance": 0.16930824305862188,
+            "terminal_rigid_distance": 0.04118980843908503
+          },
+          "terminal_success": [
+            179,
+            0.4475
+          ]
+        }
+      }
+    },
+    "case_and_seed_identity": {
+      "r2": true,
+      "r3": true
+    },
+    "limit": "30k NOCS-1838 checkpoint; three hosts confound host and round and do not bound future-run variation.",
+    "published_counts_crosscheck": {
+      "r1": true,
+      "r2": true,
+      "r3": true
+    },
+    "same_checkpoint": true,
+    "same_protocol": true,
+    "terminal_rate_mean": 0.5075,
+    "terminal_rate_range": 0.03125,
+    "terminal_rate_sample_sd": 0.016535945694153696
+  },
+  "schema": "clothdojo_nocs800_evidence_v2",
+  "source_files": [
+    {
+      "path": "paper/experiments/analyze_nocs800.py",
+      "sha256": "db567ded29c82586ae2629cf7629a80ac772aa38b49e950a2359a44dd0529d62"
+    },
+    {
+      "path": "data/benchmarks/balanced200_20260901/states/meta.json",
+      "sha256": "5f2ad355ccdded1301ce774c487cf5b590c3b810a00d24f46c9e63780cd23361"
+    },
+    {
+      "path": "outputs/evaluations/white919_noaug_balanced200_20260902/meta.json",
+      "sha256": "e5b79d1267a44f6486882a7b5abc33e16b5069e73844d4303cbcb7c4d77fb0d9"
+    },
+    {
+      "path": "outputs/evaluations/white919_noaug_balanced200_20260902/results.jsonl",
+      "sha256": "8c093b83a882ccdd9b8158b2e4f963f691be9742a1fd01c7c455acc97ab48274"
+    },
+    {
+      "path": "outputs/evaluations/nocs919_noaug_balanced200_20260902/meta.json",
+      "sha256": "b32c3a8b9de129be09304fdcc6b971e64e844e0e1f8676bdc72745f77bc45c31"
+    },
+    {
+      "path": "outputs/evaluations/nocs919_noaug_balanced200_20260902/results.jsonl",
+      "sha256": "632a62767da140b1b230cf3191ebd182a3000643a69a1165637a8be5e7a1c3f0"
+    },
+    {
+      "path": "outputs/training/pi05_white919_noaug_promptfix_b128_s43_20260831/preflight.json",
+      "sha256": "271b9a91cc0abbf9ace768aca0a2dae0c8685154fc14708a5d799c9b8262a1e4"
+    },
+    {
+      "path": "outputs/training/pi05_nocs919_noaug_promptfix_b128_s43_20260831/preflight.json",
+      "sha256": "2747c208b794ab8d0e660b8a3d4e2099c4b90e936c7febba1fa08f68b9665acb"
+    },
+    {
+      "path": "outputs/evaluations/eval919_balanced200_20260902/configs/white919.yaml",
+      "sha256": "663012bc5658db1838d48230dea372023b5a32885c3edca0e298d781dc1c4efb"
+    },
+    {
+      "path": "outputs/evaluations/eval919_balanced200_20260902/configs/nocs919.yaml",
+      "sha256": "f324ad7906d561a58bad9267e82cb485e9843a350e9a409f3e2061d67d0e429a"
+    },
+    {
+      "path": "outputs/evaluations/eval919_balanced200_20260902/runtime/eval800.py",
+      "sha256": "3225a0a33c3a1a6b13b1902be591ee09fda17ac1ee4c38c542dbd6b0596a756f"
+    },
+    {
+      "path": "outputs/evaluations/eval919_balanced200_20260902/runtime/white919-local-plan.json",
+      "sha256": "bb9e75790f7f0cf8bf824c0ec40b3ea8c847d461d8990fd3c2ac98100bf9c043"
+    },
+    {
+      "path": "outputs/evaluations/eval919_balanced200_20260902/runtime/white919-remote-plan.json",
+      "sha256": "e015896f7d8a67199e1dbc461bc1ce23ebeb1abfa25b57f98492776928c43be7"
+    },
+    {
+      "path": "outputs/evaluations/eval919_balanced200_20260902/runtime/frozen_runtime/src/clothdojo/rollout/trajectory_collection.py",
+      "sha256": "03dbf522cafd244da8f89de6283598d77db6294f5cbdb7a6c5156f7795de05b7"
+    },
+    {
+      "path": "outputs/evaluations/eval919_balanced200_20260902/runtime/frozen_runtime/src/clothdojo/sim/scene.py",
+      "sha256": "53178d18843c32dd5363c490fc444893107605bbc796420541012a39a09c1074"
+    },
+    {
+      "path": "outputs/evaluations/eval919_balanced200_20260902/runtime/frozen_runtime/src/clothdojo/rendering.py",
+      "sha256": "df4a3563fbc3a5c1d2fbb755935e4874bec287d02db4d124253c759a17ed003e"
+    },
+    {
+      "path": "outputs/evaluations/white919_noaug_20260831/runtime/frozen_runtime/src/clothdojo/sim/scene.py",
+      "sha256": "53178d18843c32dd5363c490fc444893107605bbc796420541012a39a09c1074"
+    },
+    {
+      "path": "outputs/evaluations/white919_noaug_20260831/runtime/frozen_runtime/src/clothdojo/rendering.py",
+      "sha256": "df4a3563fbc3a5c1d2fbb755935e4874bec287d02db4d124253c759a17ed003e"
+    },
+    {
+      "path": "outputs/evaluations/white919_noaug_20260831/runtime/frozen_runtime/src/clothdojo/rollout/trajectory_collection.py",
+      "sha256": "03dbf522cafd244da8f89de6283598d77db6294f5cbdb7a6c5156f7795de05b7"
+    },
+    {
+      "path": "outputs/evaluations/white919_noaug_20260831/runtime/smoke.py",
+      "sha256": "e63082f05c49971cac5854baa34ffe5fcac88f15967db3bef14410faea59d89c"
+    },
+    {
+      "path": "outputs/evaluations/white919_noaug_20260831/runtime/smoke.json",
+      "sha256": "1e09ea70a147569ceb8b3bfb931f6747d207e4bc3ccceffb763957a31caf1250"
+    },
+    {
+      "path": "outputs/evaluations/white919_noaug_20260831/runtime/white_observation.png",
+      "sha256": "3e98395320eaa7b671cea1fcb6fd0ee4263088c6b7a50306f239cc99d745fe2a"
+    },
+    {
+      "path": "outputs/evaluations/balanced200_repeatability_20260901/conditions/r1/meta.json",
+      "sha256": "987ad08874b37c7e38e77beacf8cc64c2f01fa25e4b82b85971db50af7eacbe5"
+    },
+    {
+      "path": "outputs/evaluations/balanced200_repeatability_20260901/conditions/r1/results.jsonl",
+      "sha256": "e66a0050fd639e0a9ad047e034eb0d79a010cbe36852906a5092dea27e5f5055"
+    },
+    {
+      "path": "outputs/evaluations/balanced200_repeatability_20260901/conditions/r2/meta.json",
+      "sha256": "85f2e750ca0d26debeecdbd00f154820f4fa2f58ebc2ab6bbbe177a79501d0a6"
+    },
+    {
+      "path": "outputs/evaluations/balanced200_repeatability_20260901/conditions/r2/results.jsonl",
+      "sha256": "cb4c831ce021ed0f45804dee7a9ab26eb5fd7203fdbe4f97a1ab5685d50e98c2"
+    },
+    {
+      "path": "outputs/evaluations/balanced200_repeatability_20260901/conditions/r3/meta.json",
+      "sha256": "acfce6861898c40f78ac72cae7211bc7298c000f898e149bbdc73ff784032331"
+    },
+    {
+      "path": "outputs/evaluations/balanced200_repeatability_20260901/conditions/r3/results.jsonl",
+      "sha256": "b0bc91095907502065bb8d38c4a7ef4fefa78cb657009483ca60239e0c196c23"
+    },
+    {
+      "path": "outputs/evaluations/balanced200_repeatability_20260901/analysis.json",
+      "sha256": "c081106b7ef2a85d44b5fad3c941a2019e6c759000d0b7c3fcf07a90450883d3"
+    },
+    {
+      "path": "outputs/evaluations/balanced200_repeatability_20260901/experiment.json",
+      "sha256": "60c1109b5783427c3c7eaf868a3d6b62470df009ddc9c6e9a04bed1f067672db"
+    },
+    {
+      "path": "outputs/evaluations/balanced200_repeatability_20260901/results.md",
+      "sha256": "4ad6a2c0bcf772308027bf73e293c286556c68082f59ee3e7340d0836d356a65"
+    }
+  ],
+  "terminal_success_asset_bootstrap": {
+    "all": {
+      "assets": 200,
+      "ci95_percentile": [
+        0.3025,
+        0.38125
+      ],
+      "point_estimate": 0.34125
+    },
+    "contrast": "nocs_minus_white",
+    "draws": 100000,
+    "method": "paired percentile bootstrap; assets resampled within seen/unseen, splits equally weighted",
+    "seed": 20260905,
+    "seen": {
+      "assets": 100,
+      "ci95_percentile": [
+        0.335,
+        0.4425
+      ],
+      "point_estimate": 0.3875
+    },
+    "states_retained_per_asset": 4,
+    "status": "computed_strict_case_paired",
+    "unit": "asset",
+    "unseen": {
+      "assets": 100,
+      "ci95_percentile": [
+        0.2375,
+        0.3525
+      ],
+      "point_estimate": 0.295
+    }
+  },
+  "training_pairing": {
+    "episode_and_frame_counts_match": true,
+    "limit": "Preflights do not prove byte-identical state/action payloads; visual dataset manifests intentionally differ.",
+    "matched_recipe": true,
+    "nocs_episodes_frames": [
+      919,
+      1576387
+    ],
+    "seed": 43,
+    "white_episodes_frames": [
+      919,
+      1576387
+    ]
+  },
+  "visual_identity_audit": {
+    "all_checks_passed": true,
+    "checks": {
+      "all_800_manifests_white_with_nocs_residue": true,
+      "both_persisted_worker_plans_white": true,
+      "launcher_maps_white_and_copies_to_spec": true,
+      "metadata_helper_hardcodes_nocs": true,
+      "old_white_smoke_passed_same_checkpoint": true,
+      "old_white_smoke_uses_identical_frozen_sources": true,
+      "plans_cover_200_assets_14_workers": true,
+      "scene_white_branch_sets_rgb255": true,
+      "worker_passes_spec_visual_to_scene": true
+    },
+    "claim_limit": "Report +34.125 pp as strict case-paired evidence with White execution provenance; not an unconditionally pixel-proven visual-only causal effect.",
+    "corroborating_pixel_artifact": {
+      "manual_inspection": "three-camera image shows a white/gray garment rather than NOCS coordinate colors",
+      "path": "outputs/evaluations/white919_noaug_20260831/runtime/white_observation.png",
+      "scope": "earlier White smoke using byte-identical frozen scene/rendering/collection sources; not an EVAL-800 frame",
+      "sha256": "3e98395320eaa7b671cea1fcb6fd0ee4263088c6b7a50306f239cc99d745fe2a"
+    },
+    "eval800_retained_policy_input_pixels": [],
+    "metadata_conflict_explained": "policy_observation_settings() hard-codes nocs while scene appearance uses spec.cloth_visual",
+    "verdict": "white_scene_supported_by_frozen_execution_provenance_not_direct_eval800_pixel_audit"
+  }
+}

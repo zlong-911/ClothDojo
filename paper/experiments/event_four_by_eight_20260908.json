@@ -1,0 +1,132 @@
+{
+  "schema": "clothdojo_paper_teaser_render_v1",
+  "seed": 20260907,
+  "source_batch_status": "Flatten batch remains provisional, matching previously inspected videos.",
+  "jobs": [
+    {
+      "group": "frames",
+      "name": "rand_24XNTUDUZ1_000001",
+      "trajectory": "data/rollouts/hil_sft40k_rtc_n5_h10_w5_exp_200assets_4states_20260902/trajectories/rand_24XNTUDUZ1_000001",
+      "frames": [
+        75,
+        150,
+        325,
+        450,
+        660,
+        705,
+        720,
+        975
+      ],
+      "camera": "cam_high",
+      "camera_focal_length": 6.5,
+      "cloth_visual": "normal",
+      "appearance_episode_index": 0,
+      "appearance_id": "fold_behavior_shared_studio_20260907",
+      "room": "azure",
+      "environment": "robodojo",
+      "room_yaw": 0,
+      "environment_light_scale": 1,
+      "light_temperature": 5100,
+      "paper_exposure_bias": 0,
+      "geniesim_table_material_pool": [
+        "geniesim_lab_cream"
+      ],
+      "paper_cloth_material": "velour_velvet",
+      "paper_backface_scale": 0.25
+    },
+    {
+      "group": "frames",
+      "name": "rand_20JUZJXU1F_000001",
+      "trajectory": "data/rollouts/hil_sft40k_rtc_n5_h10_w5_exp_200assets_4states_20260902/trajectories/rand_20JUZJXU1F_000001",
+      "frames": [
+        650,
+        865,
+        1670,
+        1800,
+        2200,
+        3350,
+        3400,
+        3435
+      ],
+      "camera": "cam_high",
+      "camera_focal_length": 6.5,
+      "cloth_visual": "normal",
+      "appearance_episode_index": 0,
+      "appearance_id": "fold_behavior_shared_studio_20260907",
+      "room": "azure",
+      "environment": "robodojo",
+      "room_yaw": 0,
+      "environment_light_scale": 1,
+      "light_temperature": 5100,
+      "paper_exposure_bias": 0,
+      "geniesim_table_material_pool": [
+        "geniesim_lab_cream"
+      ],
+      "paper_cloth_material": "cotton_jersey",
+      "paper_backface_scale": 0.25
+    },
+    {
+      "group": "frames",
+      "name": "rand_0EXG3ISQ34_000000",
+      "trajectory": "data/collections/shirt_fold/rollouts/fold_clean30k_standard2000_rtc30s_20260906/trajectories/rand_0EXG3ISQ34_000000",
+      "frames": [
+        125,
+        200,
+        275,
+        550,
+        725,
+        810,
+        925,
+        975
+      ],
+      "camera": "cam_high",
+      "camera_focal_length": 6.5,
+      "cloth_visual": "normal",
+      "appearance_episode_index": 0,
+      "appearance_id": "fold_behavior_shared_studio_20260907",
+      "room": "azure",
+      "environment": "robodojo",
+      "room_yaw": 0,
+      "environment_light_scale": 1,
+      "light_temperature": 5100,
+      "paper_exposure_bias": 0,
+      "geniesim_table_material_pool": [
+        "geniesim_lab_cream"
+      ],
+      "paper_cloth_material": "denim_fabric_03",
+      "paper_backface_scale": 0.25
+    },
+    {
+      "group": "frames",
+      "name": "rand_0TKY8IYX0W_000003",
+      "trajectory": "data/collections/shirt_fold/rollouts/fold_clean30k_standard2000_rtc30s_20260906/trajectories/rand_0TKY8IYX0W_000003",
+      "frames": [
+        100,
+        325,
+        695,
+        750,
+        865,
+        1005,
+        1050,
+        1100
+      ],
+      "camera": "cam_high",
+      "camera_focal_length": 6.5,
+      "cloth_visual": "normal",
+      "appearance_episode_index": 0,
+      "appearance_id": "fold_behavior_shared_studio_20260907",
+      "room": "azure",
+      "environment": "robodojo",
+      "room_yaw": 0,
+      "environment_light_scale": 1,
+      "light_temperature": 5100,
+      "paper_exposure_bias": 0,
+      "geniesim_table_material_pool": [
+        "geniesim_lab_cream"
+      ],
+      "paper_cloth_material": "fabric_pattern_07",
+      "paper_cloth_color_channel": "col_1",
+      "paper_backface_scale": 0.25
+    }
+  ]
+}

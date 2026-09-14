@@ -1,0 +1,49 @@
+{
+  "eligible_count": 595,
+  "frames": {
+    "lower": {
+      "asset_id": "rand_0TKY8IYX0W",
+      "confirmed_step": 995,
+      "deformable_at_completion": 0.06872328370809555,
+      "initial_state_index": 0,
+      "replicate": 0,
+      "rigid_at_completion": 0.030065465718507767,
+      "ttc_seconds": 19.9,
+      "trajectory": "/cfs/mlp/training/docker/user/hadoop-aipnlp/huangzilong09/repos/ClothDojo/.evaluation_project_7afbe670/outputs/evaluations/dagger_hil800_aggregate_strict_40k_s43_chunk_h10_balanced200_v2_20260908/trajectories/rand_0TKY8IYX0W_000000_r000",
+      "state_index": 2995,
+      "joint_error": 1.0475110379814034,
+      "percentile": 90,
+      "percentile_value": 1.0465474175166734
+    },
+    "typical": {
+      "asset_id": "rand_10WJYTHZPM",
+      "confirmed_step": 495,
+      "deformable_at_completion": 0.04235072806477547,
+      "initial_state_index": 2,
+      "replicate": 0,
+      "rigid_at_completion": 0.018999896943569183,
+      "ttc_seconds": 9.9,
+      "trajectory": "/cfs/mlp/training/docker/user/hadoop-aipnlp/huangzilong09/repos/ClothDojo/.evaluation_project_7afbe670/outputs/evaluations/dagger_hil800_aggregate_strict_40k_s43_chunk_h10_balanced200_v2_20260908/trajectories/rand_10WJYTHZPM_000002_r000",
+      "state_index": 2980,
+      "joint_error": 0.6529078672754379,
+      "percentile": 50,
+      "percentile_value": 0.6529078672754379
+    },
+    "upper": {
+      "asset_id": "rand_1GTZ866PI3",
+      "confirmed_step": 500,
+      "deformable_at_completion": 0.028200719505548477,
+      "initial_state_index": 0,
+      "replicate": 0,
+      "rigid_at_completion": 0.00788717158138752,
+      "ttc_seconds": 10.0,
+      "trajectory": "/cfs/mlp/training/docker/user/hadoop-aipnlp/huangzilong09/repos/ClothDojo/.evaluation_project_7afbe670/outputs/evaluations/dagger_hil800_aggregate_strict_40k_s43_chunk_h10_balanced200_v2_20260908/trajectories/rand_1GTZ866PI3_000000_r000",
+      "state_index": 2940,
+      "joint_error": 0.36890336328038364,
+      "percentile": 10,
+      "percentile_value": 0.3701763103607491
+    }
+  },
+  "mode": "flatten-model",
+  "release_definition": "both grippers open and unattached for at least 0.5 s"
+}

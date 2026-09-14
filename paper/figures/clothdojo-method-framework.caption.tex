@@ -1,0 +1,6 @@
+\textbf{Overview of the NOCS-guided data-generation pipeline.}
+Expert demonstrations $\mathcal D_E$ initialize a trajectory agent. For
+failures encountered during autonomous execution, an operator restores a
+selected state and provides a correction $\mathcal D_H$. The two sources of
+human data update the agent, while successful rollouts are re-rendered under
+randomized appearances to train an RGB policy.

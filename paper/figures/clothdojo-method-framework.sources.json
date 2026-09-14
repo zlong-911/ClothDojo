@@ -1,0 +1,69 @@
+{
+  "content_source": [
+    "paper/draft_zh.md, sections 3–4",
+    "src/clothdojo/training/hil_sft.py",
+    "configs/training/pi05_aloha_openpi_rlinf_hil800_aggregate_fullonly_wd001_b256_strict_40k.yaml"
+  ],
+  "code_audit": "Embedded post-layout assertions in paper/experiments/draw_method_framework.py",
+  "authoring_canvas_pt": [
+    504.00000000000006,
+    210.0
+  ],
+  "cropped_pdf_size_bp": [
+    503.998,
+    201.492
+  ],
+  "cropped_pdf_width_mm": 177.79929444444443,
+  "pdfcrop": {
+    "version": "1.42",
+    "hires": true,
+    "margins_bp": [
+      3.99,
+      0,
+      3.99,
+      0
+    ]
+  },
+  "font_sizes_pt": {
+    "main_heading": 8.5,
+    "module_heading": 7.5,
+    "secondary_module_text": 7.0,
+    "connector_annotation": 7.0,
+    "math_scripts": 6.3
+  },
+  "font_note": "Every connector annotation uses 7 pt regular Arial in FLOW color. Horizontal-shaft annotations keep 3.5–4.6 pt bbox clearance; vertical-shaft annotations keep 6.5–7.5 pt.",
+  "font_conversion": "Final font size = source font size * 504 / 503.998. The pdfcrop side margins preserve the 504 bp design width; scale=1.00000397, so all sizes round to their authored values at 0.001 pt.",
+  "font_family": "Arial",
+  "font_directory": "/cfs/mlp/training/docker/user/hadoop-aipnlp/huangzilong09/tools/fonts/msttcorefonts",
+  "svg_font_embedding": "Subset Arial WOFF Regular, Bold, Italic, BoldItalic",
+  "design_references": [
+    "paper/figures/method-style-reference-1.png",
+    "paper/figures/method-style-reference-2.png"
+  ],
+  "caption": "paper/figures/clothdojo-method-framework.caption.tex",
+  "publication_pdf": "paper/main.pdf",
+  "typography_spec": "paper/experiments/method_framework_typography.md",
+  "design": "Correction aggregation and supervised fine-tuning replace the former advantage-conditioned update. A bottom return connects selected rollout states to VR correction. The original three-stage palette, Arial typography, and 504 bp width are preserved; the canvas is 210 pt tall.",
+  "palette": {
+    "background": "#FFFFFF",
+    "stage_backgrounds": [
+      "#F0F5F8",
+      "#F8F4EC",
+      "#F8F0EE"
+    ],
+    "update_group": "#ECE4D8",
+    "edge": "#525D64",
+    "side_bars": [
+      "#4D718C",
+      "#88683F",
+      "#955D51"
+    ]
+  },
+  "terminology_audit": "paper/experiments/method_framework_terminology_audit.md",
+  "terminology_sources": [
+    "https://arxiv.org/html/2504.16054v1",
+    "https://arxiv.org/html/1703.06907v1",
+    "https://arxiv.org/html/1810.02890v1"
+  ],
+  "formal_figure_replaced": true
+}

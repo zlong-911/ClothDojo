@@ -1,0 +1,28 @@
+{
+  "eligible_count": 305,
+  "frames": {
+    "lower": {
+      "asset_id": "rand_1PSXI9D50T", "confirmation_seconds": 19.0,
+      "confirmation_step": 950, "q_at_confirmation": 0.3185676654222711,
+      "split": "unseen", "trajectory_id": "rand_1PSXI9D50T_000002",
+      "trajectory": "/mnt/dolphinfs-serving/hldy/user/hadoop-aipnlp/huangzilong09/ClothDojo/outputs/evaluations/fold_nocs_prefix_verified40k_eval800_20260912/trajectories/rand_1PSXI9D50T_000002",
+      "state_index": 950, "percentile": 10, "percentile_value": 0.3201301368760825
+    },
+    "typical": {
+      "asset_id": "rand_0V15754TTS", "confirmation_seconds": 22.68,
+      "confirmation_step": 1134, "q_at_confirmation": 0.7793990604918882,
+      "split": "unseen", "trajectory_id": "rand_0V15754TTS_000002",
+      "trajectory": "/mnt/dolphinfs-serving/hldy/user/hadoop-aipnlp/huangzilong09/ClothDojo/outputs/evaluations/fold_nocs_prefix_verified40k_eval800_20260912/trajectories/rand_0V15754TTS_000002",
+      "state_index": 1134, "percentile": 50, "percentile_value": 0.7793990604918882
+    },
+    "upper": {
+      "asset_id": "rand_1GIQSRDLN2", "confirmation_seconds": 26.98,
+      "confirmation_step": 1349, "q_at_confirmation": 1.3762642009891888,
+      "split": "seen", "trajectory_id": "rand_1GIQSRDLN2_000001",
+      "trajectory": "/mnt/dolphinfs-serving/hldy/user/hadoop-aipnlp/huangzilong09/ClothDojo/outputs/evaluations/fold_nocs_prefix_verified40k_eval800_20260912/trajectories/rand_1GIQSRDLN2_000001",
+      "state_index": 1349, "percentile": 90, "percentile_value": 1.3761080994041472
+    }
+  },
+  "mode": "fold",
+  "selection": "Both grippers remain open for the final 0.5 s of the earliest confirmed success interval."
+}

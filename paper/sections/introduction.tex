@@ -1,43 +1,65 @@
 \section{Introduction}
 \label{sec:introduction}
 
-Generalist visuomotor policies should reliably complete tasks across unseen
-objects and complex states, adjusting subsequent actions based on observed
-outcomes. Garment flattening and folding are well suited for evaluating these
-capabilities. Garments vary widely in structure and appearance. Severe
-crumpling causes self-occlusion, making the current configuration difficult to
-infer. Completing the task requires both dynamic actions, such as flinging, and
-precise local adjustments during flattening and folding.
+Garment flattening and folding require visual understanding and bimanual
+control throughout long sequences of interaction. Garments differ in structure
+and appearance. Wrinkles and self-occlusion hide relevant parts, and each
+contact changes the cloth configuration and the conditions for subsequent
+actions. Policies must continually adjust to the outcomes of their actions.
+Training across garments therefore requires continuous trajectories covering
+many initial states. Collecting these trajectories on real robots is
+time-consuming and requires repeatedly setting up complex configurations that
+are difficult to reproduce. Differences in robots and scenes further limit
+the reuse of data and experiments, making training and evaluation at scale
+costly.
 
-Garment manipulation has been used to evaluate generalist policies on real
-robots, but large-scale, reproducible comparisons remain difficult: data
-collection, scene setup, and task resets require sustained human effort, and
-garment initial configurations are difficult to reproduce precisely.
-Simulation provides controlled experimental conditions and supports both data
-reuse and scalable evaluation. However, existing simulation benchmarks provide
-limited coverage of diverse garments and complex initial states, and their
-datasets contain few successful trajectories that complete both flattening and
-folding.
+Simulation reduces interaction costs by allowing initial states to be reused
+and rollouts to run in batches, but successful trajectories still need to be
+designed or collected. Task-specific primitives, keypoint-based planning, and
+prescribed steps can generate trajectories automatically, but require the
+motion patterns or task structure to be designed in advance. Human
+teleoperation allows adjustments during execution, yet remains limited by the
+cost of collecting each trajectory. Fig.~\ref{fig:folding-trajectories} shows
+midair regrasping in autonomous flattening rollouts, and hand switching and
+post-fold adjustments in folding rollouts. We study how to generate
+trajectories that include these behaviors at scale.
 
-We present ClothDojo, a platform for data generation and policy evaluation in
-garment flattening and folding. ClothDojo supports real-time dynamic
-interaction between multiple bimanual robot embodiments and diverse garments.
-Starting from severely crumpled states, closed-loop policies use flinging and
-local adjustments to flatten garments, then continue to fold them. Unified
-metrics measure task progress and final outcomes.
+Real-robot laundry systems show that demonstrations, human corrections, and
+autonomous experience can form an effective data collection and learning
+cycle~\cite{pistar06,chi0,demavla}. Inspired by these systems, ClothDojo uses a
+closed-loop policy as a trajectory agent to generate simulation data from new
+states. We first train the agent on human demonstrations using supervised
+fine-tuning (SFT). The agent then performs batched rollouts: task metrics automatically
+select successful trajectories, failed rollouts receive human-in-the-loop
+(HIL) corrections, and these corrections are added to the training data for
+the next round. Simulation also allows normalized object coordinate space
+(NOCS) to be encoded as cloth
+appearance. Through the standard image interface of a vision-language-action
+model (VLA), these coordinates provide a canonical position reference for
+learning cloth interaction. Human effort is thus concentrated on
+demonstrations and necessary corrections, while the agent expands the
+trajectory collection through autonomous rollouts.
 
-To scale the successful trajectories needed for downstream policy training,
-ClothDojo decouples physical trajectory generation from appearance
-randomization. A trajectory agent uses privileged visual information and is
-initialized from human demonstrations. It is continually improved through
-autonomous rollouts and human interventions. The resulting agent generates
-successful closed-loop trajectories on new garments and initial states. We
-then re-render these trajectories with randomized appearances while preserving
-the underlying behavior, producing diverse RGB observations.
+As shown in Fig.~\ref{fig:framework}, ClothDojo connects learned trajectory
+generation, data expansion, and closed-loop evaluation through dynamic
+interaction between bimanual robots and cloth. Our contributions are:
 
-We use ClothDojo to study what enables generalist visuomotor policies to
-complete this task. Paired experiments separate the effects of new physical
-trajectories and appearance re-renderings, while controlled policy comparisons
-test the roles of observation history, memory, and real-time control. We
-evaluate all policies in closed loop on held-out initial states across seen and
-unseen garments, reporting both stage-wise and end-to-end performance.
+\begin{enumerate}[\setlength{\labelindent}{0pt}]
+  \item \textbf{A data generation and learning cycle.} A shared dynamic
+  robot--cloth environment combines human demonstrations and corrections,
+  batched rollouts, and automatic success filtering, turning adaptive human
+  manipulation into a scalable source of trajectories.
+  \item \textbf{A trajectory agent with privileged visual observations.}
+  NOCS provides canonical position cues through the VLA's standard image
+  interface. Trained with SFT and HIL corrections, the agent directly predicts
+  continuous bimanual actions without task-specific primitives or prescribed
+  steps.
+  \item \textbf{A large trajectory dataset and closed-loop evaluation.}
+  To our knowledge, we construct the first dataset of successful flattening
+  and folding trajectories generated autonomously by learned continuous
+  control policies across hundreds of garments: 500 garments, with ten
+  trajectories per garment for each task, totaling 10,000 trajectories.
+  Successful trajectories are re-rendered with randomized appearances for
+  training policies on ordinary RGB observations. A fixed protocol evaluates
+  flattening, folding, and their sequential execution.
+\end{enumerate}

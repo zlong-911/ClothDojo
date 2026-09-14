@@ -1,6 +1,6 @@
 # ClothDojo 相关工作事实表
 
-> 本文件是写作前的内部证据表，不是论文正文。更新时间：2026-09-03。只记录论文、正式项目页、官方数据页或竞赛仓库可以直接核验的事实；最后一列留给作者判断。`待核` 表示公开材料尚不足以支持更细的结论。
+> 本文件是写作前的内部证据表，不是论文正文。更新时间：2026-09-04。只记录论文、正式项目页、官方数据页或竞赛仓库可以直接核验的事实；最后一列留给作者判断。`待核` 表示公开材料尚不足以支持更细的结论。
 
 ## 0. 比较口径
 
@@ -23,16 +23,17 @@
 | P4 | 学习策略层面的反馈主要发生在 primitive 之间，primitive 内反馈通常是预写低层逻辑。 | FlingBot；SpeedFolding；UniFolding；Cloth Funnels | **直接/综合。** FlingBot 的拉伸有视觉终止，SpeedFolding/UniFolding 有力阈值；“primitive 内完全无反馈”不成立。 |
 | P5 | 固定 primitive 库限定可表达的行为；加入新行为需继续设计动作及参数。 | SpeedFolding；UniFolding；DeformPAM | 前半句是接口定义的**直接推论**；“维护成本高”未被这些论文量化，应作为作者判断而非文献事实。 |
 | P6 | 同一物理目标允许多条有效轨迹，具体动作依赖遮挡、接触结果和持续变化的中间状态；人类会组合难以枚举的恢复行为。 | Robot Olympics；ClothDojo 人类遥操作轨迹 | 博客支持“物理技能难以通过指令或程序完整表达、需要丰富行为数据”的**概念判断**；具体服装行为仍是**作者观察**，应由本文轨迹举证。不要把“随机”写成能力本身。 |
-| G1 | 通用 visuomotor/VLA 已直接预测连续动作或 action chunks，并在衣物任务上评测。 | π₀；FAST；DexVLA；FoldNet；LeHome；π*₀.₆；χ₀/Kai0；DeMaVLA | **直接。** π₀.₅ 训练混合含折衣，但其论文没有独立的折衣主评测，不能单独作为此声明证据。 |
-| G2 | 不依赖上述任务专用 primitive 的衣物控制是可行的。 | π₀；FAST；DexVLA；FoldNet；LeHome；SimWeaver；π*₀.₆；χ₀/Kai0；DeMaVLA | **直接/综合。** 这些方法的任务和本体不同，不构成公平性能排名。 |
-| G3 | 不同通用策略的衣物结果难直接比较。 | π₀；FAST；DexVLA；FoldNet；LeHome；SimWeaver；π*₀.₆；χ₀/Kai0；DeMaVLA；标准化综述 | **协议综合。** 差异确实落在本体、初态、服装集、时限和成功定义上。 |
+| G1 | 通用 visuomotor/VLA 已直接预测连续动作或 action chunks，并在衣物任务上评测。 | π₀；FAST；DexVLA；FoldNet；LeHome；Instant-Fold；π*₀.₆；χ₀/Kai0；DeMaVLA | **直接。** π₀.₅ 训练混合含折衣，但其论文没有独立的折衣主评测，不能单独作为此声明证据。 |
+| G2 | 不依赖上述任务专用 primitive 的衣物控制是可行的。 | π₀；FAST；DexVLA；FoldNet；LeHome；SimWeaver；Instant-Fold；π*₀.₆；χ₀/Kai0；DeMaVLA | **直接/综合。** 这些方法的任务和本体不同，不构成公平性能排名。 |
+| G3 | 不同通用策略的衣物结果难直接比较。 | π₀；FAST；DexVLA；FoldNet；LeHome；SimWeaver；Instant-Fold；π*₀.₆；χ₀/Kai0；DeMaVLA；标准化综述 | **协议综合。** 差异确实落在本体、初态、服装集、时限和成功定义上。 |
 | S1 | 通用可变形物体平台提供布料、绳索、流体或薄壳任务。 | SoftGym；DeformableRavens；DaXBench；ThinShellLab | **直接。** 它们的物理表示和动作抽象不同，不能统称为服装 benchmark。 |
 | S2 | 服装专用平台扩展了资产、机器人和交互场景。 | ClothesNet；GarmentLab；DexGarmentLab；LeHome | **直接。** ClothesNet 的核心还包括感知，DexGarmentLab 是 15 个任务/8 类服装。 |
 | S3 | 已有工作专门测量真实—仿真布料动力学差距。 | Cloth Sim-to-Real Benchmark；RGBench | **直接。** 它们复现规定动作并比较几何轨迹，不等于评测学习策略的任务成功。 |
-| S4 | 新近平台开始把仿真采集、连续视觉策略训练和 rollout 评测连起来。 | LeHome；FoldNet；DexGarmentLab；SIM1；SimWeaver | **直接。** LeHome 与 SimWeaver 是最适合正文概括的平台级证据。 |
+| S4 | 新近工作开始把仿真采集、连续视觉策略训练和 rollout 评测连起来。 | LeHome；FoldNet；DexGarmentLab；SIM1；SimWeaver；Instant-Fold | **直接。** LeHome 与 SimWeaver 是最适合概括平台能力的证据；Instant-Fold 是大规模多资产 folding 评测的直接近邻。 |
 | S5 | 各平台的资产、初态、动作接口与成功条件不统一。 | 本表第 3 节全部 benchmark；标准化综述 | **协议综合。** 这是 ClothDojo benchmark 动机的核心，而非单篇论文的自我声明。 |
 | S6 | 许多服装 benchmark 将展平与折叠设为不同任务或不同起点，尚无共享的连续协议。 | ClothesNet；GarmentLab；DexGarmentLab；LeHome；SimWeaver | **有限支持。** 只能说“许多 benchmark”；SoftGym、SpeedFolding、UniFolding、π₀ laundry 和 χ₀ 提供反例，不能写“此前都分开评测”。 |
 | D1 | 仿真粒子/顶点状态常用于 reward 或 success evaluator。 | SoftGym；ClothesNet；GarmentLab；LeHome；FoldNet；SimWeaver | **直接。** segmentation 与 NOCS 不应无依据地并列成“常用 reward”。 |
+| D1a | 规范坐标已被用于服装状态估计和跨实例对应。 | GarmentNets；UniGarmentManip | **直接。** ClothDojo 不能把“首次将 NOCS 用于服装”作为贡献；区别必须落在 NOCS 的使用者及其产生的数据上。 |
 | D2 | GT 几何、关键点、稠密对应或完整节点状态已被用于教师和数据生成。 | UniFolding；UniGarmentManip；MetaFold；DexGarmentLab；FoldNet；SoftMimicGen；SIM1；SimWeaver | **直接。** 各自用法不同，正文应按用途归类而非堆名词。 |
 | D3 | 特权状态可只服务生成器，最终策略仍从普通图像部署。 | FoldNet；SoftMimicGen；SIM1；SimWeaver；LeHome | **直接。** 因此前人已有该范式，ClothDojo 不能把它本身作为新颖性。 |
 | D4 | 新物理 rollout、轨迹变换/重组与仅外观重渲染提供不同的数据增量。 | FoldNet；LeHome；SoftMimicGen；SIM1；SimWeaver | **机制综合。** 这是组织 2.3 的关键抽象，也直接支撑 ClothDojo 的“物理覆盖/视觉覆盖”区分。 |
@@ -55,6 +56,7 @@
 | ClothMate（RA-L 2026） | 任意状态下的多类别服装展平 | 在 canonicalized-aligned 状态学习逐点 fling response，再投影至任意状态；静态 pick-and-stretch 局部修正 | 摘要能确认局部修正机制；primitive 内反馈、数据划分和失败恢复待全文核验 | 摘要报告五类服装上的联合训练与评测，并比较数据效率、coverage 和步骤数 | [IEEE 条目](https://ieeexplore.ieee.org/document/11248822)、[DOI](https://doi.org/10.1109/LRA.2025.3632758) | — |
 | APS-Net（ICML 2025） | 褶皱服装的 unfolding 与 standardization；目标同时考虑 coverage、朝向和规范对齐 | 顶视 RGB-D spatial action maps 选择 dynamic fling 或 pick-and-place 及空间参数 | primitive 间闭环选择；不直接生成 primitive 内连续控制 | 仿真主要结果针对长袖；真机用后续 folding 说明 standardization 的用途 | [PMLR](https://proceedings.mlr.press/v267/zhou25q.html)、[论文](https://openreview.net/pdf?id=pT4gJ0PgGD) | — |
 | FoldNet（RA-L 2026） | 从随机旋转、翻面和褶皱的初态完成预定义多阶段 folding；不包含先将严重褶皱服装展平的独立目标 | 最终 Diffusion Policy 从单目 RGB 直接输出双臂 8D 动作序列；生成教师按 GT keypoint 产生分阶段抓放与插值轨迹 | KG-DAgger 在策略 rollout 中用 GT keypoint 检测抓取失败并接管重试；最终部署不使用 keypoint | 4 类合成服装；15K 轨迹、约 2M 图像—动作对；报告仿真和零样本真机 folding | [论文](https://arxiv.org/html/2505.09109)、[项目页](https://pku-epic.github.io/FoldNet/) | — |
+| Instant-Fold（2026 preprint） | 根据单条人类示范指定的模式执行 folding；不包含从严重褶皱状态自主展平 | 最终 flow-matching policy 从观测与示范上下文输出双臂连续 8D action chunks；训练轨迹由 sleeve/body-fold primitives 及其顺序程序化生成 | 策略执行时闭环预测动作；训练数据中的折叠阶段和操作结构由程序规定 | 360 个 tops（300 train / 60 held-out）、约 80K folding 轨迹；在 held-out 资产上进行 1,920 次 rollout | [论文](https://arxiv.org/html/2606.04269)、[项目页](https://instant-fold.github.io/) | 已构成“大规模多资产仿真 folding + 连续策略”的直接近邻，ClothDojo 不能单独以规模、多资产或连续动作为 first claim。 |
 | χ₀ / Kai0（2026 preprint） | 真实机器人长程任务；Task A 连续 flattening→三次 folding，Task B/C 还包含取衣、整理、悬挂等阶段 | π₀.₅/π₀ 直接预测 action chunks；论文同时比较 absolute/delta joint control、RTC、temporal ensembling 和 chunk-wise smoothing | 使用标准/heuristic DAgger 收集失败恢复，Stage Advantage 训练与高频控制对齐；不是 primitive 策略 | 两套双臂平台；论文报告每个 task 约 20 h 示范、约 2.7K–3.5K episodes，并进行 24 h 压力测试；公开数据后续扩展到 20,909 episodes | [论文](https://arxiv.org/html/2602.09021)、[代码与数据](https://github.com/OpenDriveLab/kai0)、[数据说明](https://github.com/OpenDriveLab/kai0/blob/main/docs/dataset.md) | — |
 | π₀（2024） | 一项 T-shirt fold 从基本平铺状态开始；laundry task 从衣篮中的随机褶皱衣物开始，连续完成抓取、展平、折叠与堆叠 | 多视角 RGB、语言、本体状态；flow matching action expert 生成连续 action chunks | 在 50 Hz 任务中每约 0.5 s 重新推理并执行下一段 25-step chunk，不是整条轨迹一次性开环生成 | 折衣评测为少量上衣、每件少量 trials；laundry 按抓取/展平/折叠/堆叠分项计分，说明可行性但不是标准 benchmark | [论文](https://www.pi.website/download/pi0.pdf) | 直接支持 G1/G2；也说明“连续展平—折叠此前不存在”是错误的。 |
 | FAST（2025） | 沿用 π₀ 的 T-shirt folding 与 laundry 等高频任务，用来检验离散 action tokenizer | 将动作先做 DCT，再以 BPE token 化并自回归预测约 1 s action chunks | action chunk 间重新推理；论文比较 tokenization/训练效率，而非提出新的服装任务协议 | 服装结果证明 autoregressive VLA 也能执行高频连续控制，但不应与 π₀ 当作两个独立 benchmark 计数 | [论文](https://www.pi.website/download/fast.pdf) | 支持 G1；引用时最好写 π₀/FAST，而非暗示两个独立数据集。 |
@@ -67,8 +69,9 @@
 
 | 工作 | 任务与方法 | 数据与评测 | 与正文声明的关系 | 核验来源 |
 | --- | --- | --- | --- | --- |
+| GarmentNets（ICCV 2021） | 将服装姿态估计表述为规范空间中的形状补全；先预测观测点的 NOCS 坐标，再补全表面并映射回任务空间 | 在类别共享的规范空间中建立跨实例对应，评测重点是未见服装实例的三维姿态估计，不是动作策略或轨迹生成 | 直接支持 D1a，并约束 ClothDojo：NOCS 用于服装本身不是创新，区别在于用 NOCS 图像条件化学习式轨迹生成策略 | [论文](https://openaccess.thecvf.com/content/ICCV2021/html/Chi_GarmentNets_Category-Level_Pose_Estimation_for_Garments_via_Canonical_Space_Shape_ICCV_2021_paper.html)、[项目页](https://garmentnets.cs.columbia.edu/) |
 | FabricFlowNet（CoRL 2021） | 输入当前/目标深度图，以 optical flow 建立对应并确定 place point，PickNet 再预测双臂 pick points，最后执行固定 pick-and-place | 用仿真随机动作生成训练对；真机主要为方布目标形状、trial 数有限，且假定折叠前已较平整 | 支持 P2；说明 primitive 不必显式预测“动作类型”，也可只学习其空间参数 | [论文](https://proceedings.mlr.press/v164/weng22a.html) |
-| UniGarmentManip（CVPR 2024） | 学习跨实例、跨形变的服装稠密视觉对应，再迁移示范中的 manipulation points；展开、折叠、悬挂分别执行 | PyFlex 中约 500 tops、600 trousers、600 dresses，并做仿真与真机验证；各任务初态与成功指标不同 | 支持 D2；与 NOCS 都处理跨资产对应，但它主要迁移操作点，而不是训练可自由产生连续行为的数据代理 | [论文](https://openaccess.thecvf.com/content/CVPR2024/papers/Wu_UniGarmentManip_A_Unified_Framework_for_Category-Level_Garment_Manipulation_via_Dense_CVPR_2024_paper.pdf) |
+| UniGarmentManip（CVPR 2024） | 学习跨实例、跨形变的服装稠密视觉对应，再迁移示范中的 manipulation points；展开、折叠、悬挂分别执行 | PyFlex 中约 500 tops、600 trousers、600 dresses，并做仿真与真机验证；各任务初态与成功指标不同 | 支持 D2；与 NOCS 都处理跨资产对应，但它主要迁移操作点，而不是训练可自由产生连续行为的生成策略 | [论文](https://openaccess.thecvf.com/content/CVPR2024/papers/Wu_UniGarmentManip_A_Unified_Framework_for_Category-Level_Garment_Manipulation_via_Dense_CVPR_2024_paper.pdf) |
 | MetaFold（IROS 2025） | 从点云和语言生成后续 cloth trajectory，再由 ManiFoundation 推断接触点与力方向并迭代执行 | 基于 ClothesNetM 的 1,210 件服装；在 DiffClothAI 中由人工起终 keypoints 与 heuristic 生成约 3,376 条 point-cloud trajectories | 支持 D2/D4；是特权几何生成折叠轨迹的近邻，但不是从已训练策略失败分布收集 recovery | [论文](https://arxiv.org/abs/2503.08372)、[项目页](https://meta-fold.github.io/) |
 | DeformPAM（2024 preprint） | 从分割 3D point cloud 预测 primitive 类型/参数，以偏好模型排序；连续轨迹仍由 OMPL/PyBullet 与手写规则规划 | 在三类长程可变形任务上做真机评测，其中 T-shirt unfolding 使用 FlingBot 类 primitive；论文也比较 primitive-free Diffusion Policy | 直接支持 P1/P2/P5，并由作者明确把降维搜索空间作为 primitive 的理由 | [论文](https://arxiv.org/abs/2410.11584) |
 | Visuotactile Affordances（CoRL 2023） | 抓住布料后，策略利用视觉和触觉反馈沿边缘滑动，学习局部闭环控制 | 真机布料边缘跟随与重抓取实验；任务范围比完整展平—折叠窄 | primitive 内闭环反馈的边界反例；不必列入正文主引用，但用于避免 P4 的绝对表述 | [论文](https://proceedings.mlr.press/v205/sunil23a.html) |
@@ -116,6 +119,7 @@
 | MetaFold | ClothesNet mesh 与人工规定的 folding start/end keypoints | 在 DiffClothAI 中按 heuristic 生成分阶段折叠 mesh/point-cloud trajectories，并配语言 | 是，仿真执行会产生新的布料状态轨迹 | GT keypoint 用于生成；下游框架从点云与语言预测轨迹 | 有迭代 feedback，但不是基于策略失败的 DAgger 数据生成 | [论文](https://arxiv.org/abs/2503.08372)、[数据页](https://huggingface.co/datasets/chenhn02/MetaFold) | — |
 | UniGarmentManip | CLOTH3D/PyFlex 中的 tops、trousers、dresses 与少量任务示范 | 用仿真 point tracing 学习跨实例稠密对应，再把示范中的 manipulation points 迁移到新服装 | 是，迁移后的动作在仿真/真机重新执行 | 对应监督来自 mesh；执行时由视觉对应网络定位目标点 | 不是 on-policy recovery；任务按 unfolding、folding、hanging 分别评测 | [论文](https://openaccess.thecvf.com/content/CVPR2024/papers/Wu_UniGarmentManip_A_Unified_Framework_for_Category-Level_Garment_Manipulation_via_Dense_CVPR_2024_paper.pdf) | 支持 D2；与 NOCS 都处理跨资产位置对应，但它迁移 manipulation points，不生成自由连续策略。 |
 | FoldNet | 合成服装、自动 semantic keypoints 与 keypoint-based folding teacher | 教师从随机初态生成成功 folding；KG-DAgger 在模型 rollout 的失败状态接管并补充重试轨迹 | 是 | 生成器读取 GT keypoints；最终 Diffusion Policy 只看单目 RGB，不在部署时检测 keypoint | **是：自动生成 on-policy 抓取失败恢复** | [论文](https://arxiv.org/html/2505.09109) | — |
+| Instant-Fold | 程序化的 sleeve/body-fold primitives、顺序和 19 种 folding modes；测试时另给单条人类示范作为上下文 | 在 300 个训练 mesh 上组合模式、空间参数和执行顺序，生成约 80K 轨迹 | 是 | 训练生成器使用仿真任务结构；最终 policy 从普通视觉与示范上下文输出连续动作 | 执行时闭环，但公开方法不以当前策略失败分布上的自动恢复数据为核心 | [论文](https://arxiv.org/html/2606.04269) | 证明大规模多资产 folding 训练和 held-out 闭环评测已有先例；其训练行为结构仍来自程序化 primitive。 |
 | χ₀ / Kai0 | 真实双臂人类示范 | 标准/heuristic DAgger、时空增强、不同数据子集训练后模型合并；当前公开数据含 base 与 dagger | DAgger 是；普通 augmentation 不是 | 最终 π₀.₅/π₀ 使用 RGB、本体状态和 action chunks；Stage Advantage 由阶段标签/进展训练 | **是：人工或 heuristic DAgger** | [论文](https://arxiv.org/html/2602.09021)、[数据说明](https://github.com/OpenDriveLab/kai0/blob/main/docs/dataset.md) | — |
 | DeMaVLA | 约 5,000 h 真实双臂预训练和 37 h 多类别 folding 后训练数据 | 混合多类折叠示范；部署当前策略并由人只在预期失败时接管，聚合 correction 后继续训练 | 是，来自真机 rollout | 最终策略使用 RGB、语言与本体状态，flow matching 生成连续 action chunks | **是：human-gated DAgger** | [论文](https://arxiv.org/abs/2605.31286) | 与 ClothDojo 同样强调策略失败附近的数据；主要差异是其依赖大规模真实数据，ClothDojo 研究仿真代理生成与可控数据因素。 |
 | LeHome | 每 task 仿真遥操作；真机实验另有少量真实示范 | 采集时随机初始位置和外观；采集后在固定物体位置下重放轨迹并随机外观，再按成功条件过滤 | 初次遥操作是；后处理 replay 主要不是新的行为 | 仿真状态用于 replay/filter；最终 ACT/DP/VLA 接收普通相机与机器人状态 | 论文没有以 on-policy failure recovery 为核心 | [论文](https://arxiv.org/html/2604.22363) | — |
@@ -123,14 +127,15 @@
 | SIM1（2026 preprint） | 少量示范与扫描得到的真实数字孪生 | 几何/物理对齐后，将示范分段，用 diffusion 生成运动并经过轨迹优化、仿真执行、质量过滤和外观随机化 | 是 | 仿真特权用于校准、规划和过滤；最终 π₀/π₀.₅ 从普通视觉执行 | 主要依靠生成与过滤；公开论述未把 on-policy recovery 作为核心 | [论文](https://arxiv.org/html/2604.08544) | — |
 | SimWeaver | 手工构建的拓扑图、landmark、任务谓词和少量任务定义 | 规划器基于当前仿真状态合成连续轨迹，并以闭式成功/安全条件检查；每 task 生成 200 条 | 是 | 生成器访问拓扑与仿真几何；最终 π₀.₅ 使用 RGB | 生成过程闭环重规划，但不是从已训练策略的失败分布做 DAgger | [论文](https://arxiv.org/html/2606.15338) | — |
 
-## 5. 与 ClothDojo 最接近、正文不能漏掉的四组关系
+## 5. 与 ClothDojo 最接近、正文不能漏掉的五组关系
 
 以下只是证据关系，不替作者填写最终结论：
 
 1. **χ₀ / Kai0 与 DeMaVLA**：两者都已在真实机器人上研究长程 flatten–fold、连续 action chunks 和失败纠正数据；χ₀ 还系统讨论 advantage 与实时控制，DeMaVLA 则覆盖四类衣物的单 checkpoint 策略。ClothDojo 若讨论“通用策略为何需要新的 benchmark”，必须承认这些真实任务证据，再说明仿真可复现性、固定测试分布和规模化物理数据的增量。
-2. **FoldNet**：与 NOCS 数据代理的技术关系最直接。两者都把仿真特权几何用于数据生成/恢复，并让最终视觉策略摆脱特权输入。真正的区别应从任务起点、教师表示、轨迹生成自由度、展平—折叠连续性和评测目标中找，不能写成“此前没有用特权信息生成普通视觉策略数据”。
+2. **FoldNet**：与 NOCS 条件化生成策略的技术关系最直接。两者都把仿真特权几何用于数据生成/恢复，并让最终视觉策略摆脱特权输入。真正的区别应从任务起点、教师表示、轨迹生成自由度、展平—折叠覆盖和评测目标中找，不能写成“此前没有用特权信息生成普通视觉策略数据”。
 3. **LeHome**：同时覆盖低成本双臂、连续控制、VLA benchmark、轨迹重放随机化和 sim+real，因此不能再笼统归入“只提供仿真能力”。可比较的是其论文中的服装 task 分离、每 task 数据协议，以及 ClothDojo 是否提供更严格的严重褶皱连续任务与诊断性测试分布。
-4. **SimWeaver / SoftMimicGen / SIM1**：三者分别代表规则与拓扑驱动生成、非刚性轨迹迁移、物理对齐后的生成模型扩展。ClothDojo 的数据代理需要明确说明自己属于哪种机制，以及新增 rollout 与外观重渲染分别提供了什么。
+4. **SimWeaver / SoftMimicGen / SIM1**：三者分别代表规则与拓扑驱动生成、非刚性轨迹迁移、物理对齐后的生成模型扩展。ClothDojo 的生成策略需要明确说明自己属于哪种机制，以及新增 rollout 与外观重渲染分别提供了什么。
+5. **Instant-Fold**：已提供约 80K 程序化 folding 轨迹、300/60 资产划分和大规模 held-out 闭环 rollout。它排除了“首个大规模多资产 folding 数据或评测”的说法；ClothDojo 的差异应限定为从人工示范训练的生成策略在无外部任务逻辑下自主扩展展平与折叠行为，并覆盖更多类别和形态。
 
 ## 6. 尚待作者核对或继续补证据
 
@@ -141,3 +146,5 @@
 - π₀ 系列服装任务的服装数量、初态与试验次数需按具体版本分别记录，不能把博客演示、论文任务和后续版本合并。
 - DeMaVLA 的真机任务明确规定超时与落桌失败，但“task-specific completion criteria”没有在主文中给出可复现的几何阈值；可引用其连续任务证据，不宜与 ClothDojo 的最终形态指标直接做数值比较。
 - `closed-loop` 一词不能直接填成“支持实时反馈”。需要进一步记录观测频率、action chunk 长度、每次实际执行长度、是否异步推理及低层控制频率。
+- ClothDojo 的展平与折叠最终采用独立评测、两个 checkpoint 串联，还是单一策略端到端完成尚未冻结；在确认前，相关工作只能写“覆盖展平与折叠”，不能声称同一 episode 连续完成。
+- 计划中的 500 件服装、每件 10 次 rollout 属于评测预算，而不是生成策略的训练轨迹规模；完成审计前不得据此宣称数据集规模。

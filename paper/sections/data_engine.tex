@@ -9,7 +9,14 @@ and action structure. Corresponding regions retain related visual coordinates
 across different garments, giving the agent cues about local identity, surface
 orientation, and canonical arrangement without introducing a separate symbolic
 action representation. Human demonstrations initialize the trajectory agent;
-rollout and HIL then improve it.
+we denote the resulting SFT parameters by $\theta_{\mathrm{init}}$. Rollout and
+HIL data then improve it.
+
+At time $t$, the policy $\pi_\theta$ receives NOCS images, robot state, and a
+task instruction, and predicts an action chunk $A_t$. The simulator executes
+the chunk from state $s_t$ and returns the next observation. Task metrics
+measure shape and orientation for flattening or fold quality for folding,
+classifying rollouts as successful ($\tau^+$) or failed ($\tau^-$).
 
 \subsection{Fixed-target trajectory generation}
 
@@ -20,6 +27,15 @@ original initial-state distribution. The agent's success rate and the final
 coverage of difficult states consequently remain observable rather than being
 hidden by repeated resampling.
 
+For a selected rollout, a reviewer marks an intervention state, the simulator
+restores that recorded state, and an operator resumes VR teleoperation. The
+resulting correction $\mathcal{D}_H$ retains its source rollout and intervention
+point. Corrections are aggregated with the original expert demonstrations for
+supervised fine-tuning with the same action-prediction objective used for
+initialization. Autonomous rollouts provide states for correction; only
+demonstrated actions enter this policy update. The updated policy then
+generates further rollouts.
+
 \subsection{Selection and visual replay}
 
 Successful rollouts may contain failure and recovery. They are trimmed at the
@@ -28,6 +44,10 @@ separates new state--action behavior from new visual observations of the same
 behavior. New rollouts expand the physical state--action distribution;
 re-rendering expands only the visual distribution. Keeping these identities
 separate makes their downstream effects experimentally distinguishable.
+
+Re-rendering restores the recorded states, keeping robot and garment motion
+and action targets unchanged. It varies garment materials, scene appearance,
+and lighting between episodes while keeping each episode visually consistent.
 
 \subsection{Released data contract}
 

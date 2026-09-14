@@ -7,6 +7,7 @@
 
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
+\usepackage{capt-of}
 \usepackage{cite}
 \usepackage{graphicx}
 \usepackage{url}
@@ -20,18 +21,19 @@ Flattening and Folding}
 \IEEEaftertitletext{%
   \vspace{-1.0em}
   \begin{center}
-    \includegraphics[width=\textwidth]{figures/clothdojo-teaser.png}
-    \vspace{0.2em}
-    \begin{minipage}{0.98\textwidth}
-      \footnotesize
-      \refstepcounter{figure}\label{fig:teaser}%
-      Fig.~\thefigure. ClothDojo supports topologically diverse garments at a
-      shared metric scale (left) and contact-rich bimanual manipulation across
-      five robot embodiments (right). The two rows select action-revealing
-      keyframes from flattening and folding trajectories; each column preserves
-      the complete robot workcell and a consistent third-person camera.
-      Background scenes and studio lighting are adapted from GenieSimAssets
-      (AgibotTech, CC BY-NC-SA 4.0) and NVIDIA Isaac Sim assets.
+    \begin{minipage}{\textwidth}
+      \centering
+      \includegraphics[width=\linewidth]{figures/clothdojo-framework.pdf}
+      \captionof{figure}{\textbf{ClothDojo connects data generation, data
+      expansion, and closed-loop evaluation.} (01) A trajectory
+      agent with privileged visual observations generates flattening and
+      folding trajectories, shown with normalized object coordinate space
+      (NOCS) and standard RGB appearances side by side. (02) Retargeting across
+      robot embodiments and visual randomization expand the data. (03) Garment
+      assets and manipulation trajectories form a data library. (04)
+      Evaluation uses continuous metrics, policy ranking, and sensitivity
+      analysis.}
+      \label{fig:framework}
     \end{minipage}
   \end{center}
   \vspace{0.4em}
@@ -64,15 +66,33 @@ assess the roles of memory and real-time control in handling occlusion and
 dynamic manipulation.
 \end{abstract}
 
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/clothdojo-manipulation-sequences.pdf}
+  \caption{\textbf{Autonomous policies generate long-horizon behaviors with
+  varied action transitions and adjustments during execution.} Flattening
+  trajectories combine midair regrasping, dynamic unfolding, and local
+  adjustments; folding includes hand switching, garment rotation, and
+  post-fold adjustments. Each row shows keyframes from an independent rollout,
+  ordered from left to right with nonuniform time intervals. Box labels
+  describe observed behaviors; the images are re-rendered from recorded
+  simulation states.}
+  \label{fig:folding-trajectories}
+\end{figure*}
+
 \input{sections/introduction}
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{figures/clothdojo-method-framework.pdf}
+  \caption[Overview of the NOCS-guided data engine.]{\input{figures/clothdojo-method-framework.caption.tex}}
+  \label{fig:method-framework}
+\end{figure*}
 \input{sections/related_work}
-\input{sections/benchmark}
-\input{sections/data_engine}
+\input{sections/method}
 \input{sections/experiments}
 \input{sections/conclusion}
 
-% Enable once verified bibliography entries and citations have been added.
-% \bibliographystyle{IEEEtran}
-% \bibliography{references}
+\bibliographystyle{IEEEtran}
+\bibliography{references}
 
 \end{document}

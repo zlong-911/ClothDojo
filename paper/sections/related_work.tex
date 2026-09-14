@@ -1,36 +1,47 @@
 \section{Related Work}
 \label{sec:related-work}
 
-\subsection{Garment manipulation}
+\subsection{Garment manipulation policies}
 
-Garment manipulation has commonly been made tractable by reducing control to
-task-specific primitives, such as selecting grasp points followed by a fixed
-pick--place or fling motion. These methods encode useful geometric and control
-knowledge and can solve well-defined garment tasks efficiently. At the same
-time, the primitive determines much of the behavior before learning begins. It
-therefore provides limited evidence about whether a generalist policy can infer
-garment state, produce continuous robot motion, and recover from its own
-mistakes. ClothDojo retains the ordinary robot action interface so that these
-abilities remain part of the evaluated problem.
+Many methods define a set of task-specific primitives for garment flattening
+and folding. A policy selects a primitive or predicts parameters such as grasp
+locations from visual observations, while a predefined controller executes
+the continuous motion~\cite{flingbot,clothmate,clothfunnels,speedfolding,unifolding}.
+The policy can observe the cloth again between primitives, and some primitives
+also use feedback during operations such as stretching. These action priors
+reduce the learning space and have been used for flattening multiple garment
+types and for structured folding.
 
-\subsection{Deformable simulation and benchmarks}
+Another approach learns continuous actions from data. Recent VLAs directly
+predict action chunks and perform long sequences of picking up, flattening,
+folding, and stacking garments on real robots~\cite{pistar06,chi0,demavla}.
+These systems establish initial behavior with human demonstrations, expose
+failures through autonomous rollouts, and use human corrections to cover
+states encountered by the policy. This learning cycle also lets the policy
+learn action ordering, bimanual coordination, and adjustments during execution.
 
-Simulation environments, simulation benchmarks, and policy benchmarks answer
-different questions. An environment determines what can be simulated; a
-fidelity benchmark measures how well simulated cloth matches physical cloth;
-a policy benchmark measures what an agent can accomplish under a fixed task
-distribution. GarmentLab and RGBench primarily strengthen the first two
-layers. SimWeaver additionally connects simulation to policy training and is
-therefore the closest setting to ClothDojo. ClothDojo concentrates on the third
-layer: severe garment flattening with continuous actions, scalable successful
-data, and closed-loop evaluation across garment variation.
+\subsection{Simulation environments and data generation}
 
-\subsection{Data generation for generalist robot policies}
+Existing garment simulation platforms provide diverse garment assets and
+dynamic robot--cloth interaction for tasks including flattening and
+folding~\cite{garmentlab,dexgarmentlab,lehome,simweaver}. Their publicly
+described trajectories primarily come from task primitives, demonstration
+transfer, or limited teleoperation.
 
-Privileged supervision separates the difficulty of producing useful training
-behavior from the difficulty of the final visual task. NOCS supplies stable
-cross-asset geometric cues to the trajectory agent while preserving the VLA's
-image-to-action structure. Once a successful physical trajectory exists, its
-observations can be rendered without those cues. Thus the downstream policy
-still acts from ordinary images and never accesses particle state; privilege is
-used to manufacture data, not to simplify the evaluated policy.
+Automatic trajectory expansion largely follows two approaches. Programmatic
+methods construct trajectories using keypoints, task stages, or folding
+patterns~\cite{foldnet,instantfold}. Demonstration transfer adapts segmented
+behaviors to new assets and initial states, then executes them to obtain new
+physical trajectories~\cite{softmimicgen,sim1}. The former supports batched
+execution of specified task procedures, while the latter reuses existing
+demonstrations; both have effectively expanded simulation datasets. Existing
+large-scale results mainly concern folding tasks with well-defined steps.
+For severely crumpled garments, however, the course of flattening changes with
+the cloth state, making fixed procedures and segmented demonstrations
+difficult to reuse directly.
+
+ClothDojo brings the demonstration--rollout--correction cycle used in
+real-robot garment manipulation to simulation trajectory generation. The
+trajectory agent learns from human interaction and then runs autonomously on
+diverse garments and complex initial states; Fig.~\ref{fig:folding-trajectories}
+shows examples of the resulting behavior.

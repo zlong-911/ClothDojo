@@ -1,0 +1,131 @@
+{
+  "schema": "clothdojo_paper_teaser_render_v1",
+  "seed": 20260907,
+  "jobs": [
+    {
+      "group": "frames",
+      "name": "rand_0EXG3ISQ34_000000",
+      "trajectory": "data/collections/shirt_fold/rollouts/fold_clean30k_standard2000_rtc30s_20260906/trajectories/rand_0EXG3ISQ34_000000",
+      "frames": [
+        0,
+        125,
+        200,
+        275,
+        425,
+        550,
+        600,
+        725,
+        1025
+      ],
+      "camera": "cam_high",
+      "camera_focal_length": 6.5,
+      "cloth_visual": "normal",
+      "appearance_episode_index": 0,
+      "appearance_id": "fold_behavior_shared_studio_20260907",
+      "room": "azure",
+      "environment": "robodojo",
+      "room_yaw": 0,
+      "environment_light_scale": 1,
+      "light_temperature": 5100,
+      "paper_exposure_bias": 0,
+      "geniesim_table_material_pool": [
+        "geniesim_lab_cream"
+      ],
+      "paper_cloth_material": "denim_fabric_03"
+    },
+    {
+      "group": "frames",
+      "name": "rand_0EXG3ISQ34_000003",
+      "trajectory": "data/collections/shirt_fold/rollouts/fold_clean30k_standard2000_rtc30s_20260906/trajectories/rand_0EXG3ISQ34_000003",
+      "frames": [
+        0,
+        200,
+        375,
+        450,
+        625,
+        750,
+        875,
+        1135,
+        1200
+      ],
+      "camera": "cam_high",
+      "camera_focal_length": 6.5,
+      "cloth_visual": "normal",
+      "appearance_episode_index": 0,
+      "appearance_id": "fold_behavior_shared_studio_20260907",
+      "room": "azure",
+      "environment": "robodojo",
+      "room_yaw": 0,
+      "environment_light_scale": 1,
+      "light_temperature": 5100,
+      "paper_exposure_bias": 0,
+      "geniesim_table_material_pool": [
+        "geniesim_lab_cream"
+      ],
+      "paper_cloth_material": "denim_fabric_03"
+    },
+    {
+      "group": "frames",
+      "name": "rand_0TKY8IYX0W_000003",
+      "trajectory": "data/collections/shirt_fold/rollouts/fold_clean30k_standard2000_rtc30s_20260906/trajectories/rand_0TKY8IYX0W_000003",
+      "frames": [
+        0,
+        240,
+        300,
+        690,
+        750,
+        865,
+        990,
+        1005,
+        1160
+      ],
+      "camera": "cam_high",
+      "camera_focal_length": 6.5,
+      "cloth_visual": "normal",
+      "appearance_episode_index": 0,
+      "appearance_id": "fold_behavior_shared_studio_20260907",
+      "room": "azure",
+      "environment": "robodojo",
+      "room_yaw": 0,
+      "environment_light_scale": 1,
+      "light_temperature": 5100,
+      "paper_exposure_bias": 0,
+      "geniesim_table_material_pool": [
+        "geniesim_lab_cream"
+      ],
+      "paper_cloth_material": "fabric_pattern_07",
+      "paper_cloth_color_channel": "col_1"
+    },
+    {
+      "group": "frames",
+      "name": "rand_1UUYHHN5U4_000002",
+      "trajectory": "data/collections/shirt_fold/rollouts/fold_clean30k_standard2000_rtc30s_20260906/trajectories/rand_1UUYHHN5U4_000002",
+      "frames": [
+        0,
+        125,
+        190,
+        340,
+        375,
+        635,
+        675,
+        740,
+        975
+      ],
+      "camera": "cam_high",
+      "camera_focal_length": 6.5,
+      "cloth_visual": "normal",
+      "appearance_episode_index": 0,
+      "appearance_id": "fold_behavior_shared_studio_20260907",
+      "room": "azure",
+      "environment": "robodojo",
+      "room_yaw": 0,
+      "environment_light_scale": 1,
+      "light_temperature": 5100,
+      "paper_exposure_bias": 0,
+      "geniesim_table_material_pool": [
+        "geniesim_lab_cream"
+      ],
+      "paper_cloth_material": "crepe_satin"
+    }
+  ]
+}
