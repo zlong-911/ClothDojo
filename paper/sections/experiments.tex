@@ -209,18 +209,17 @@ trend holds across all three training sets and both tasks, suggesting that
 generalization across garment structures remains the larger challenge and
 motivating broader garment coverage in the training data.
 
-\subsection{Comparing policy models}
+\subsection{Comparison of policy models}
 \label{sec:policy-model-comparison}
 
-We further compare policy models on ClothDojo. Using the same downstream
-training data and evaluation protocol, we train $\pi_{0.5}$ and GR00T N1.7,
-both pretrained on large-scale vision--language--action data, together with a
-randomly initialized Diffusion Policy. We use the same Seen/Unseen garment and
-Seen/Unseen appearance splits as Sec.~\ref{sec:generated-data-value}. As shown in
-Fig.~\ref{fig:policy-architecture-benchmark}, the three policies exhibit distinct
-performance levels: $\pi_{0.5}$ performs best overall, followed by GR00T N1.7,
-while Diffusion Policy performs lower, with the ordering largely consistent
-across tasks and garment splits.
+We next compare three policy models on ClothDojo. Using the same task-specific
+training data and evaluation protocol, we fine-tune two pretrained VLA models,
+$\pi_{0.5}$ and GR00T N1.7, and train a Diffusion Policy from scratch. We
+evaluate all three policies using the same Seen/Unseen garment and appearance
+splits as in Sec.~\ref{sec:generated-data-value}. As shown in
+Fig.~\ref{fig:policy-architecture-benchmark}, $\pi_{0.5}$ performs best overall,
+followed by GR00T N1.7, while Diffusion Policy achieves lower success rates.
+This ordering is largely consistent across tasks and garment splits.
 
 \par\medskip
 \noindent\begin{minipage}{\columnwidth}
@@ -234,24 +233,26 @@ across tasks and garment splits.
 \end{minipage}
 \par\medskip
 
-The two pretrained VLAs are more stable under appearance shifts. This is most
-visible in folding: $\pi_{0.5}$ and GR00T N1.7 perform similarly under Seen and
-Unseen appearances, whereas Diffusion Policy drops more on unseen appearances.
-This pattern suggests that large-scale pretraining may improve robustness to
-visual distribution shifts.
+The two pretrained VLAs are less sensitive to appearance shifts. This contrast
+is clearest in folding: $\pi_{0.5}$ and GR00T N1.7 change little between Seen
+and Unseen appearances, whereas Diffusion Policy degrades more noticeably under
+Unseen appearances. This pattern suggests that large-scale pretraining may
+contribute to robustness against visual distribution shifts.
 
-Unseen garments have a more persistent effect on all three policies than
-unseen appearances. All three policies drop from Seen to Unseen garments on
-both tasks, while appearance shifts affect the two pretrained VLAs less. This
-matches the trend in Sec.~\ref{sec:generated-data-value} and indicates that generalization across garment
-geometry and structure remains a shared challenge.
+Unseen garments pose a more consistent challenge than unseen appearances
+across all three policies. Performance drops from Seen to Unseen garments on
+both tasks, whereas appearance shifts have a smaller effect on the two
+pretrained VLAs. Together with the results in
+Sec.~\ref{sec:generated-data-value}, this points to generalization across garment
+geometry and structure as a major remaining challenge.
 
-Under our evaluation protocol, crumpled flattening is harder than folding. The
-trend holds for all three policies. Flattening must recover garment structure
-from high-dimensional deformation states produced by random settling while
-handling severe wrinkles and self-occlusion; folding starts from already
-flattened garments with clearer structure and more consistent action sequences
-across instances.
+In our evaluation setup, flattening from crumpled states is harder than folding,
+and this trend holds across all three policies. Flattening starts from randomly
+settled garments and must recover garment structure from a broader range of
+high-dimensional deformation states, often with severe wrinkles and
+self-occlusion. Folding instead starts from already flattened garments, where
+the structure is clearer and action sequences are more consistent across
+instances.
 
 \subsection{Do memory and action models help?}
 
