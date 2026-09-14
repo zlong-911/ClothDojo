@@ -144,6 +144,7 @@ data generation.
 \end{figure}
 
 \subsection{What is the value of automatically generated data?}
+\label{sec:generated-data-value}
 
 We initialize all policies from the same pretrained $\pi_{0.5}$ weights and
 train separate RGB policies for flattening and folding using three data
@@ -178,14 +179,18 @@ randomization distributions; Unseen appearances use garment textures, support
 surfaces, backgrounds, and lighting conditions withheld from training. All
 policies are evaluated on the same garments, initial states, and appearances.
 
-\begin{figure}[!ht]
+\par\medskip
+\noindent\begin{minipage}{\columnwidth}
   \centering
-  \includegraphics[width=\columnwidth]{figures/rgb-policy-by-metric.pdf}
-  \caption{\textbf{Generated trajectories train effective RGB policies.}
-  Success rates are reported on common sets of Seen and Unseen garments, each
-  evaluated with Seen and Unseen appearances.}
+  \includegraphics[width=\columnwidth]{figures/generated-data-benchmark.pdf}
+  \captionof{figure}{\textbf{Generated trajectories train effective RGB policies.}
+  Success rates are reported for flattening and folding on Seen and Unseen
+  garments. Within each stacked bar, the lighter upper and darker lower portions
+  denote Seen and Unseen appearances, respectively; the value above each bar is
+  their mean success rate.}
   \label{fig:generated-data-value}
-\end{figure}
+\end{minipage}
+\par\medskip
 
 Generated outperforms Human under every evaluation condition in
 Fig.~\ref{fig:generated-data-value}. Although generated trajectories have less
@@ -204,14 +209,49 @@ trend holds across all three training sets and both tasks, suggesting that
 generalization across garment structures remains the larger challenge and
 motivating broader garment coverage in the training data.
 
-\subsection{Where do current policies fail?}
+\subsection{Comparing policy models}
+\label{sec:policy-model-comparison}
 
-Aggregate success mixes several causes of failure. Conditioning results on
-initial distance and garment morphology exposes geometric difficulty. Holding
-the physical case fixed while changing texture, background, or lighting exposes
-visual sensitivity. Changing validated physical parameters exposes dynamics
-sensitivity. Together these views turn the task into a diagnostic benchmark
-rather than a single leaderboard number.
+We further compare policy models on ClothDojo. Using the same downstream
+training data and evaluation protocol, we train $\pi_{0.5}$ and GR00T N1.7,
+both pretrained on large-scale vision--language--action data, together with a
+randomly initialized Diffusion Policy. We use the same Seen/Unseen garment and
+Seen/Unseen appearance splits as Sec.~\ref{sec:generated-data-value}. As shown in
+Fig.~\ref{fig:policy-architecture-benchmark}, the three policies exhibit distinct
+performance levels: $\pi_{0.5}$ performs best overall, followed by GR00T N1.7,
+while Diffusion Policy performs lower, with the ordering largely consistent
+across tasks and garment splits.
+
+\par\medskip
+\noindent\begin{minipage}{\columnwidth}
+  \centering
+  \includegraphics[width=\columnwidth]{figures/policy-architecture-benchmark.pdf}
+  \captionof{figure}{\textbf{Closed-loop performance of different policy models
+  on ClothDojo.} Success rates are reported for flattening and folding on Seen
+  and Unseen garments. The lighter upper and darker lower portions of each bar
+  denote Seen and Unseen appearances, respectively.}
+  \label{fig:policy-architecture-benchmark}
+\end{minipage}
+\par\medskip
+
+The two pretrained VLAs are more stable under appearance shifts. This is most
+visible in folding: $\pi_{0.5}$ and GR00T N1.7 perform similarly under Seen and
+Unseen appearances, whereas Diffusion Policy drops more on unseen appearances.
+This pattern suggests that large-scale pretraining may improve robustness to
+visual distribution shifts.
+
+Unseen garments have a more persistent effect on all three policies than
+unseen appearances. All three policies drop from Seen to Unseen garments on
+both tasks, while appearance shifts affect the two pretrained VLAs less. This
+matches the trend in Sec.~\ref{sec:generated-data-value} and indicates that generalization across garment
+geometry and structure remains a shared challenge.
+
+Under our evaluation protocol, crumpled flattening is harder than folding. The
+trend holds for all three policies. Flattening must recover garment structure
+from high-dimensional deformation states produced by random settling while
+handling severe wrinkles and self-occlusion; folding starts from already
+flattened garments with clearer structure and more consistent action sequences
+across instances.
 
 \subsection{Do memory and action models help?}
 

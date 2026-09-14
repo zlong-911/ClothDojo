@@ -1,18 +1,26 @@
-.PHONY: paper figure-rgb-policy-by-metric figure-rgb-policy-baselines-compact figure-rgb-policy-baselines clean
+.PHONY: paper figure-benchmarks figure-generated-data-benchmark figure-policy-architecture-benchmark figure-rgb-policy-baselines-compact figure-rgb-policy-baselines clean
 
 PERSISTENT_TECTONIC := $(abspath $(CURDIR)/../../../tools/latex-runtime/bin/tectonic)
 TECTONIC := $(if $(wildcard $(PERSISTENT_TECTONIC)),$(PERSISTENT_TECTONIC),tectonic)
 PERSISTENT_PDFCROP := $(abspath $(CURDIR)/../../../tools/latex-runtime/bin/pdfcrop)
 PDFCROP := $(if $(wildcard $(PERSISTENT_PDFCROP)),$(PERSISTENT_PDFCROP),pdfcrop)
 
+PYTHON ?= python3
+
+figure-benchmarks: figure-generated-data-benchmark figure-policy-architecture-benchmark
+
+figure-generated-data-benchmark:
+	TECTONIC=$(TECTONIC) PDFCROP=$(PDFCROP) $(PYTHON) scripts/make_stacked_benchmark_bars.py \
+		--config scripts/benchmark_configs/generated_data.json \
+		--output paper/figures/generated-data-benchmark.pdf
+
+figure-policy-architecture-benchmark:
+	TECTONIC=$(TECTONIC) PDFCROP=$(PDFCROP) $(PYTHON) scripts/make_stacked_benchmark_bars.py \
+		--config scripts/benchmark_configs/policy_architecture.json \
+		--output paper/figures/policy-architecture-benchmark.pdf
+
 paper:
 	$(TECTONIC) -C --keep-logs main.tex
-
-figure-rgb-policy-by-metric:
-	cd figures && $(TECTONIC) -C --keep-logs rgb-policy-by-metric.tex
-	cd figures && PATH=$(dir $(PERSISTENT_PDFCROP)):$$PATH $(PDFCROP) --ini --margins '0 0 0 0' \
-		rgb-policy-by-metric.pdf rgb-policy-by-metric-crop.pdf
-	mv figures/rgb-policy-by-metric-crop.pdf figures/rgb-policy-by-metric.pdf
 
 figure-rgb-policy-baselines-compact:
 	cd figures && $(TECTONIC) -C --keep-logs rgb-policy-baselines-compact.tex
