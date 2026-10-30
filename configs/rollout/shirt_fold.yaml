@@ -1,8 +1,0 @@
-schema: clothdojo_rollout_scenario
-format_version: 1
-scenario_id: shirt_fold_v1
-task_name: shirt_fold
-seed: 43
-prompt: Fold the shirt.
-steps: 3600
-action_horizon: 50

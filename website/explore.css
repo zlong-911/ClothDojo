@@ -1,0 +1,110 @@
+.full-sequence { margin-top:24px; }
+.full-sequence video { margin-top:18px; }
+.explorer-footnote .figure-note { margin-top:12px; }
+.explorer-section { margin-top: 24px; background: #f5f6f7; border-block: 1px solid #e4e6e8; }
+.explorer-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 30px; margin-bottom: 27px; }
+.explorer-heading h2 { margin-bottom: 10px; }
+.explorer-heading p { color: #666; font-size: 15px; }
+.explorer-heading > a { font-size: 11px; white-space: nowrap; }
+.explorer-tabs { display: flex; flex-wrap: wrap; gap: 28px; border-bottom: 1px solid #d5d9dc; margin-bottom: 20px; }
+.explorer-tabs button { display: flex; align-items: center; gap: 12px; padding: 11px 0 13px; border: 0; border-bottom: 2px solid transparent; background: none; color: #666; font-size: 14px; }
+.explorer-tabs button > span { padding: 1px 7px; border-radius: 4px; background: #e8ebed; font-size: 10px; color: #666; }
+.explorer-tabs button[aria-selected=true] { border-color: #333; color: #222; }
+.catalog-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 17px; }
+.case-filters { display: flex; gap: 7px; }
+.case-filters button { border: 1px solid transparent; border-radius: 5px; background: transparent; padding: 4px 11px; font-size: 12px; color: #666; }
+.case-filters button > span { font-size: 10px; margin-left: 6px; color: #888; }
+.case-filters button[aria-pressed=true] { border-color: #d5d9dc; background: white; color: #222; }
+.hover-hint { color: #888; font-size: 11px; }
+.case-grid { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 14px; }
+.case-card { display: flex; flex-direction: column; min-width: 0; padding: 0; border: 1px solid #e0e3e5; border-radius: 6px; background: white; overflow: hidden; text-align: left; color: #444; }
+.case-card:hover { border-color: #9ba9b3; box-shadow: 0 2px 9px #00000009; }
+.case-card-media { position: relative; display: block; width: 100%; aspect-ratio: 4/3; background: #e8eaec; overflow: hidden; }
+.case-card-media > img, .case-card-media > video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.case-card-media > video { opacity: 0; pointer-events: none; }
+.case-card.is-playing .case-card-media > video { opacity: 1; }
+.case-play { position: absolute; right: 7px; bottom: 7px; width: 23px; height: 23px; background: #ffffffd9; border-radius: 4px; color: #333; font-size: 14px; text-align: center; line-height: 23px; }
+.case-card-caption { display: grid; grid-template-columns: 1fr auto; gap: 1px 6px; width: 100%; padding: 8px 10px 10px; }
+.case-card-caption strong { font-size: 12px; font-weight: 500; }
+.case-card-caption > span { color: #888; font-size: 10px; align-self: center; }
+.case-card-caption small { grid-column: 1/-1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: #888; }
+.catalog-status { font-size: 11px; color: #777; margin-top: 16px; }
+.explorer-footnote { margin-top: 20px; font-size: 12px; line-height: 1.8; color: #737373; }
+.explorer-footnote > details { margin-top: 15px; font-size: 12px; }
+.atlas-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 15px; }
+.zoom-controls { display: flex; align-items: center; gap: 7px; }
+.zoom-controls button { min-width: 32px; height: 32px; border: 1px solid #d5d9dc; border-radius: 4px; background: white; color: #444; font-size: 15px; }
+.zoom-controls button:last-child { padding-inline: 11px; font-size: 11px; margin-left: 4px; }
+.zoom-controls button:disabled { opacity: .35; cursor: default; }
+.zoom-controls output { min-width: 31px; font-size: 11px; text-align: center; }
+.text-button { padding: 0; border: 0; background: none; color: var(--link); font-size: 12px; }
+.text-button:hover { text-decoration: underline; }
+.atlas-layout { display: grid; grid-template-columns: minmax(0,1fr) 250px; align-items: start; gap: 20px; }
+.atlas-viewport { position: relative; aspect-ratio: 16/9; overflow: hidden; background: #eeeae1; border: 1px solid #d9d8d1; border-radius: 4px; touch-action: pan-y; }
+.atlas-viewport.is-zoomed { touch-action: none; cursor: grab; }
+.atlas-viewport.is-zoomed:active { cursor: grabbing; }
+.atlas-inner { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
+.atlas-inner > img { width: 100%; height: 100%; object-fit: contain; user-select: none; pointer-events: none; }
+.atlas-hits { position: absolute; inset: 0; }
+.atlas-hit { position: absolute; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.atlas-hit:hover { outline: 1px solid #ffffffcc; background: #ffffff22; }
+.atlas-hit[aria-pressed=true] { outline: 1px solid #176fa4; z-index: 1; }
+.atlas-hit.has-replay:after { content: ''; position: absolute; right: 9%; bottom: 9%; width: 3px; height: 3px; background: #176fa4; border-radius: 50%; }
+.atlas-detail { min-width: 0; padding: 15px; border: 1px solid #e0e3e5; border-radius: 4px; background: white; }
+.detail-kicker { color: #888; font-size: 10px; margin: 0 0 10px; }
+.asset-crop { width: 100%; aspect-ratio: 304/213; background-repeat: no-repeat; background-color: #eeeae1; border-radius: 3px; }
+.atlas-detail h3 { margin: 13px 0; font: 12px/1.6 Consolas, monospace; overflow-wrap: anywhere; }
+.atlas-detail dl { margin: 0; font-size: 11px; }
+.atlas-detail dl > div { display: flex; justify-content: space-between; gap: 15px; padding: 6px 0; border-bottom: 1px solid #eee; }
+.atlas-detail dt { color: #888; flex-shrink: 0; }
+.atlas-detail dd { margin: 0; text-align: right; color: #555; }
+.atlas-detail .button { width: 100%; font-size: 11px; margin-top: 15px; padding-inline: 9px; }
+.atlas-detail .figure-note { font-size: 11px; }
+.case-dialog { width: min(960px,94vw); max-height: 94vh; padding: 20px 24px 23px; border: 0; border-radius: 7px; background: white; overflow-y: auto; }
+.case-dialog::backdrop { background: #12161be6; }
+.case-dialog-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 17px; }
+.case-dialog-header h2 { margin: 0; font-size: 18px; font-weight: 500; overflow-wrap: anywhere; }
+.case-dialog-header .detail-kicker { margin-bottom: 4px; }
+.case-dialog-header > button { border: 0; background: none; color: #777; font-size: 12px; white-space: nowrap; }
+.case-dialog > video { width: min(100%,calc(64vh * 4 / 3)); height: auto; aspect-ratio: 4/3; margin-inline: auto; background: #222; }
+.case-dialog-footer { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 20px; margin: 17px 0 13px; }
+.case-dialog-footer button { padding: 5px 10px; border: 1px solid #ddd; border-radius: 4px; background: white; color: #555; font-size: 11px; }
+.case-dialog-footer p { font-size: 11px; text-align: center; color: #888; }
+@media(max-width:1100px) {
+  .case-grid { grid-template-columns: repeat(4,minmax(0,1fr)); }
+}
+@media(max-width:900px) {
+  .atlas-layout { grid-template-columns: minmax(0,1fr) 210px; gap: 15px; }
+  .atlas-detail { padding: 12px; }
+  .explorer-heading { align-items: flex-start; }
+}
+@media(max-width:760px) {
+  .case-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 11px; }
+  .explorer-heading { display: block; }
+  .explorer-heading > a { display: inline-block; margin-top: 12px; }
+  .catalog-toolbar { flex-wrap: wrap; gap: 10px; }
+  .hover-hint { display: none; }
+  .atlas-layout { grid-template-columns: 1fr; }
+  .atlas-detail { display: grid; grid-template-columns: 1fr 1.2fr; gap: 10px 18px; }
+  .atlas-detail > .detail-kicker { grid-column: 1/-1; margin: 0; }
+  .asset-crop { grid-column: 1; grid-row: 2/6; }
+  .atlas-detail h3, .atlas-detail dl, .atlas-detail .button, .atlas-detail .figure-note { grid-column: 2; margin: 0; }
+  .atlas-detail .figure-note { font-size: 10px; }
+  .explorer-tabs { gap: 20px; }
+  .explorer-tabs button { font-size: 12px; gap: 7px; }
+  .explorer-tabs button > span { font-size: 9px; }
+  .case-dialog { padding: 16px; }
+  .case-dialog-footer { gap: 10px; }
+}
+@media(max-width:480px) {
+  .case-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .explorer-tabs { gap: 15px; }
+  .explorer-tabs button { gap: 5px; font-size: 11px; }
+  .explorer-tabs button > span { padding: 1px 5px; font-size: 8px; }
+  .atlas-toolbar .text-button { font-size: 11px; }
+  .case-dialog-header h2 { font-size: 15px; }
+  .case-dialog-footer { grid-template-columns: 1fr 1fr; }
+  .case-dialog-footer p { grid-column: 1/-1; grid-row: 2; }
+  .case-dialog-footer button:last-child { text-align: right; }
+}
+

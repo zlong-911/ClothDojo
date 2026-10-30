@@ -1,0 +1,4788 @@
+{
+  "schema": "clothdojo_explorer_v1",
+  "dataset_counts": {
+    "flatten": 3992,
+    "fold": 3856,
+    "total": 7848
+  },
+  "cases": [
+    {
+      "id": 0,
+      "task": "flatten",
+      "asset_id": "rand_00PJYCPW0L",
+      "video": "assets/catalog/case-00.mp4",
+      "preview": "assets/catalog/case-00-preview.mp4",
+      "poster": "assets/catalog/case-00.jpg",
+      "duration": 38.08,
+      "fps": 25,
+      "source": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000021.mp4"
+    },
+    {
+      "id": 12,
+      "task": "fold",
+      "asset_id": "rand_0E362JU16I",
+      "video": "assets/catalog/case-12.mp4",
+      "preview": "assets/catalog/case-12-preview.mp4",
+      "poster": "assets/catalog/case-12.jpg",
+      "duration": 28.16,
+      "fps": 25,
+      "source": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000228.mp4"
+    },
+    {
+      "id": 1,
+      "task": "flatten",
+      "asset_id": "rand_0I3JWVNKOR",
+      "video": "assets/catalog/case-01.mp4",
+      "preview": "assets/catalog/case-01-preview.mp4",
+      "poster": "assets/catalog/case-01.jpg",
+      "duration": 31.48,
+      "fps": 25,
+      "source": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000259.mp4"
+    },
+    {
+      "id": 13,
+      "task": "fold",
+      "asset_id": "rand_244NPT0F0J",
+      "video": "assets/catalog/case-13.mp4",
+      "preview": "assets/catalog/case-13-preview.mp4",
+      "poster": "assets/catalog/case-13.jpg",
+      "duration": 56.16,
+      "fps": 25,
+      "source": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002863.mp4"
+    },
+    {
+      "id": 2,
+      "task": "flatten",
+      "asset_id": "rand_1GIQSRDLN2",
+      "video": "assets/catalog/case-02.mp4",
+      "preview": "assets/catalog/case-02-preview.mp4",
+      "poster": "assets/catalog/case-02.jpg",
+      "duration": 33.56,
+      "fps": 25,
+      "source": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001610.mp4"
+    },
+    {
+      "id": 14,
+      "task": "fold",
+      "asset_id": "rand_1KMN65OI4O",
+      "video": "assets/catalog/case-14.mp4",
+      "preview": "assets/catalog/case-14-preview.mp4",
+      "poster": "assets/catalog/case-14.jpg",
+      "duration": 19.8,
+      "fps": 25,
+      "source": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001795.mp4"
+    },
+    {
+      "id": 3,
+      "task": "flatten",
+      "asset_id": "rand_02WJ207M8N",
+      "video": "assets/catalog/case-03.mp4",
+      "preview": "assets/catalog/case-03-preview.mp4",
+      "poster": "assets/catalog/case-03.jpg",
+      "duration": 26.56,
+      "fps": 25,
+      "source": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000084.mp4"
+    },
+    {
+      "id": 15,
+      "task": "fold",
+      "asset_id": "rand_1RJ8D5A7EC",
+      "video": "assets/catalog/case-15.mp4",
+      "preview": "assets/catalog/case-15-preview.mp4",
+      "poster": "assets/catalog/case-15.jpg",
+      "duration": 40.04,
+      "fps": 25,
+      "source": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002200.mp4"
+    },
+    {
+      "id": 4,
+      "task": "flatten",
+      "asset_id": "rand_1AWWJ9TCB8",
+      "video": "assets/catalog/case-04.mp4",
+      "preview": "assets/catalog/case-04-preview.mp4",
+      "poster": "assets/catalog/case-04.jpg",
+      "duration": 27.96,
+      "fps": 25,
+      "source": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001277.mp4"
+    },
+    {
+      "id": 16,
+      "task": "fold",
+      "asset_id": "rand_1UPT0NGFMM",
+      "video": "assets/catalog/case-16.mp4",
+      "preview": "assets/catalog/case-16-preview.mp4",
+      "poster": "assets/catalog/case-16.jpg",
+      "duration": 18.24,
+      "fps": 25,
+      "source": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002376.mp4"
+    },
+    {
+      "id": 5,
+      "task": "flatten",
+      "asset_id": "rand_23MXTAPSYO",
+      "video": "assets/catalog/case-05.mp4",
+      "preview": "assets/catalog/case-05-preview.mp4",
+      "poster": "assets/catalog/case-05.jpg",
+      "duration": 24.08,
+      "fps": 25,
+      "source": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002937.mp4"
+    },
+    {
+      "id": 17,
+      "task": "fold",
+      "asset_id": "rand_12CMB9NKG1",
+      "video": "assets/catalog/case-17.mp4",
+      "preview": "assets/catalog/case-17-preview.mp4",
+      "poster": "assets/catalog/case-17.jpg",
+      "duration": 19.36,
+      "fps": 25,
+      "source": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000799.mp4"
+    },
+    {
+      "id": 6,
+      "task": "flatten",
+      "asset_id": "rand_1GX7ZBY2SX",
+      "video": "assets/catalog/case-06.mp4",
+      "preview": "assets/catalog/case-06-preview.mp4",
+      "poster": "assets/catalog/case-06.jpg",
+      "duration": 37.24,
+      "fps": 25,
+      "source": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001649.mp4"
+    },
+    {
+      "id": 18,
+      "task": "fold",
+      "asset_id": "rand_117L64AH1R",
+      "video": "assets/catalog/case-18.mp4",
+      "preview": "assets/catalog/case-18-preview.mp4",
+      "poster": "assets/catalog/case-18.jpg",
+      "duration": 40.64,
+      "fps": 25,
+      "source": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000728.mp4"
+    },
+    {
+      "id": 7,
+      "task": "flatten",
+      "asset_id": "rand_2HIUZ3RBD3",
+      "video": "assets/catalog/case-07.mp4",
+      "preview": "assets/catalog/case-07-preview.mp4",
+      "poster": "assets/catalog/case-07.jpg",
+      "duration": 20.08,
+      "fps": 25,
+      "source": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003808.mp4"
+    },
+    {
+      "id": 19,
+      "task": "fold",
+      "asset_id": "rand_2EBUYCB46V",
+      "video": "assets/catalog/case-19.mp4",
+      "preview": "assets/catalog/case-19-preview.mp4",
+      "poster": "assets/catalog/case-19.jpg",
+      "duration": 45.92,
+      "fps": 25,
+      "source": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003545.mp4"
+    },
+    {
+      "id": 8,
+      "task": "flatten",
+      "asset_id": "rand_1B862QIZ9S",
+      "video": "assets/catalog/case-08.mp4",
+      "preview": "assets/catalog/case-08-preview.mp4",
+      "poster": "assets/catalog/case-08.jpg",
+      "duration": 27.44,
+      "fps": 25,
+      "source": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001287.mp4"
+    },
+    {
+      "id": 20,
+      "task": "fold",
+      "asset_id": "rand_1H2L4705WL",
+      "video": "assets/catalog/case-20.mp4",
+      "preview": "assets/catalog/case-20-preview.mp4",
+      "poster": "assets/catalog/case-20.jpg",
+      "duration": 20.88,
+      "fps": 25,
+      "source": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001617.mp4"
+    },
+    {
+      "id": 9,
+      "task": "flatten",
+      "asset_id": "rand_184ZB0LXIR",
+      "video": "assets/catalog/case-09.mp4",
+      "preview": "assets/catalog/case-09-preview.mp4",
+      "poster": "assets/catalog/case-09.jpg",
+      "duration": 33.76,
+      "fps": 25,
+      "source": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001088.mp4"
+    },
+    {
+      "id": 21,
+      "task": "fold",
+      "asset_id": "rand_27QVZO5VN5",
+      "video": "assets/catalog/case-21.mp4",
+      "preview": "assets/catalog/case-21-preview.mp4",
+      "poster": "assets/catalog/case-21.jpg",
+      "duration": 21.52,
+      "fps": 25,
+      "source": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003100.mp4"
+    },
+    {
+      "id": 10,
+      "task": "flatten",
+      "asset_id": "rand_0ZFJUADVCA",
+      "video": "assets/catalog/case-10.mp4",
+      "preview": "assets/catalog/case-10-preview.mp4",
+      "poster": "assets/catalog/case-10.jpg",
+      "duration": 19.36,
+      "fps": 25,
+      "source": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000687.mp4"
+    },
+    {
+      "id": 22,
+      "task": "fold",
+      "asset_id": "rand_1BBH5VM6IR",
+      "video": "assets/catalog/case-22.mp4",
+      "preview": "assets/catalog/case-22-preview.mp4",
+      "poster": "assets/catalog/case-22.jpg",
+      "duration": 22.76,
+      "fps": 25,
+      "source": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001281.mp4"
+    },
+    {
+      "id": 11,
+      "task": "flatten",
+      "asset_id": "rand_1A0BGLIDR1",
+      "video": "assets/catalog/case-11.mp4",
+      "preview": "assets/catalog/case-11-preview.mp4",
+      "poster": "assets/catalog/case-11.jpg",
+      "duration": 20.76,
+      "fps": 25,
+      "source": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001194.mp4"
+    },
+    {
+      "id": 23,
+      "task": "fold",
+      "asset_id": "rand_155MRLXVMW",
+      "video": "assets/catalog/case-23.mp4",
+      "preview": "assets/catalog/case-23-preview.mp4",
+      "poster": "assets/catalog/case-23.jpg",
+      "duration": 20.4,
+      "fps": 25,
+      "source": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000930.mp4"
+    }
+  ],
+  "atlas": {
+    "width": 8000,
+    "height": 4500,
+    "columns": 25,
+    "rows": 20,
+    "margin_x": 200,
+    "margin_y": 112,
+    "cell_width": 304,
+    "cell_height": 213,
+    "preview": "assets/catalog/garment-atlas-preview.jpg",
+    "image": "assets/catalog/garment-atlas.png",
+    "assets": [
+      {
+        "asset_id": "rand_1BSZCNY1LV",
+        "size_m": [
+          1.0152453184127808,
+          0.5967705249786377
+        ],
+        "material": "velour_velvet",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1VKTA3O4NL",
+        "size_m": [
+          0.827958345413208,
+          0.5239391922950745
+        ],
+        "material": "polar_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_11CBEZVPAK",
+        "size_m": [
+          1.03652822971344,
+          0.5227773189544678
+        ],
+        "material": "wool_boucle",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_17UY5SOHZ2",
+        "size_m": [
+          1.1737838983535767,
+          0.5497299432754517
+        ],
+        "material": "waffle_pique_cotton",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0T071CSSTD",
+        "size_m": [
+          0.4230179190635681,
+          0.4560084342956543
+        ],
+        "material": "fabric_pattern_07",
+        "color_channel": "col_03"
+      },
+      {
+        "asset_id": "rand_1EEIEEXOHT",
+        "size_m": [
+          0.47792720794677734,
+          0.3783245384693146
+        ],
+        "material": "denim_fabric_04",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1AREF49CK1",
+        "size_m": [
+          0.5366032123565674,
+          0.5946567058563232
+        ],
+        "material": "denmin_fabric_02",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1YGWDNTUBA",
+        "size_m": [
+          0.49537545442581177,
+          0.5962624549865723
+        ],
+        "material": "denim_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_22A0ALI25H",
+        "size_m": [
+          0.7941973209381104,
+          0.4696340262889862
+        ],
+        "material": "denim_fabric_06",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1AWWJ9TCB8",
+        "size_m": [
+          0.5497164130210876,
+          0.4379282593727112
+        ],
+        "material": "ribbed_corduroy",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_209LS78ZW0",
+        "size_m": [
+          1.2932497262954712,
+          0.47255879640579224
+        ],
+        "material": "caban",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_28WUHZO5NH",
+        "size_m": [
+          0.48272067308425903,
+          0.4281805753707886
+        ],
+        "material": "fabric_pattern_05",
+        "color_channel": "col_01"
+      },
+      {
+        "asset_id": "rand_12FL0PZP12",
+        "size_m": [
+          0.4706297516822815,
+          0.5158246755599976
+        ],
+        "material": "rough_linen",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0A1ZQT230R",
+        "size_m": [
+          0.5106090307235718,
+          0.4633004367351532
+        ],
+        "material": "terry_cloth",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1DPOA5OB9A",
+        "size_m": [
+          0.5259794592857361,
+          0.5271754860877991
+        ],
+        "material": "gingham_check",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1K7UAS5RJU",
+        "size_m": [
+          0.6906874179840088,
+          0.5206107497215271
+        ],
+        "material": "bi_stretch",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_232X14D5PP",
+        "size_m": [
+          0.9688845276832581,
+          0.5257930755615234
+        ],
+        "material": "curly_teddy_natural",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1SQ7A2A0ZI",
+        "size_m": [
+          1.1075339317321777,
+          0.6383785605430603
+        ],
+        "material": "book_pattern",
+        "color_channel": "col1"
+      },
+      {
+        "asset_id": "rand_0QEFS4I9VY",
+        "size_m": [
+          0.9239974617958069,
+          0.6223058700561523
+        ],
+        "material": "denim_fabric_05",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2KLYQD12HN",
+        "size_m": [
+          0.952465832233429,
+          0.8106836080551147
+        ],
+        "material": "cotton_jersey",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_13O1F9D78S",
+        "size_m": [
+          1.3284634351730347,
+          0.49213486909866333
+        ],
+        "material": "floral_jacquard",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_289RRAT04D",
+        "size_m": [
+          0.4855455458164215,
+          0.6115496158599854
+        ],
+        "material": "faux_fur_geometric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0URVRF4FRO",
+        "size_m": [
+          0.4629193842411041,
+          0.37908685207366943
+        ],
+        "material": "poly_wool_herringbone",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1M4MU8KSIY",
+        "size_m": [
+          0.873106837272644,
+          0.6308213472366333
+        ],
+        "material": "denim_fabric_03",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1BEWWU2K6Q",
+        "size_m": [
+          0.5567933917045593,
+          0.48838478326797485
+        ],
+        "material": "scuba_suede",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_20SVIOW9YI",
+        "size_m": [
+          1.153334379196167,
+          0.5471006631851196
+        ],
+        "material": "curly_teddy_checkered",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2HIUZ3RBD3",
+        "size_m": [
+          0.6356662511825562,
+          0.4900621771812439
+        ],
+        "material": "crepe_georgette",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_21HNFJ1C84",
+        "size_m": [
+          1.0758575201034546,
+          0.5680097937583923
+        ],
+        "material": "stretch_poplin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2BQESAQXGX",
+        "size_m": [
+          0.6056398153305054,
+          0.5404394865036011
+        ],
+        "material": "jogging_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_26KG2BKFRL",
+        "size_m": [
+          0.932604193687439,
+          0.6428394317626953
+        ],
+        "material": "quatrefoil_jacquard_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1NEI7EY6G1",
+        "size_m": [
+          1.0348528623580933,
+          0.5271166563034058
+        ],
+        "material": "terlenka",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1UZO4ECAO8",
+        "size_m": [
+          1.1037057638168335,
+          0.4406437873840332
+        ],
+        "material": "crepe_satin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1N0TROJ8R4",
+        "size_m": [
+          1.0626769065856934,
+          0.6572197675704956
+        ],
+        "material": "jersey_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2JJ6F2IVBF",
+        "size_m": [
+          1.1599725484848022,
+          0.9966996312141418
+        ],
+        "material": "knitted_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1Q9F9PTYCB",
+        "size_m": [
+          0.48990359902381897,
+          0.4788457751274109
+        ],
+        "material": "velour_velvet",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_268QVG7RNY",
+        "size_m": [
+          0.9556882381439209,
+          0.7671674489974976
+        ],
+        "material": "polar_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0XJWP7W9ZI",
+        "size_m": [
+          1.4851372241973877,
+          0.6163855195045471
+        ],
+        "material": "wool_boucle",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1BKOCG69L9",
+        "size_m": [
+          1.0237022638320923,
+          0.6391721963882446
+        ],
+        "material": "waffle_pique_cotton",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1O86FAG3GD",
+        "size_m": [
+          1.062878966331482,
+          0.7506445646286011
+        ],
+        "material": "fabric_pattern_07",
+        "color_channel": "col_03"
+      },
+      {
+        "asset_id": "rand_1JY83CS1BA",
+        "size_m": [
+          1.001054286956787,
+          0.7709471583366394
+        ],
+        "material": "denim_fabric_04",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1LYIV5QVH2",
+        "size_m": [
+          0.9126555323600769,
+          0.6221414804458618
+        ],
+        "material": "denmin_fabric_02",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_26WRBYAPUY",
+        "size_m": [
+          0.4455065131187439,
+          0.6171482801437378
+        ],
+        "material": "denim_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1ABU7HKRR9",
+        "size_m": [
+          0.9735949039459229,
+          0.33410561084747314
+        ],
+        "material": "denim_fabric_06",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_196ZJ6KG0I",
+        "size_m": [
+          0.526300311088562,
+          0.5521886348724365
+        ],
+        "material": "ribbed_corduroy",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_11ME9YEK0R",
+        "size_m": [
+          1.0079939365386963,
+          0.5534420609474182
+        ],
+        "material": "caban",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1NMOEFSF0W",
+        "size_m": [
+          0.8568068742752075,
+          0.767299234867096
+        ],
+        "material": "fabric_pattern_05",
+        "color_channel": "col_01"
+      },
+      {
+        "asset_id": "rand_1P4DYD7GRT",
+        "size_m": [
+          0.8258030414581299,
+          0.8475677967071533
+        ],
+        "material": "rough_linen",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1BB8QEIHOS",
+        "size_m": [
+          1.192993402481079,
+          0.5456399917602539
+        ],
+        "material": "terry_cloth",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1N3LSNK0ZW",
+        "size_m": [
+          1.2255311012268066,
+          0.7986686825752258
+        ],
+        "material": "gingham_check",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_07SZ5QQ0QP",
+        "size_m": [
+          0.5087147951126099,
+          0.501927375793457
+        ],
+        "material": "bi_stretch",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1G753QQF8L",
+        "size_m": [
+          1.3393481969833374,
+          0.8148881196975708
+        ],
+        "material": "curly_teddy_natural",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_061TOSXC5W",
+        "size_m": [
+          0.9027408361434937,
+          0.538550615310669
+        ],
+        "material": "book_pattern",
+        "color_channel": "col1"
+      },
+      {
+        "asset_id": "rand_2G817ZBS45",
+        "size_m": [
+          0.8035223484039307,
+          0.637405276298523
+        ],
+        "material": "denim_fabric_05",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_04OU2IZ2GV",
+        "size_m": [
+          0.48186323046684265,
+          0.5273149609565735
+        ],
+        "material": "cotton_jersey",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2D5DGYT0TQ",
+        "size_m": [
+          0.8333662748336792,
+          0.49238085746765137
+        ],
+        "material": "floral_jacquard",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2HA52Y4C1D",
+        "size_m": [
+          0.7123101949691772,
+          0.540361225605011
+        ],
+        "material": "faux_fur_geometric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1F7UUHFTTF",
+        "size_m": [
+          0.5356076955795288,
+          0.5137733221054077
+        ],
+        "material": "poly_wool_herringbone",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_244NPT0F0J",
+        "size_m": [
+          0.8401482105255127,
+          0.7973002195358276
+        ],
+        "material": "denim_fabric_03",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_26C2NB01N1",
+        "size_m": [
+          0.7095127701759338,
+          0.5427440404891968
+        ],
+        "material": "scuba_suede",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_24XNTUDUZ1",
+        "size_m": [
+          1.054069995880127,
+          0.5010762214660645
+        ],
+        "material": "curly_teddy_checkered",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1MPIIA3B5T",
+        "size_m": [
+          0.8217642307281494,
+          0.5831296443939209
+        ],
+        "material": "crepe_georgette",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2LN9D9BZBV",
+        "size_m": [
+          1.3114897012710571,
+          0.6196500062942505
+        ],
+        "material": "stretch_poplin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1L3CQRZABV",
+        "size_m": [
+          1.2137095928192139,
+          0.7604565024375916
+        ],
+        "material": "jogging_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1BYN9OGP8S",
+        "size_m": [
+          0.5711222887039185,
+          0.5147782564163208
+        ],
+        "material": "quatrefoil_jacquard_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1GGZFP6PYZ",
+        "size_m": [
+          1.0338424444198608,
+          0.45217904448509216
+        ],
+        "material": "terlenka",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_25MNI4EUYG",
+        "size_m": [
+          0.8554050326347351,
+          0.6164554357528687
+        ],
+        "material": "crepe_satin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1GQVNXRSQR",
+        "size_m": [
+          0.8961315155029297,
+          0.5449483394622803
+        ],
+        "material": "jersey_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1IS9ZV2NCW",
+        "size_m": [
+          1.229529619216919,
+          0.5159777998924255
+        ],
+        "material": "knitted_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_117L64AH1R",
+        "size_m": [
+          0.6947609186172485,
+          0.7555594444274902
+        ],
+        "material": "velour_velvet",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_20K0H65GUU",
+        "size_m": [
+          0.522635817527771,
+          0.8631606101989746
+        ],
+        "material": "polar_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2DQCL6CL8T",
+        "size_m": [
+          0.3998786509037018,
+          0.5202958583831787
+        ],
+        "material": "wool_boucle",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0IX189WGFR",
+        "size_m": [
+          1.1121927499771118,
+          0.48699456453323364
+        ],
+        "material": "waffle_pique_cotton",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1545L6O32O",
+        "size_m": [
+          0.8071694374084473,
+          0.5820339918136597
+        ],
+        "material": "fabric_pattern_07",
+        "color_channel": "col_03"
+      },
+      {
+        "asset_id": "rand_1NNDIM3NKA",
+        "size_m": [
+          0.7494823932647705,
+          0.5565204620361328
+        ],
+        "material": "denim_fabric_04",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_21ROLSJXO7",
+        "size_m": [
+          0.5196380615234375,
+          0.2953358292579651
+        ],
+        "material": "denmin_fabric_02",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1VER7QPVAD",
+        "size_m": [
+          1.178324580192566,
+          0.5190523862838745
+        ],
+        "material": "denim_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1VKRDNWFKE",
+        "size_m": [
+          0.566314697265625,
+          0.549932599067688
+        ],
+        "material": "denim_fabric_06",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_23VG6SJ4P2",
+        "size_m": [
+          0.46521979570388794,
+          0.4729977250099182
+        ],
+        "material": "ribbed_corduroy",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_18NFSE5T3N",
+        "size_m": [
+          0.5313955545425415,
+          0.5591064691543579
+        ],
+        "material": "caban",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2ABUSKI9UP",
+        "size_m": [
+          0.9012874960899353,
+          0.5540894269943237
+        ],
+        "material": "fabric_pattern_05",
+        "color_channel": "col_01"
+      },
+      {
+        "asset_id": "rand_0ZNJWJJCQJ",
+        "size_m": [
+          0.5071438550949097,
+          0.6818625926971436
+        ],
+        "material": "rough_linen",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1OSY1R2AQM",
+        "size_m": [
+          0.9478697776794434,
+          0.6072665452957153
+        ],
+        "material": "terry_cloth",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_28TCTHHN3J",
+        "size_m": [
+          0.7045285701751709,
+          0.9228787422180176
+        ],
+        "material": "gingham_check",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_04NKS685SH",
+        "size_m": [
+          0.567122220993042,
+          0.5135422945022583
+        ],
+        "material": "bi_stretch",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0V99E6MZAM",
+        "size_m": [
+          0.6488354802131653,
+          0.6558659672737122
+        ],
+        "material": "curly_teddy_natural",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_21BK468XX1",
+        "size_m": [
+          0.9640712738037109,
+          0.6068000197410583
+        ],
+        "material": "book_pattern",
+        "color_channel": "col1"
+      },
+      {
+        "asset_id": "rand_1LQ7UKMACP",
+        "size_m": [
+          0.5979445576667786,
+          0.6861472129821777
+        ],
+        "material": "denim_fabric_05",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_29NJ8CPGEY",
+        "size_m": [
+          0.822594165802002,
+          0.45150095224380493
+        ],
+        "material": "cotton_jersey",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1GDCM6208E",
+        "size_m": [
+          1.1807425022125244,
+          0.5816810131072998
+        ],
+        "material": "floral_jacquard",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_12AWPZXUOK",
+        "size_m": [
+          0.39818719029426575,
+          0.5165764093399048
+        ],
+        "material": "faux_fur_geometric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_24R3ZE960E",
+        "size_m": [
+          0.9735313057899475,
+          0.5930107831954956
+        ],
+        "material": "poly_wool_herringbone",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_27QVZO5VN5",
+        "size_m": [
+          1.3218340873718262,
+          0.5616596341133118
+        ],
+        "material": "denim_fabric_03",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2DSGBFQM2L",
+        "size_m": [
+          0.9702607989311218,
+          0.5332503318786621
+        ],
+        "material": "scuba_suede",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1CD8JAPAP2",
+        "size_m": [
+          0.48819705843925476,
+          0.4868142604827881
+        ],
+        "material": "curly_teddy_checkered",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_26BE4KX8V3",
+        "size_m": [
+          1.1816599369049072,
+          0.5431563854217529
+        ],
+        "material": "crepe_georgette",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_004NVCOKV7",
+        "size_m": [
+          1.2843462228775024,
+          0.5415244102478027
+        ],
+        "material": "stretch_poplin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_29TIE8HBTT",
+        "size_m": [
+          1.1848145723342896,
+          0.552503764629364
+        ],
+        "material": "jogging_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0UKD4QKBTS",
+        "size_m": [
+          1.2528796195983887,
+          0.49072569608688354
+        ],
+        "material": "quatrefoil_jacquard_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_00PJYCPW0L",
+        "size_m": [
+          0.9266941547393799,
+          0.5384443998336792
+        ],
+        "material": "terlenka",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1Q7SCGVCYH",
+        "size_m": [
+          0.6107369661331177,
+          0.6405937671661377
+        ],
+        "material": "crepe_satin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2923WVVO72",
+        "size_m": [
+          0.559184730052948,
+          0.5300144553184509
+        ],
+        "material": "jersey_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_211Y4IO94C",
+        "size_m": [
+          1.183842420578003,
+          0.5660220384597778
+        ],
+        "material": "knitted_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_22W6XQ2A2U",
+        "size_m": [
+          0.9721134305000305,
+          0.6003546118736267
+        ],
+        "material": "velour_velvet",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_26CDT8GJDW",
+        "size_m": [
+          0.5249814987182617,
+          0.546440601348877
+        ],
+        "material": "polar_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1DGYFK46D0",
+        "size_m": [
+          0.8148719668388367,
+          0.5048859119415283
+        ],
+        "material": "wool_boucle",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_19VLXSSFLD",
+        "size_m": [
+          0.7229112386703491,
+          0.6766782402992249
+        ],
+        "material": "waffle_pique_cotton",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0XY7VMAT8O",
+        "size_m": [
+          0.6083019971847534,
+          0.6940460205078125
+        ],
+        "material": "fabric_pattern_07",
+        "color_channel": "col_03"
+      },
+      {
+        "asset_id": "rand_1JB1BH6H7B",
+        "size_m": [
+          1.03291654586792,
+          0.5335986614227295
+        ],
+        "material": "denim_fabric_04",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0VVJGBK29H",
+        "size_m": [
+          0.5254597663879395,
+          0.6017621755599976
+        ],
+        "material": "denmin_fabric_02",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2GQR9SSX4I",
+        "size_m": [
+          1.3195828199386597,
+          0.5906456708908081
+        ],
+        "material": "denim_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1I2KU288LG",
+        "size_m": [
+          0.6796634197235107,
+          0.49181318283081055
+        ],
+        "material": "denim_fabric_06",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1GYOCYM934",
+        "size_m": [
+          0.7279704213142395,
+          0.7225028276443481
+        ],
+        "material": "ribbed_corduroy",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1EDHTQFUNP",
+        "size_m": [
+          0.4623264670372009,
+          0.7413567304611206
+        ],
+        "material": "caban",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1AN0DCLJP8",
+        "size_m": [
+          1.1205216646194458,
+          0.7681589126586914
+        ],
+        "material": "fabric_pattern_05",
+        "color_channel": "col_01"
+      },
+      {
+        "asset_id": "rand_14D1WXFN6Q",
+        "size_m": [
+          1.230001449584961,
+          0.5140281915664673
+        ],
+        "material": "rough_linen",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1HHW0GGKMF",
+        "size_m": [
+          1.3125673532485962,
+          0.6136596202850342
+        ],
+        "material": "terry_cloth",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_10WJYTHZPM",
+        "size_m": [
+          1.2561619281768799,
+          0.7727631330490112
+        ],
+        "material": "gingham_check",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1BBH5VM6IR",
+        "size_m": [
+          0.8546317219734192,
+          0.48008644580841064
+        ],
+        "material": "bi_stretch",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1MMDANUOGJ",
+        "size_m": [
+          0.795639157295227,
+          0.4766586720943451
+        ],
+        "material": "curly_teddy_natural",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1LGZ20AJA1",
+        "size_m": [
+          1.1088833808898926,
+          0.6708860397338867
+        ],
+        "material": "book_pattern",
+        "color_channel": "col1"
+      },
+      {
+        "asset_id": "rand_13WVY4KNP7",
+        "size_m": [
+          0.9706282019615173,
+          0.6621229648590088
+        ],
+        "material": "denim_fabric_05",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1PVUZVFU2U",
+        "size_m": [
+          0.766931414604187,
+          0.636408805847168
+        ],
+        "material": "cotton_jersey",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1KMXBNUGJS",
+        "size_m": [
+          0.4753365218639374,
+          0.5012262463569641
+        ],
+        "material": "floral_jacquard",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_28R28NJ9TT",
+        "size_m": [
+          0.8968038558959961,
+          0.5160740613937378
+        ],
+        "material": "faux_fur_geometric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1TSMB7S1IE",
+        "size_m": [
+          0.45070770382881165,
+          0.5009908676147461
+        ],
+        "material": "poly_wool_herringbone",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_28N56YOZXC",
+        "size_m": [
+          0.9670005440711975,
+          0.5891354084014893
+        ],
+        "material": "denim_fabric_03",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0WB64RKU4J",
+        "size_m": [
+          1.076593279838562,
+          0.5091809034347534
+        ],
+        "material": "scuba_suede",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2GLQYGBEU5",
+        "size_m": [
+          1.1035490036010742,
+          0.5510789155960083
+        ],
+        "material": "curly_teddy_checkered",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1O5U24MFXR",
+        "size_m": [
+          0.5352461338043213,
+          0.7870076894760132
+        ],
+        "material": "crepe_georgette",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0I3JWVNKOR",
+        "size_m": [
+          0.8716742396354675,
+          0.5289871692657471
+        ],
+        "material": "stretch_poplin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1BU52I9LRX",
+        "size_m": [
+          0.7822723388671875,
+          0.5371171236038208
+        ],
+        "material": "jogging_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2G0KVHUU9H",
+        "size_m": [
+          1.0478405952453613,
+          0.5857681035995483
+        ],
+        "material": "quatrefoil_jacquard_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2I0LZERVH9",
+        "size_m": [
+          1.00836980342865,
+          0.510585367679596
+        ],
+        "material": "terlenka",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1VW0ZFXD17",
+        "size_m": [
+          0.7999482154846191,
+          0.5850524306297302
+        ],
+        "material": "crepe_satin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1VHHVM8RXX",
+        "size_m": [
+          0.8705199360847473,
+          0.5000135898590088
+        ],
+        "material": "jersey_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2LE0F0YW4O",
+        "size_m": [
+          0.7324033975601196,
+          0.5346243381500244
+        ],
+        "material": "knitted_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1ONEJHCOVS",
+        "size_m": [
+          0.5586358308792114,
+          0.4922226667404175
+        ],
+        "material": "velour_velvet",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1NN9OT0UKB",
+        "size_m": [
+          0.9173777103424072,
+          0.5834101438522339
+        ],
+        "material": "polar_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_070KTTPZZR",
+        "size_m": [
+          0.9945881962776184,
+          0.5267133712768555
+        ],
+        "material": "wool_boucle",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1T6IM4B3AE",
+        "size_m": [
+          0.5268250703811646,
+          0.5313088297843933
+        ],
+        "material": "waffle_pique_cotton",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1OCQNTE24T",
+        "size_m": [
+          0.7171972393989563,
+          0.5161908864974976
+        ],
+        "material": "fabric_pattern_07",
+        "color_channel": "col_03"
+      },
+      {
+        "asset_id": "rand_02WJ207M8N",
+        "size_m": [
+          0.6192830204963684,
+          0.6660451889038086
+        ],
+        "material": "denim_fabric_04",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1AH3GT8PTO",
+        "size_m": [
+          0.8316830396652222,
+          0.6477830410003662
+        ],
+        "material": "denmin_fabric_02",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_07FDM3U88E",
+        "size_m": [
+          0.5413208603858948,
+          0.6142140030860901
+        ],
+        "material": "denim_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1TDA3XR78A",
+        "size_m": [
+          1.2117152214050293,
+          0.7238022089004517
+        ],
+        "material": "denim_fabric_06",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_16AC0MKLJL",
+        "size_m": [
+          1.4384301900863647,
+          0.7458504438400269
+        ],
+        "material": "ribbed_corduroy",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_24Y512G41S",
+        "size_m": [
+          0.5278297066688538,
+          0.6212875843048096
+        ],
+        "material": "caban",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2DGPD4CKCV",
+        "size_m": [
+          0.6769522428512573,
+          1.0438157320022583
+        ],
+        "material": "fabric_pattern_05",
+        "color_channel": "col_01"
+      },
+      {
+        "asset_id": "rand_01871Y38Q0",
+        "size_m": [
+          0.5585139989852905,
+          0.5385450124740601
+        ],
+        "material": "rough_linen",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1F9YNONW4N",
+        "size_m": [
+          1.1316859722137451,
+          0.5249553918838501
+        ],
+        "material": "terry_cloth",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2712IUKDND",
+        "size_m": [
+          1.0958888530731201,
+          0.5607376098632812
+        ],
+        "material": "gingham_check",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0TJJVRB5RK",
+        "size_m": [
+          1.0865662097930908,
+          0.5390222072601318
+        ],
+        "material": "bi_stretch",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1H2L4705WL",
+        "size_m": [
+          0.5494855642318726,
+          0.5100412368774414
+        ],
+        "material": "curly_teddy_natural",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_16V49KL0R9",
+        "size_m": [
+          0.5569031238555908,
+          0.48438987135887146
+        ],
+        "material": "book_pattern",
+        "color_channel": "col1"
+      },
+      {
+        "asset_id": "rand_2E3G8AEUUG",
+        "size_m": [
+          1.097078800201416,
+          0.5133551359176636
+        ],
+        "material": "denim_fabric_05",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0TRXNY577R",
+        "size_m": [
+          0.5572710037231445,
+          0.5714828968048096
+        ],
+        "material": "cotton_jersey",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0X2J5FX39U",
+        "size_m": [
+          0.49984997510910034,
+          0.47762924432754517
+        ],
+        "material": "floral_jacquard",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_27ERXK40H3",
+        "size_m": [
+          1.308598518371582,
+          0.5321494936943054
+        ],
+        "material": "faux_fur_geometric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1X5Z0QHKP8",
+        "size_m": [
+          0.9721984267234802,
+          0.43944960832595825
+        ],
+        "material": "poly_wool_herringbone",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2A9P5KIEPP",
+        "size_m": [
+          1.111545205116272,
+          0.550377368927002
+        ],
+        "material": "denim_fabric_03",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2DE7A43NO3",
+        "size_m": [
+          1.1254216432571411,
+          0.8570090532302856
+        ],
+        "material": "scuba_suede",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0FK7DNKCM5",
+        "size_m": [
+          0.8751267194747925,
+          0.529961347579956
+        ],
+        "material": "curly_teddy_checkered",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1WWCRATVQK",
+        "size_m": [
+          1.0091309547424316,
+          0.49637746810913086
+        ],
+        "material": "crepe_georgette",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_155MRLXVMW",
+        "size_m": [
+          0.9321140050888062,
+          0.5851654410362244
+        ],
+        "material": "stretch_poplin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0TMR6NDPHP",
+        "size_m": [
+          0.6589181423187256,
+          0.8300457000732422
+        ],
+        "material": "jogging_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1PSXI9D50T",
+        "size_m": [
+          0.4907480776309967,
+          0.6687880754470825
+        ],
+        "material": "quatrefoil_jacquard_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_249RUXCM75",
+        "size_m": [
+          0.7544837594032288,
+          0.4880107343196869
+        ],
+        "material": "terlenka",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_089NYY0BW7",
+        "size_m": [
+          0.5186545848846436,
+          0.4806332588195801
+        ],
+        "material": "crepe_satin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1IG00BP5CS",
+        "size_m": [
+          0.749636173248291,
+          1.2367841005325317
+        ],
+        "material": "jersey_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_260POMYL0L",
+        "size_m": [
+          0.953937828540802,
+          0.5548683404922485
+        ],
+        "material": "knitted_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0AYSPSNK8T",
+        "size_m": [
+          0.9909072518348694,
+          0.7758559584617615
+        ],
+        "material": "velour_velvet",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2JPS3KSTC3",
+        "size_m": [
+          0.5254595279693604,
+          0.6189189553260803
+        ],
+        "material": "polar_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0XKZV2GIHN",
+        "size_m": [
+          0.9249933958053589,
+          0.6704034805297852
+        ],
+        "material": "wool_boucle",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_15BA9G04GP",
+        "size_m": [
+          0.4761108160018921,
+          0.5133549571037292
+        ],
+        "material": "waffle_pique_cotton",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2J9L12THIB",
+        "size_m": [
+          0.49302440881729126,
+          0.5076177716255188
+        ],
+        "material": "fabric_pattern_07",
+        "color_channel": "col_03"
+      },
+      {
+        "asset_id": "rand_1M76LY0VT2",
+        "size_m": [
+          0.6957502365112305,
+          0.5244485139846802
+        ],
+        "material": "denim_fabric_04",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1ZX8VGCFE6",
+        "size_m": [
+          0.9122371673583984,
+          0.6650339365005493
+        ],
+        "material": "denmin_fabric_02",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_23MXTAPSYO",
+        "size_m": [
+          1.16013503074646,
+          0.6501741409301758
+        ],
+        "material": "denim_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2968QV5JF1",
+        "size_m": [
+          1.1784329414367676,
+          0.8587304949760437
+        ],
+        "material": "denim_fabric_06",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0OXVTOY8BQ",
+        "size_m": [
+          1.0979743003845215,
+          0.5263599753379822
+        ],
+        "material": "ribbed_corduroy",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1FYRV0NHSK",
+        "size_m": [
+          1.36930513381958,
+          0.5207310914993286
+        ],
+        "material": "caban",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0TQEY7VJ0K",
+        "size_m": [
+          0.5071802139282227,
+          0.522598922252655
+        ],
+        "material": "fabric_pattern_05",
+        "color_channel": "col_01"
+      },
+      {
+        "asset_id": "rand_2M5Z9M9C8Q",
+        "size_m": [
+          1.0018281936645508,
+          0.565369725227356
+        ],
+        "material": "rough_linen",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1MUGEQMOL1",
+        "size_m": [
+          0.8356443643569946,
+          0.8566689491271973
+        ],
+        "material": "terry_cloth",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_225EQHMJP5",
+        "size_m": [
+          0.5057119131088257,
+          0.43496453762054443
+        ],
+        "material": "gingham_check",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2EUB3L1K4G",
+        "size_m": [
+          0.9218737483024597,
+          0.5285097360610962
+        ],
+        "material": "bi_stretch",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0MBY846ZGF",
+        "size_m": [
+          0.5773206353187561,
+          0.5818510055541992
+        ],
+        "material": "curly_teddy_natural",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1S9FP9MIQF",
+        "size_m": [
+          0.9983416795730591,
+          0.6352083683013916
+        ],
+        "material": "book_pattern",
+        "color_channel": "col1"
+      },
+      {
+        "asset_id": "rand_2D47UXG6QS",
+        "size_m": [
+          0.6625890731811523,
+          0.9112308025360107
+        ],
+        "material": "denim_fabric_05",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2FCM9GRUJ9",
+        "size_m": [
+          0.5605543851852417,
+          0.5228399038314819
+        ],
+        "material": "cotton_jersey",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1G0SYPVGVT",
+        "size_m": [
+          0.7611644268035889,
+          0.3512120246887207
+        ],
+        "material": "floral_jacquard",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_13CJX80V5K",
+        "size_m": [
+          0.9257733225822449,
+          0.6539856195449829
+        ],
+        "material": "faux_fur_geometric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2FAFY6P8YW",
+        "size_m": [
+          0.4285876452922821,
+          0.4659740924835205
+        ],
+        "material": "poly_wool_herringbone",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0BT32SCGZY",
+        "size_m": [
+          0.9827269911766052,
+          0.6243247985839844
+        ],
+        "material": "denim_fabric_03",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0X7SATI5R6",
+        "size_m": [
+          1.0256638526916504,
+          0.7182894349098206
+        ],
+        "material": "scuba_suede",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_254M1CY1Z9",
+        "size_m": [
+          0.7661176919937134,
+          0.47381144762039185
+        ],
+        "material": "curly_teddy_checkered",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1CJ9S3DEOE",
+        "size_m": [
+          1.1434197425842285,
+          0.8152381181716919
+        ],
+        "material": "crepe_georgette",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1QBX81UFGA",
+        "size_m": [
+          0.9829251170158386,
+          0.7042285203933716
+        ],
+        "material": "stretch_poplin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_26YTA42TWS",
+        "size_m": [
+          0.6747714281082153,
+          0.508496880531311
+        ],
+        "material": "jogging_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1IQFSMVA35",
+        "size_m": [
+          0.5004922151565552,
+          0.5316437482833862
+        ],
+        "material": "quatrefoil_jacquard_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1OZ5M6MFR3",
+        "size_m": [
+          0.5297595858573914,
+          0.5499671101570129
+        ],
+        "material": "terlenka",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_259JZ10MG4",
+        "size_m": [
+          0.8531687259674072,
+          0.6826872229576111
+        ],
+        "material": "crepe_satin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1M563GT4KS",
+        "size_m": [
+          0.771843433380127,
+          0.5327036380767822
+        ],
+        "material": "jersey_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_296QU3RR8Q",
+        "size_m": [
+          0.5051608085632324,
+          0.44053077697753906
+        ],
+        "material": "knitted_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1W39DISV6F",
+        "size_m": [
+          0.5234980583190918,
+          0.6189744472503662
+        ],
+        "material": "velour_velvet",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1S9XQJ3VS2",
+        "size_m": [
+          0.9941085577011108,
+          0.5343737006187439
+        ],
+        "material": "polar_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1LN4VU7300",
+        "size_m": [
+          0.816260814666748,
+          0.4263506233692169
+        ],
+        "material": "wool_boucle",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2FGVBFKYGA",
+        "size_m": [
+          0.4550360143184662,
+          0.5259350538253784
+        ],
+        "material": "waffle_pique_cotton",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0WYOH8KDV2",
+        "size_m": [
+          0.8637381792068481,
+          1.2378013134002686
+        ],
+        "material": "fabric_pattern_07",
+        "color_channel": "col_03"
+      },
+      {
+        "asset_id": "rand_21QA5FKS58",
+        "size_m": [
+          0.8840954899787903,
+          0.6020421981811523
+        ],
+        "material": "denim_fabric_04",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_10TMRP07PP",
+        "size_m": [
+          0.6388068199157715,
+          0.8245733976364136
+        ],
+        "material": "denmin_fabric_02",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1E9U8TA9OX",
+        "size_m": [
+          1.048805594444275,
+          0.4068371057510376
+        ],
+        "material": "denim_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1BB06QD3IC",
+        "size_m": [
+          0.5260511040687561,
+          0.9195268750190735
+        ],
+        "material": "denim_fabric_06",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2BSBYO0M6J",
+        "size_m": [
+          0.5126519203186035,
+          0.7759070992469788
+        ],
+        "material": "ribbed_corduroy",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1M30N2RBSC",
+        "size_m": [
+          0.8142074346542358,
+          0.5718683004379272
+        ],
+        "material": "caban",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_144Q3BXXH6",
+        "size_m": [
+          0.8522253036499023,
+          0.5721198320388794
+        ],
+        "material": "fabric_pattern_05",
+        "color_channel": "col_01"
+      },
+      {
+        "asset_id": "rand_20TOL15808",
+        "size_m": [
+          1.106925129890442,
+          0.9432719349861145
+        ],
+        "material": "rough_linen",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_079HTTNCTJ",
+        "size_m": [
+          0.47883009910583496,
+          0.4869351387023926
+        ],
+        "material": "terry_cloth",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1UUYHHN5U4",
+        "size_m": [
+          0.4792313873767853,
+          0.285854697227478
+        ],
+        "material": "gingham_check",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0VBR02U024",
+        "size_m": [
+          0.977288007736206,
+          0.49528515338897705
+        ],
+        "material": "bi_stretch",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_11SEFBSFKK",
+        "size_m": [
+          1.0235251188278198,
+          0.8946188688278198
+        ],
+        "material": "curly_teddy_natural",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_01R50NZJVR",
+        "size_m": [
+          1.0162490606307983,
+          0.5240223407745361
+        ],
+        "material": "book_pattern",
+        "color_channel": "col1"
+      },
+      {
+        "asset_id": "rand_2D87L67S71",
+        "size_m": [
+          1.1314486265182495,
+          1.0355851650238037
+        ],
+        "material": "denim_fabric_05",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_28TQ6Q9FB2",
+        "size_m": [
+          1.0106230974197388,
+          0.5260838866233826
+        ],
+        "material": "cotton_jersey",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2357Z1D4N2",
+        "size_m": [
+          0.784618616104126,
+          0.9228348731994629
+        ],
+        "material": "floral_jacquard",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_058QFFSWAQ",
+        "size_m": [
+          1.266063928604126,
+          0.5883106589317322
+        ],
+        "material": "faux_fur_geometric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_17CZIN60B4",
+        "size_m": [
+          0.4380967915058136,
+          0.47156035900115967
+        ],
+        "material": "poly_wool_herringbone",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2CQX7CIBKN",
+        "size_m": [
+          1.2737277746200562,
+          0.5595508813858032
+        ],
+        "material": "denim_fabric_03",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1A3EW2P8G8",
+        "size_m": [
+          0.5698918700218201,
+          0.6944979429244995
+        ],
+        "material": "scuba_suede",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0V27DDLPSU",
+        "size_m": [
+          0.5068798065185547,
+          0.47974342107772827
+        ],
+        "material": "curly_teddy_checkered",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2DZXRRV7AF",
+        "size_m": [
+          0.4530966877937317,
+          0.5134978890419006
+        ],
+        "material": "crepe_georgette",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1LJV1Y2LFP",
+        "size_m": [
+          0.9439917206764221,
+          0.6683404445648193
+        ],
+        "material": "stretch_poplin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_25QY0N1WEZ",
+        "size_m": [
+          0.5469110608100891,
+          0.6899559497833252
+        ],
+        "material": "jogging_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_12KXNKIIP0",
+        "size_m": [
+          0.489205539226532,
+          0.900043249130249
+        ],
+        "material": "quatrefoil_jacquard_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1PN6FIHECX",
+        "size_m": [
+          0.7985481023788452,
+          0.48932385444641113
+        ],
+        "material": "terlenka",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1G5NLOGYKY",
+        "size_m": [
+          0.5022693872451782,
+          0.6820336580276489
+        ],
+        "material": "crepe_satin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_29Y6R278T5",
+        "size_m": [
+          1.2226558923721313,
+          0.3952920138835907
+        ],
+        "material": "jersey_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1L7E9AZXM7",
+        "size_m": [
+          0.6081608533859253,
+          0.8437418341636658
+        ],
+        "material": "knitted_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1SR02MRXC9",
+        "size_m": [
+          0.9551591277122498,
+          0.7549670338630676
+        ],
+        "material": "velour_velvet",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1GPAATSVAA",
+        "size_m": [
+          0.580350399017334,
+          0.5429844856262207
+        ],
+        "material": "polar_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1V1GOLCEAS",
+        "size_m": [
+          1.052528977394104,
+          0.41354045271873474
+        ],
+        "material": "wool_boucle",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1FVJ238UE7",
+        "size_m": [
+          1.208789348602295,
+          0.5030078291893005
+        ],
+        "material": "waffle_pique_cotton",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_13AAK4PO2O",
+        "size_m": [
+          0.48914653062820435,
+          0.5468013286590576
+        ],
+        "material": "fabric_pattern_07",
+        "color_channel": "col_03"
+      },
+      {
+        "asset_id": "rand_19BUGQPTDE",
+        "size_m": [
+          1.040671467781067,
+          0.6314315795898438
+        ],
+        "material": "denim_fabric_04",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_195MFTZ664",
+        "size_m": [
+          1.1446142196655273,
+          0.7427518367767334
+        ],
+        "material": "denmin_fabric_02",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1YQ82NEHKT",
+        "size_m": [
+          1.1694393157958984,
+          0.8445178270339966
+        ],
+        "material": "denim_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_20JUZJXU1F",
+        "size_m": [
+          0.8319701552391052,
+          0.5160680413246155
+        ],
+        "material": "denim_fabric_06",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_22CMEGP7XN",
+        "size_m": [
+          1.0586254596710205,
+          0.5479573011398315
+        ],
+        "material": "ribbed_corduroy",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_041L4IHB7W",
+        "size_m": [
+          1.071526288986206,
+          0.5502743721008301
+        ],
+        "material": "caban",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0JL0G525XH",
+        "size_m": [
+          0.8884984254837036,
+          0.5705779790878296
+        ],
+        "material": "fabric_pattern_05",
+        "color_channel": "col_01"
+      },
+      {
+        "asset_id": "rand_0XC05H210D",
+        "size_m": [
+          0.561188280582428,
+          0.5369075536727905
+        ],
+        "material": "rough_linen",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1SBLEDJN3X",
+        "size_m": [
+          1.2302885055541992,
+          0.46472716331481934
+        ],
+        "material": "terry_cloth",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_243A4D3Y3E",
+        "size_m": [
+          0.4576664865016937,
+          0.5529113411903381
+        ],
+        "material": "gingham_check",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2613YML9QW",
+        "size_m": [
+          1.0039578676223755,
+          0.7180484533309937
+        ],
+        "material": "bi_stretch",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2977CX9HEP",
+        "size_m": [
+          0.6506701707839966,
+          0.9456132054328918
+        ],
+        "material": "curly_teddy_natural",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2IRMP3FS5A",
+        "size_m": [
+          0.864833652973175,
+          0.7224622964859009
+        ],
+        "material": "book_pattern",
+        "color_channel": "col1"
+      },
+      {
+        "asset_id": "rand_2E8QOURG7B",
+        "size_m": [
+          1.1857960224151611,
+          0.8158701658248901
+        ],
+        "material": "denim_fabric_05",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_278FARWFTW",
+        "size_m": [
+          1.3672418594360352,
+          0.4544476866722107
+        ],
+        "material": "cotton_jersey",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1JEXBQG6Q2",
+        "size_m": [
+          0.5040912628173828,
+          0.5074089765548706
+        ],
+        "material": "floral_jacquard",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1YR03C0459",
+        "size_m": [
+          1.2684762477874756,
+          0.5625642538070679
+        ],
+        "material": "faux_fur_geometric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1ALD8ZQDU4",
+        "size_m": [
+          0.5226834416389465,
+          0.5375622510910034
+        ],
+        "material": "poly_wool_herringbone",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_212H6YGVUI",
+        "size_m": [
+          0.6267445087432861,
+          0.5091664791107178
+        ],
+        "material": "denim_fabric_03",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_01Q78IXCLW",
+        "size_m": [
+          1.0078107118606567,
+          0.5220696926116943
+        ],
+        "material": "scuba_suede",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_13ZRL8YUW9",
+        "size_m": [
+          0.7330099940299988,
+          0.46233171224594116
+        ],
+        "material": "curly_teddy_checkered",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1PGT2TD9N1",
+        "size_m": [
+          1.1098649501800537,
+          0.5032356977462769
+        ],
+        "material": "crepe_georgette",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1TCXJZALSN",
+        "size_m": [
+          1.284608244895935,
+          0.5713460445404053
+        ],
+        "material": "stretch_poplin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0ZFJUADVCA",
+        "size_m": [
+          0.6978054642677307,
+          0.538489043712616
+        ],
+        "material": "jogging_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_24Z3FYN9F5",
+        "size_m": [
+          0.8066924810409546,
+          0.7387877702713013
+        ],
+        "material": "quatrefoil_jacquard_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1O0U4OLCUA",
+        "size_m": [
+          0.7785542011260986,
+          0.7254544496536255
+        ],
+        "material": "terlenka",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_28Y9ZV7P4R",
+        "size_m": [
+          1.3109554052352905,
+          0.5216491222381592
+        ],
+        "material": "crepe_satin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1FYX9TK11W",
+        "size_m": [
+          0.6006710529327393,
+          0.6081821918487549
+        ],
+        "material": "jersey_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_13GMJ3LRZZ",
+        "size_m": [
+          1.0519543886184692,
+          0.4713877737522125
+        ],
+        "material": "knitted_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_00GEDVLKJJ",
+        "size_m": [
+          0.5084384083747864,
+          0.7235922813415527
+        ],
+        "material": "velour_velvet",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2C5OWHIMT4",
+        "size_m": [
+          0.7229792475700378,
+          0.5548241138458252
+        ],
+        "material": "polar_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1X249KBY3Y",
+        "size_m": [
+          0.8806906938552856,
+          0.5333970785140991
+        ],
+        "material": "wool_boucle",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1ZKD85VJEC",
+        "size_m": [
+          0.9625012278556824,
+          0.5653723478317261
+        ],
+        "material": "waffle_pique_cotton",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_27PM190BEW",
+        "size_m": [
+          0.48272836208343506,
+          0.48360031843185425
+        ],
+        "material": "fabric_pattern_07",
+        "color_channel": "col_03"
+      },
+      {
+        "asset_id": "rand_2AXTMMQG8Q",
+        "size_m": [
+          1.0372079610824585,
+          0.5414454936981201
+        ],
+        "material": "denim_fabric_04",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_12CR1HRKKE",
+        "size_m": [
+          0.49335116147994995,
+          0.5133084058761597
+        ],
+        "material": "denmin_fabric_02",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1HXYY6APBN",
+        "size_m": [
+          1.023129940032959,
+          0.5780365467071533
+        ],
+        "material": "denim_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1NGV8BJPJI",
+        "size_m": [
+          0.9345842003822327,
+          0.5769704580307007
+        ],
+        "material": "denim_fabric_06",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_11TS48IS8W",
+        "size_m": [
+          1.0188179016113281,
+          0.6552911996841431
+        ],
+        "material": "ribbed_corduroy",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2EHRZQL8Y6",
+        "size_m": [
+          0.7105247974395752,
+          0.5197055339813232
+        ],
+        "material": "caban",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0Z5CXF4ZQP",
+        "size_m": [
+          0.5623157024383545,
+          0.6006472706794739
+        ],
+        "material": "fabric_pattern_05",
+        "color_channel": "col_01"
+      },
+      {
+        "asset_id": "rand_21SL3KXM69",
+        "size_m": [
+          1.005303978919983,
+          0.5830752849578857
+        ],
+        "material": "rough_linen",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1LPWCNA3ER",
+        "size_m": [
+          0.9758855700492859,
+          0.6892167329788208
+        ],
+        "material": "terry_cloth",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1TTG4D6E4R",
+        "size_m": [
+          0.700543999671936,
+          0.5671136975288391
+        ],
+        "material": "gingham_check",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0XEAOKSSSD",
+        "size_m": [
+          0.5054904818534851,
+          0.5893182754516602
+        ],
+        "material": "bi_stretch",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0Y83K1TKNT",
+        "size_m": [
+          0.9064417481422424,
+          0.5888643860816956
+        ],
+        "material": "curly_teddy_natural",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1AUTDNAW0L",
+        "size_m": [
+          1.0251874923706055,
+          0.6321777105331421
+        ],
+        "material": "book_pattern",
+        "color_channel": "col1"
+      },
+      {
+        "asset_id": "rand_16W8ARYM6G",
+        "size_m": [
+          1.0668065547943115,
+          0.7029745578765869
+        ],
+        "material": "denim_fabric_05",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2CN2KHC0C0",
+        "size_m": [
+          0.902847409248352,
+          0.529930830001831
+        ],
+        "material": "cotton_jersey",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1I7PJ11DEK",
+        "size_m": [
+          1.2912124395370483,
+          0.6010274887084961
+        ],
+        "material": "floral_jacquard",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1AQJGG2YQ9",
+        "size_m": [
+          0.7677754163742065,
+          0.49050822854042053
+        ],
+        "material": "faux_fur_geometric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0V7RGHZ8JM",
+        "size_m": [
+          0.9672231674194336,
+          0.42078521847724915
+        ],
+        "material": "poly_wool_herringbone",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1YHCYZE5OK",
+        "size_m": [
+          0.4768404960632324,
+          0.4948340952396393
+        ],
+        "material": "denim_fabric_03",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1IZJJK0HJJ",
+        "size_m": [
+          0.5760287642478943,
+          0.5392972230911255
+        ],
+        "material": "scuba_suede",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_19U2D4IL4V",
+        "size_m": [
+          0.8981835842132568,
+          0.5727976560592651
+        ],
+        "material": "curly_teddy_checkered",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_12CSX4HLLP",
+        "size_m": [
+          1.1074522733688354,
+          0.6385140419006348
+        ],
+        "material": "crepe_georgette",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0VI0BDUCV4",
+        "size_m": [
+          0.6702646017074585,
+          0.7398048043251038
+        ],
+        "material": "stretch_poplin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2AHJC9D402",
+        "size_m": [
+          0.6684461236000061,
+          0.5335177183151245
+        ],
+        "material": "jogging_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1PS9PI586R",
+        "size_m": [
+          0.8789777755737305,
+          0.4678869843482971
+        ],
+        "material": "quatrefoil_jacquard_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_176L9DT8YW",
+        "size_m": [
+          0.8203598260879517,
+          0.4834296703338623
+        ],
+        "material": "terlenka",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2CJNH7LLW4",
+        "size_m": [
+          1.0636204481124878,
+          0.5696127414703369
+        ],
+        "material": "crepe_satin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2KZ6OAY83R",
+        "size_m": [
+          0.6224567890167236,
+          0.942198634147644
+        ],
+        "material": "jersey_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_28L0FM4KOI",
+        "size_m": [
+          0.45374447107315063,
+          0.47585731744766235
+        ],
+        "material": "knitted_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_10Z0XNZHV6",
+        "size_m": [
+          0.5736590027809143,
+          1.2038699388504028
+        ],
+        "material": "velour_velvet",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_202YC61Q5J",
+        "size_m": [
+          1.1644327640533447,
+          0.5469993352890015
+        ],
+        "material": "polar_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_15E6R5W9TL",
+        "size_m": [
+          0.8662202954292297,
+          0.46308934688568115
+        ],
+        "material": "wool_boucle",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_10J8E452FG",
+        "size_m": [
+          0.5630152821540833,
+          0.8419950604438782
+        ],
+        "material": "waffle_pique_cotton",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2KYU3PKUSK",
+        "size_m": [
+          0.5167016983032227,
+          0.5296482443809509
+        ],
+        "material": "fabric_pattern_07",
+        "color_channel": "col_03"
+      },
+      {
+        "asset_id": "rand_2C3IQKWMNQ",
+        "size_m": [
+          0.470632940530777,
+          0.6591470837593079
+        ],
+        "material": "denim_fabric_04",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0ZN4M0TNAD",
+        "size_m": [
+          1.0980587005615234,
+          0.6420786380767822
+        ],
+        "material": "denmin_fabric_02",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2EBUYCB46V",
+        "size_m": [
+          0.5180634260177612,
+          0.5819240808486938
+        ],
+        "material": "denim_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_18TWRPGQIS",
+        "size_m": [
+          1.2048332691192627,
+          0.7822778820991516
+        ],
+        "material": "denim_fabric_06",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_27GAFB5970",
+        "size_m": [
+          1.0011277198791504,
+          0.7459718585014343
+        ],
+        "material": "ribbed_corduroy",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1LELQ8QAD5",
+        "size_m": [
+          0.9801743030548096,
+          0.9845538139343262
+        ],
+        "material": "caban",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_ZZCWITH5HY",
+        "size_m": [
+          0.7743170261383057,
+          0.5067266225814819
+        ],
+        "material": "fabric_pattern_05",
+        "color_channel": "col_01"
+      },
+      {
+        "asset_id": "rand_205QROW2JT",
+        "size_m": [
+          0.5095973014831543,
+          0.4739815294742584
+        ],
+        "material": "rough_linen",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0UYXAJYKTZ",
+        "size_m": [
+          0.4369058907032013,
+          0.47090762853622437
+        ],
+        "material": "terry_cloth",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1MEERT1VNZ",
+        "size_m": [
+          1.0267452001571655,
+          0.718044638633728
+        ],
+        "material": "gingham_check",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2IG5KFJP9S",
+        "size_m": [
+          0.9522897005081177,
+          0.5332564115524292
+        ],
+        "material": "bi_stretch",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_00A7LZGTAJ",
+        "size_m": [
+          0.8313014507293701,
+          0.5780079364776611
+        ],
+        "material": "curly_teddy_natural",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_11195TH4Q6",
+        "size_m": [
+          0.534022867679596,
+          0.5217073559761047
+        ],
+        "material": "book_pattern",
+        "color_channel": "col1"
+      },
+      {
+        "asset_id": "rand_1I1LBRHDZL",
+        "size_m": [
+          0.4942536950111389,
+          0.5443570017814636
+        ],
+        "material": "denim_fabric_05",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1MZ1KMEP5C",
+        "size_m": [
+          0.9374133348464966,
+          0.5080004334449768
+        ],
+        "material": "cotton_jersey",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_14PKUX6JOI",
+        "size_m": [
+          0.8439682722091675,
+          0.48435696959495544
+        ],
+        "material": "floral_jacquard",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0FGHC5MNWV",
+        "size_m": [
+          1.0347070693969727,
+          0.486674964427948
+        ],
+        "material": "faux_fur_geometric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_29U4IFXUY1",
+        "size_m": [
+          0.8624748587608337,
+          0.5104337334632874
+        ],
+        "material": "poly_wool_herringbone",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_299AM1LG5I",
+        "size_m": [
+          0.5582036972045898,
+          0.8985211253166199
+        ],
+        "material": "denim_fabric_03",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_29SLKOJO8L",
+        "size_m": [
+          1.0524452924728394,
+          0.7221238613128662
+        ],
+        "material": "scuba_suede",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1ANEU0APNF",
+        "size_m": [
+          0.6223520040512085,
+          0.5330706834793091
+        ],
+        "material": "curly_teddy_checkered",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1BIF7BVRJ4",
+        "size_m": [
+          0.4665898382663727,
+          0.4243165850639343
+        ],
+        "material": "crepe_georgette",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_111P95CVJW",
+        "size_m": [
+          1.0235099792480469,
+          0.5203119516372681
+        ],
+        "material": "stretch_poplin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2J6ZGADMFI",
+        "size_m": [
+          0.918556272983551,
+          0.5451920032501221
+        ],
+        "material": "jogging_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1KMN65OI4O",
+        "size_m": [
+          1.2036418914794922,
+          0.5326359272003174
+        ],
+        "material": "quatrefoil_jacquard_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1RUXCWNZMC",
+        "size_m": [
+          0.8258315920829773,
+          0.4689273238182068
+        ],
+        "material": "terlenka",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1RW662PVB8",
+        "size_m": [
+          0.821768581867218,
+          1.0109933614730835
+        ],
+        "material": "crepe_satin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1Q7ETFUCKR",
+        "size_m": [
+          1.2339431047439575,
+          0.7985481023788452
+        ],
+        "material": "jersey_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1GIQSRDLN2",
+        "size_m": [
+          1.1028003692626953,
+          0.6276170015335083
+        ],
+        "material": "knitted_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0VGB1NG35B",
+        "size_m": [
+          0.5042757987976074,
+          0.732698917388916
+        ],
+        "material": "velour_velvet",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_172N6T24NM",
+        "size_m": [
+          0.7189191579818726,
+          0.527809739112854
+        ],
+        "material": "polar_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_265ZXGNG1J",
+        "size_m": [
+          0.8451018929481506,
+          0.47728431224823
+        ],
+        "material": "wool_boucle",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_25KFCLZ8JD",
+        "size_m": [
+          1.0704349279403687,
+          0.49212342500686646
+        ],
+        "material": "waffle_pique_cotton",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_25BZ5D5REA",
+        "size_m": [
+          0.4908302426338196,
+          0.4976426362991333
+        ],
+        "material": "fabric_pattern_07",
+        "color_channel": "col_03"
+      },
+      {
+        "asset_id": "rand_1EHUSGYR73",
+        "size_m": [
+          0.8977228999137878,
+          0.5223851203918457
+        ],
+        "material": "denim_fabric_04",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0Z4SKWV6AF",
+        "size_m": [
+          0.9352223873138428,
+          0.616795539855957
+        ],
+        "material": "denmin_fabric_02",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1NI1OP5D3Z",
+        "size_m": [
+          0.7556192874908447,
+          0.5788120627403259
+        ],
+        "material": "denim_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_128O8MCE0P",
+        "size_m": [
+          0.9604187607765198,
+          0.5055265426635742
+        ],
+        "material": "denim_fabric_06",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0Z3TA1FA1C",
+        "size_m": [
+          0.5790124535560608,
+          0.5757074356079102
+        ],
+        "material": "ribbed_corduroy",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0X6SZC14TF",
+        "size_m": [
+          0.6476798057556152,
+          0.5615904331207275
+        ],
+        "material": "caban",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2FHE0HFZK7",
+        "size_m": [
+          0.5055983662605286,
+          0.48845410346984863
+        ],
+        "material": "fabric_pattern_05",
+        "color_channel": "col_01"
+      },
+      {
+        "asset_id": "rand_1Q7PF797YH",
+        "size_m": [
+          0.9150912761688232,
+          0.6450548768043518
+        ],
+        "material": "rough_linen",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1TX4CTPMKM",
+        "size_m": [
+          1.095901608467102,
+          0.7619921565055847
+        ],
+        "material": "terry_cloth",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2HECR7HXFD",
+        "size_m": [
+          1.1061992645263672,
+          0.6582142114639282
+        ],
+        "material": "gingham_check",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_00YA6ESCTQ",
+        "size_m": [
+          1.298911452293396,
+          0.6333075761795044
+        ],
+        "material": "bi_stretch",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1B862QIZ9S",
+        "size_m": [
+          1.2319363355636597,
+          0.7586793899536133
+        ],
+        "material": "curly_teddy_natural",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_00ZT6MGWR3",
+        "size_m": [
+          0.9263713955879211,
+          0.5018239617347717
+        ],
+        "material": "book_pattern",
+        "color_channel": "col1"
+      },
+      {
+        "asset_id": "rand_2LFN8HW5AG",
+        "size_m": [
+          0.8610161542892456,
+          0.5112701058387756
+        ],
+        "material": "denim_fabric_05",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2ETEX2XKRP",
+        "size_m": [
+          0.9616611003875732,
+          0.5071588158607483
+        ],
+        "material": "cotton_jersey",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2ALR1LPCCP",
+        "size_m": [
+          0.48985400795936584,
+          0.5069800615310669
+        ],
+        "material": "floral_jacquard",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0T6WA8FT8T",
+        "size_m": [
+          0.855757474899292,
+          0.5925908088684082
+        ],
+        "material": "faux_fur_geometric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1PWPVI9OXJ",
+        "size_m": [
+          0.7110662460327148,
+          0.49966931343078613
+        ],
+        "material": "poly_wool_herringbone",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1AEZQ9GNEL",
+        "size_m": [
+          1.2251499891281128,
+          0.604641854763031
+        ],
+        "material": "denim_fabric_03",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_26MEH085GX",
+        "size_m": [
+          0.9857960343360901,
+          0.5848404169082642
+        ],
+        "material": "scuba_suede",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_025I3DAPE6",
+        "size_m": [
+          0.5138759613037109,
+          0.542340874671936
+        ],
+        "material": "curly_teddy_checkered",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_08KYYZ0POQ",
+        "size_m": [
+          1.120953917503357,
+          0.5731255412101746
+        ],
+        "material": "crepe_georgette",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2J2W2VDRRO",
+        "size_m": [
+          0.8130244016647339,
+          0.7883129715919495
+        ],
+        "material": "stretch_poplin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_24XRCJ0AD2",
+        "size_m": [
+          1.216398000717163,
+          0.6840288043022156
+        ],
+        "material": "jogging_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1T7AMUOICV",
+        "size_m": [
+          0.9914347529411316,
+          0.5195967555046082
+        ],
+        "material": "quatrefoil_jacquard_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0TKY8IYX0W",
+        "size_m": [
+          0.4391167461872101,
+          0.7266974449157715
+        ],
+        "material": "terlenka",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_160VBHVRPV",
+        "size_m": [
+          0.9614747762680054,
+          0.5779447555541992
+        ],
+        "material": "crepe_satin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1UU0OKRS0W",
+        "size_m": [
+          0.9364373087882996,
+          0.5080264210700989
+        ],
+        "material": "jersey_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0YPBEDSNT5",
+        "size_m": [
+          0.773485541343689,
+          0.44701969623565674
+        ],
+        "material": "knitted_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1GN0K5NA2V",
+        "size_m": [
+          1.1259657144546509,
+          0.5253770351409912
+        ],
+        "material": "velour_velvet",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_22UTWB66S8",
+        "size_m": [
+          0.5580177307128906,
+          0.7160484194755554
+        ],
+        "material": "polar_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2DL1R8CXB9",
+        "size_m": [
+          1.1390081644058228,
+          0.5019372701644897
+        ],
+        "material": "wool_boucle",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1VODQ0QI0Y",
+        "size_m": [
+          0.5503510236740112,
+          0.50749671459198
+        ],
+        "material": "waffle_pique_cotton",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1RJ8D5A7EC",
+        "size_m": [
+          1.0977364778518677,
+          0.7770682573318481
+        ],
+        "material": "fabric_pattern_07",
+        "color_channel": "col_03"
+      },
+      {
+        "asset_id": "rand_26L07UTNT4",
+        "size_m": [
+          1.078635334968567,
+          0.5621533393859863
+        ],
+        "material": "denim_fabric_04",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1383GAVOF3",
+        "size_m": [
+          1.1181799173355103,
+          0.6208043098449707
+        ],
+        "material": "denmin_fabric_02",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_283J8Q52M0",
+        "size_m": [
+          0.610924482345581,
+          0.6480790376663208
+        ],
+        "material": "denim_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0XDIJIZSS1",
+        "size_m": [
+          0.8334324955940247,
+          0.4941563308238983
+        ],
+        "material": "denim_fabric_06",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2JECJGFDM0",
+        "size_m": [
+          0.5070821046829224,
+          0.6522186994552612
+        ],
+        "material": "ribbed_corduroy",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0U237S7AQZ",
+        "size_m": [
+          1.2626832723617554,
+          0.776120662689209
+        ],
+        "material": "caban",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2I95TCYIFO",
+        "size_m": [
+          0.9551058411598206,
+          0.4388842284679413
+        ],
+        "material": "fabric_pattern_05",
+        "color_channel": "col_01"
+      },
+      {
+        "asset_id": "rand_0XQT1WCCJN",
+        "size_m": [
+          0.8079179525375366,
+          0.5768429040908813
+        ],
+        "material": "rough_linen",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_11L6QS0SAZ",
+        "size_m": [
+          0.8624739646911621,
+          0.7956677079200745
+        ],
+        "material": "terry_cloth",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_27ULACQ3RP",
+        "size_m": [
+          1.1610914468765259,
+          0.49125200510025024
+        ],
+        "material": "gingham_check",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1WM0S1BHTZ",
+        "size_m": [
+          1.0227484703063965,
+          0.5027592182159424
+        ],
+        "material": "bi_stretch",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_10LIHEWSXB",
+        "size_m": [
+          0.6400535106658936,
+          0.7507895231246948
+        ],
+        "material": "curly_teddy_natural",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1E69F9VRN4",
+        "size_m": [
+          0.47530561685562134,
+          0.46911051869392395
+        ],
+        "material": "book_pattern",
+        "color_channel": "col1"
+      },
+      {
+        "asset_id": "rand_1UPT0NGFMM",
+        "size_m": [
+          0.4713456630706787,
+          0.5444973111152649
+        ],
+        "material": "denim_fabric_05",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1IEOFM9BGF",
+        "size_m": [
+          0.514007568359375,
+          0.6586373448371887
+        ],
+        "material": "cotton_jersey",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_11F1D3WU17",
+        "size_m": [
+          1.2981858253479004,
+          0.6909916996955872
+        ],
+        "material": "floral_jacquard",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1U0UUO457V",
+        "size_m": [
+          1.0069552659988403,
+          0.5732353925704956
+        ],
+        "material": "faux_fur_geometric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2F80FLJVIL",
+        "size_m": [
+          0.5297368764877319,
+          0.5136396288871765
+        ],
+        "material": "poly_wool_herringbone",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_17M94IEVAI",
+        "size_m": [
+          0.6267935633659363,
+          1.1413971185684204
+        ],
+        "material": "denim_fabric_03",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1BBQV0MXA4",
+        "size_m": [
+          1.1609441041946411,
+          0.6890127658843994
+        ],
+        "material": "scuba_suede",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1GX7ZBY2SX",
+        "size_m": [
+          0.8659634590148926,
+          0.7378052473068237
+        ],
+        "material": "curly_teddy_checkered",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0EXG3ISQ34",
+        "size_m": [
+          0.7736769914627075,
+          0.7408875226974487
+        ],
+        "material": "crepe_georgette",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_18HU0R37B7",
+        "size_m": [
+          0.9424864053726196,
+          0.616166889667511
+        ],
+        "material": "stretch_poplin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0YV4NCJD48",
+        "size_m": [
+          0.9955412149429321,
+          1.1882388591766357
+        ],
+        "material": "jogging_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1WYQKHBE0J",
+        "size_m": [
+          1.0787100791931152,
+          0.5678353309631348
+        ],
+        "material": "quatrefoil_jacquard_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_05LJ1K1GC7",
+        "size_m": [
+          0.5004279613494873,
+          0.47102653980255127
+        ],
+        "material": "terlenka",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1U12KRBTWC",
+        "size_m": [
+          0.9374586343765259,
+          0.568549633026123
+        ],
+        "material": "crepe_satin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_15MZM8JINR",
+        "size_m": [
+          0.7678425908088684,
+          0.5156555771827698
+        ],
+        "material": "jersey_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_11PCDQP6AG",
+        "size_m": [
+          1.346853256225586,
+          0.7411668300628662
+        ],
+        "material": "knitted_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1J3JE6X0VT",
+        "size_m": [
+          0.6371934413909912,
+          0.5251195430755615
+        ],
+        "material": "velour_velvet",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_28LL7BYGB0",
+        "size_m": [
+          1.0651487112045288,
+          0.4941908121109009
+        ],
+        "material": "polar_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0VGJKZG13V",
+        "size_m": [
+          0.5288935899734497,
+          0.5373730659484863
+        ],
+        "material": "wool_boucle",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1XCMK2VR1H",
+        "size_m": [
+          0.8152433633804321,
+          0.5209943056106567
+        ],
+        "material": "waffle_pique_cotton",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_18DVTRFDE8",
+        "size_m": [
+          1.0320005416870117,
+          0.4561948776245117
+        ],
+        "material": "fabric_pattern_07",
+        "color_channel": "col_03"
+      },
+      {
+        "asset_id": "rand_1IOKVF7VZ2",
+        "size_m": [
+          0.9805771112442017,
+          0.8279149532318115
+        ],
+        "material": "denim_fabric_04",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2GZTG6A6XT",
+        "size_m": [
+          0.5656228065490723,
+          0.5327199101448059
+        ],
+        "material": "denmin_fabric_02",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0ZIUSGMG7B",
+        "size_m": [
+          0.6007559299468994,
+          0.8807289600372314
+        ],
+        "material": "denim_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2KVQX1N5J4",
+        "size_m": [
+          1.068719744682312,
+          0.49493223428726196
+        ],
+        "material": "denim_fabric_06",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_02AR55C8T1",
+        "size_m": [
+          0.8242117166519165,
+          0.3541722893714905
+        ],
+        "material": "ribbed_corduroy",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_29MEJDNOTB",
+        "size_m": [
+          0.4847904145717621,
+          0.5356073379516602
+        ],
+        "material": "caban",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0ILSNHSPQ7",
+        "size_m": [
+          0.5900150537490845,
+          0.8224421739578247
+        ],
+        "material": "fabric_pattern_05",
+        "color_channel": "col_01"
+      },
+      {
+        "asset_id": "rand_1NQCOXIBQP",
+        "size_m": [
+          0.5624504089355469,
+          0.7161058187484741
+        ],
+        "material": "rough_linen",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_11J8S4NHQ9",
+        "size_m": [
+          0.9776940941810608,
+          0.7363641858100891
+        ],
+        "material": "terry_cloth",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0UOA081DQE",
+        "size_m": [
+          0.5224676132202148,
+          0.5362318754196167
+        ],
+        "material": "gingham_check",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1A2P58J9VK",
+        "size_m": [
+          0.5475643873214722,
+          0.5207788348197937
+        ],
+        "material": "bi_stretch",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2CQDA76VSP",
+        "size_m": [
+          1.0053282976150513,
+          0.5531018972396851
+        ],
+        "material": "curly_teddy_natural",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_21GKNQCZ4B",
+        "size_m": [
+          1.1411781311035156,
+          0.6079546213150024
+        ],
+        "material": "book_pattern",
+        "color_channel": "col1"
+      },
+      {
+        "asset_id": "rand_0RJMGOA8IW",
+        "size_m": [
+          0.5247560739517212,
+          0.5409328937530518
+        ],
+        "material": "denim_fabric_05",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1VCZZ1D0LQ",
+        "size_m": [
+          1.0075169801712036,
+          0.71497642993927
+        ],
+        "material": "cotton_jersey",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0V15754TTS",
+        "size_m": [
+          0.5111756324768066,
+          0.5162707567214966
+        ],
+        "material": "floral_jacquard",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1C2XLTNKGM",
+        "size_m": [
+          1.0269818305969238,
+          0.5199112296104431
+        ],
+        "material": "faux_fur_geometric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_038ROZC0KR",
+        "size_m": [
+          0.5068373680114746,
+          0.5310516953468323
+        ],
+        "material": "poly_wool_herringbone",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2CE9RSYSM8",
+        "size_m": [
+          1.0110052824020386,
+          0.4242439270019531
+        ],
+        "material": "denim_fabric_03",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1QNTFFLE65",
+        "size_m": [
+          1.0300629138946533,
+          0.6186065673828125
+        ],
+        "material": "scuba_suede",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1X7Y4QEECH",
+        "size_m": [
+          1.0358985662460327,
+          0.4739512801170349
+        ],
+        "material": "curly_teddy_checkered",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1NKG6I69HH",
+        "size_m": [
+          0.8153003454208374,
+          0.7590477466583252
+        ],
+        "material": "crepe_georgette",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_12CMB9NKG1",
+        "size_m": [
+          0.4430007338523865,
+          0.46748271584510803
+        ],
+        "material": "stretch_poplin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_184ZB0LXIR",
+        "size_m": [
+          0.8779551386833191,
+          1.0146812200546265
+        ],
+        "material": "jogging_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0Z20WVFG4J",
+        "size_m": [
+          1.3070188760757446,
+          0.5797077417373657
+        ],
+        "material": "quatrefoil_jacquard_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2BS9RS3U6O",
+        "size_m": [
+          0.8279715180397034,
+          0.47226661443710327
+        ],
+        "material": "terlenka",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_22VKISLY30",
+        "size_m": [
+          0.8493433594703674,
+          0.725580096244812
+        ],
+        "material": "crepe_satin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_14L6VNJRF9",
+        "size_m": [
+          1.049880027770996,
+          0.5021548867225647
+        ],
+        "material": "jersey_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1YFGAO5FC3",
+        "size_m": [
+          1.106709361076355,
+          0.5002985596656799
+        ],
+        "material": "knitted_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1ILSQSB7ST",
+        "size_m": [
+          0.7140586376190186,
+          0.5160874724388123
+        ],
+        "material": "velour_velvet",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0T87DPIBML",
+        "size_m": [
+          0.930343747138977,
+          0.619384765625
+        ],
+        "material": "polar_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1Y31BR25CA",
+        "size_m": [
+          1.2325962781906128,
+          0.5381969213485718
+        ],
+        "material": "wool_boucle",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_29IFSLUDRC",
+        "size_m": [
+          1.016909122467041,
+          0.9165344834327698
+        ],
+        "material": "waffle_pique_cotton",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_24IM7S8V39",
+        "size_m": [
+          0.991856038570404,
+          0.8665382862091064
+        ],
+        "material": "fabric_pattern_07",
+        "color_channel": "col_03"
+      },
+      {
+        "asset_id": "rand_1A0BGLIDR1",
+        "size_m": [
+          0.5052175521850586,
+          0.5084909200668335
+        ],
+        "material": "denim_fabric_04",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_21TFVULETA",
+        "size_m": [
+          0.5465878844261169,
+          1.1123493909835815
+        ],
+        "material": "denmin_fabric_02",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_19ZIM30DGZ",
+        "size_m": [
+          0.9342362284660339,
+          0.5645272731781006
+        ],
+        "material": "denim_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1SWQK7GLJB",
+        "size_m": [
+          0.6432664394378662,
+          0.4353252053260803
+        ],
+        "material": "denim_fabric_06",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1M8PJ2BE57",
+        "size_m": [
+          0.4740997552871704,
+          0.49813026189804077
+        ],
+        "material": "ribbed_corduroy",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_228Z31ED8J",
+        "size_m": [
+          1.352967381477356,
+          0.6009304523468018
+        ],
+        "material": "caban",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_013SQS1WZS",
+        "size_m": [
+          0.9404967427253723,
+          0.5760468244552612
+        ],
+        "material": "fabric_pattern_05",
+        "color_channel": "col_01"
+      },
+      {
+        "asset_id": "rand_1CW9M7X6EY",
+        "size_m": [
+          0.6470777988433838,
+          0.7473089694976807
+        ],
+        "material": "rough_linen",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1PFUE0L72V",
+        "size_m": [
+          0.9510624408721924,
+          0.7589560747146606
+        ],
+        "material": "terry_cloth",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0UVZH267ZC",
+        "size_m": [
+          0.4863639175891876,
+          0.5498864650726318
+        ],
+        "material": "gingham_check",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2JURAHYDKZ",
+        "size_m": [
+          0.9106065034866333,
+          0.5436253547668457
+        ],
+        "material": "bi_stretch",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1OV9B04UC5",
+        "size_m": [
+          0.5256893634796143,
+          0.8263609409332275
+        ],
+        "material": "curly_teddy_natural",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1JB634CLNN",
+        "size_m": [
+          0.46536651253700256,
+          0.527455747127533
+        ],
+        "material": "book_pattern",
+        "color_channel": "col1"
+      },
+      {
+        "asset_id": "rand_27FBPLPARE",
+        "size_m": [
+          0.782852292060852,
+          0.9075149297714233
+        ],
+        "material": "denim_fabric_05",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1IQUB8VATS",
+        "size_m": [
+          1.0040398836135864,
+          0.8031342029571533
+        ],
+        "material": "cotton_jersey",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2J23ZSEMII",
+        "size_m": [
+          0.8994622826576233,
+          0.5213338732719421
+        ],
+        "material": "floral_jacquard",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2LUN1VZLYT",
+        "size_m": [
+          1.177514910697937,
+          0.7306459546089172
+        ],
+        "material": "faux_fur_geometric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_20ESEDGJFO",
+        "size_m": [
+          1.190358281135559,
+          0.6346830129623413
+        ],
+        "material": "poly_wool_herringbone",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_28KPAW3DEX",
+        "size_m": [
+          0.5796182155609131,
+          0.9269371032714844
+        ],
+        "material": "denim_fabric_03",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0VLGD3FFJF",
+        "size_m": [
+          0.8563838005065918,
+          0.811943531036377
+        ],
+        "material": "scuba_suede",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2AWJYE6PF6",
+        "size_m": [
+          0.8450979590415955,
+          0.791441798210144
+        ],
+        "material": "curly_teddy_checkered",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1C5J5MGWB5",
+        "size_m": [
+          0.8551418781280518,
+          0.5104715824127197
+        ],
+        "material": "crepe_georgette",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_25HZIJXGYM",
+        "size_m": [
+          0.8707363605499268,
+          0.5238362550735474
+        ],
+        "material": "stretch_poplin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0X68PQMHZM",
+        "size_m": [
+          1.3319051265716553,
+          0.5830776691436768
+        ],
+        "material": "jogging_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2COXZZ87H8",
+        "size_m": [
+          0.5415741205215454,
+          0.49139195680618286
+        ],
+        "material": "quatrefoil_jacquard_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_16R640YUSC",
+        "size_m": [
+          1.2754918336868286,
+          0.9107890129089355
+        ],
+        "material": "terlenka",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2EHQRL3GKW",
+        "size_m": [
+          1.1831562519073486,
+          0.5152302980422974
+        ],
+        "material": "crepe_satin",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2I3W8H6VJJ",
+        "size_m": [
+          0.5942150354385376,
+          0.6682297587394714
+        ],
+        "material": "jersey_melange",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_09G2VZ0SDX",
+        "size_m": [
+          1.2722452878952026,
+          0.5496951937675476
+        ],
+        "material": "knitted_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1FL5UDP4YQ",
+        "size_m": [
+          0.6632422208786011,
+          0.4823257327079773
+        ],
+        "material": "velour_velvet",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_28ZDYGSR2I",
+        "size_m": [
+          1.042450189590454,
+          0.4788762331008911
+        ],
+        "material": "polar_fleece",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0ME2Z034NN",
+        "size_m": [
+          0.8680312633514404,
+          0.4807427227497101
+        ],
+        "material": "wool_boucle",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_288NETYWUM",
+        "size_m": [
+          1.2679394483566284,
+          0.6183704137802124
+        ],
+        "material": "waffle_pique_cotton",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_14QR48AC4F",
+        "size_m": [
+          0.5765419006347656,
+          0.6371506452560425
+        ],
+        "material": "fabric_pattern_07",
+        "color_channel": "col_03"
+      },
+      {
+        "asset_id": "rand_13S5ONA77Z",
+        "size_m": [
+          0.8233247399330139,
+          0.7959357500076294
+        ],
+        "material": "denim_fabric_04",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_241OQOFHLY",
+        "size_m": [
+          0.9912419319152832,
+          0.5891337394714355
+        ],
+        "material": "denmin_fabric_02",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0E362JU16I",
+        "size_m": [
+          1.120077133178711,
+          0.5044575333595276
+        ],
+        "material": "denim_fabric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2I74CBEL5E",
+        "size_m": [
+          0.8840422630310059,
+          0.5324752330780029
+        ],
+        "material": "denim_fabric_06",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_15NQN3GD2V",
+        "size_m": [
+          0.6807336807250977,
+          0.911887526512146
+        ],
+        "material": "ribbed_corduroy",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_28OEZF84ZR",
+        "size_m": [
+          0.4284133315086365,
+          0.4401199221611023
+        ],
+        "material": "caban",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_19ODP894JR",
+        "size_m": [
+          1.28361177444458,
+          0.6215471029281616
+        ],
+        "material": "fabric_pattern_05",
+        "color_channel": "col_01"
+      },
+      {
+        "asset_id": "rand_2DAJ9C0V9J",
+        "size_m": [
+          0.765520453453064,
+          0.527625322341919
+        ],
+        "material": "rough_linen",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1BO54M4I7O",
+        "size_m": [
+          0.810590386390686,
+          0.5098028182983398
+        ],
+        "material": "terry_cloth",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_29DC1LGB9H",
+        "size_m": [
+          0.9388061165809631,
+          0.7875204086303711
+        ],
+        "material": "gingham_check",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1UEV2E1PJ2",
+        "size_m": [
+          1.2188998460769653,
+          0.5160884261131287
+        ],
+        "material": "bi_stretch",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1J96RKBL4I",
+        "size_m": [
+          1.0346662998199463,
+          0.5252977609634399
+        ],
+        "material": "curly_teddy_natural",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2GI6KT3HRB",
+        "size_m": [
+          0.5129408240318298,
+          0.4024201035499573
+        ],
+        "material": "book_pattern",
+        "color_channel": "col1"
+      },
+      {
+        "asset_id": "rand_0T6A7W6QY9",
+        "size_m": [
+          0.9551050662994385,
+          0.5416497588157654
+        ],
+        "material": "denim_fabric_05",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_2D6SERJ1DO",
+        "size_m": [
+          1.1099003553390503,
+          0.5728293657302856
+        ],
+        "material": "cotton_jersey",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_0VOF58UCB8",
+        "size_m": [
+          1.057621955871582,
+          0.6004425883293152
+        ],
+        "material": "floral_jacquard",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1TTF89OK8Y",
+        "size_m": [
+          1.062256932258606,
+          0.5431170463562012
+        ],
+        "material": "faux_fur_geometric",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1CSHS4LKIJ",
+        "size_m": [
+          1.249114751815796,
+          0.5845364332199097
+        ],
+        "material": "poly_wool_herringbone",
+        "color_channel": "Diffuse"
+      },
+      {
+        "asset_id": "rand_1OU69WR2PE",
+        "size_m": [
+          0.5784198641777039,
+          0.5707559585571289
+        ],
+        "material": "denim_fabric_03",
+        "color_channel": "Diffuse"
+      }
+    ]
+  }
+}

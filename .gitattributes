@@ -1,2 +1,0 @@
-# Preserve the official PaperCept template byte-for-byte and suppress noisy CRLF diffs.
-paper/ieeeconf.cls -diff

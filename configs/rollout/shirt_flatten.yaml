@@ -1,8 +1,0 @@
-schema: clothdojo_rollout_scenario
-format_version: 1
-scenario_id: shirt_flatten_v1
-task_name: shirt_flatten
-seed: 42
-prompt: flatten the shirt
-steps: 4500
-action_horizon: 50

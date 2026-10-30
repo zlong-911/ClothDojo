@@ -1,0 +1,1274 @@
+{
+  "version": 11,
+  "primary_selection": {
+    "tasks": {
+      "file": "tasks-paired.mp4",
+      "sources": [
+        "../flatten-hq.sources.json",
+        "../fold-hq.sources.json"
+      ],
+      "composition": "Horizontal pair, 2400x900, 25 fps, 10 s. Matching external camera and appearance; separate autonomous rollout excerpts at 1x. No whole-task success claim."
+    },
+    "scale": {
+      "file": "generation-200.mp4",
+      "source_manifest": "outputs/presentation/website_rgb_pool_20260928/manifest.json",
+      "sources": [
+        {
+          "task": "flatten",
+          "asset_id": "rand_00PJYCPW0L",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000021.mp4",
+          "source_trajectory": "rand_00PJYCPW0L__01"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_0I3JWVNKOR",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000259.mp4",
+          "source_trajectory": "rand_0I3JWVNKOR__09"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1GIQSRDLN2",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001610.mp4",
+          "source_trajectory": "rand_1GIQSRDLN2__03"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_02WJ207M8N",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000084.mp4",
+          "source_trajectory": "rand_02WJ207M8N__04"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1AWWJ9TCB8",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001277.mp4",
+          "source_trajectory": "rand_1AWWJ9TCB8__00"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_23MXTAPSYO",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002937.mp4",
+          "source_trajectory": "rand_23MXTAPSYO__05"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1GX7ZBY2SX",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001649.mp4",
+          "source_trajectory": "rand_1GX7ZBY2SX__03"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_2HIUZ3RBD3",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003808.mp4",
+          "source_trajectory": "rand_2HIUZ3RBD3__06"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1B862QIZ9S",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001287.mp4",
+          "source_trajectory": "rand_1B862QIZ9S__00"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_184ZB0LXIR",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001088.mp4",
+          "source_trajectory": "rand_184ZB0LXIR__01"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_0ZFJUADVCA",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000687.mp4",
+          "source_trajectory": "rand_0ZFJUADVCA__07"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1A0BGLIDR1",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001194.mp4",
+          "source_trajectory": "rand_1A0BGLIDR1__07"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_0ME2Z034NN",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000307.mp4",
+          "source_trajectory": "rand_0ME2Z034NN__07"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_0VBR02U024",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000480.mp4",
+          "source_trajectory": "rand_0VBR02U024__00"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_0XY7VMAT8O",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000630.mp4",
+          "source_trajectory": "rand_0XY7VMAT8O__00"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_29NJ8CPGEY",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003407.mp4",
+          "source_trajectory": "rand_29NJ8CPGEY__05"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_254M1CY1Z9",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003056.mp4",
+          "source_trajectory": "rand_254M1CY1Z9__04"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_0URVRF4FRO",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000425.mp4",
+          "source_trajectory": "rand_0URVRF4FRO__05"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1UPT0NGFMM",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002464.mp4",
+          "source_trajectory": "rand_1UPT0NGFMM__01"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1X7Y4QEECH",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002603.mp4",
+          "source_trajectory": "rand_1X7Y4QEECH__00"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1YHCYZE5OK",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002666.mp4",
+          "source_trajectory": "rand_1YHCYZE5OK__03"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_2C5OWHIMT4",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003520.mp4",
+          "source_trajectory": "rand_2C5OWHIMT4__08"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1YGWDNTUBA",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002655.mp4",
+          "source_trajectory": "rand_1YGWDNTUBA__02"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_20JUZJXU1F",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002741.mp4",
+          "source_trajectory": "rand_20JUZJXU1F__09"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_28ZDYGSR2I",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003325.mp4",
+          "source_trajectory": "rand_28ZDYGSR2I__03"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_04OU2IZ2GV",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000127.mp4",
+          "source_trajectory": "rand_04OU2IZ2GV__07"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_2FCM9GRUJ9",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003735.mp4",
+          "source_trajectory": "rand_2FCM9GRUJ9__03"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_0FGHC5MNWV",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000242.mp4",
+          "source_trajectory": "rand_0FGHC5MNWV__02"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1I7PJ11DEK",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001716.mp4",
+          "source_trajectory": "rand_1I7PJ11DEK__01"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1F7UUHFTTF",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001509.mp4",
+          "source_trajectory": "rand_1F7UUHFTTF__02"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1LN4VU7300",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001933.mp4",
+          "source_trajectory": "rand_1LN4VU7300__08"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_2CQDA76VSP",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003576.mp4",
+          "source_trajectory": "rand_2CQDA76VSP__04"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1Q7SCGVCYH",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002261.mp4",
+          "source_trajectory": "rand_1Q7SCGVCYH__08"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_15E6R5W9TL",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000987.mp4",
+          "source_trajectory": "rand_15E6R5W9TL__09"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1E69F9VRN4",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001470.mp4",
+          "source_trajectory": "rand_1E69F9VRN4__03"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1CD8JAPAP2",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001421.mp4",
+          "source_trajectory": "rand_1CD8JAPAP2__04"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_211Y4IO94C",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002772.mp4",
+          "source_trajectory": "rand_211Y4IO94C__00"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_28KPAW3DEX",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003257.mp4",
+          "source_trajectory": "rand_28KPAW3DEX__05"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_26L07UTNT4",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003154.mp4",
+          "source_trajectory": "rand_26L07UTNT4__02"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_2AWJYE6PF6",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003466.mp4",
+          "source_trajectory": "rand_2AWJYE6PF6__04"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_0X2J5FX39U",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000543.mp4",
+          "source_trajectory": "rand_0X2J5FX39U__03"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_01Q78IXCLW",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000041.mp4",
+          "source_trajectory": "rand_01Q78IXCLW__01"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_225EQHMJP5",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002845.mp4",
+          "source_trajectory": "rand_225EQHMJP5__03"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1XGYTK3QMJ",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002624.mp4",
+          "source_trajectory": "rand_1XGYTK3QMJ__01"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_24XNTUDUZ1",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003019.mp4",
+          "source_trajectory": "rand_24XNTUDUZ1__07"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1CW9M7X6EY",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001447.mp4",
+          "source_trajectory": "rand_1CW9M7X6EY__00"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_0VI0BDUCV4",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000502.mp4",
+          "source_trajectory": "rand_0VI0BDUCV4__02"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_25QY0N1WEZ",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003084.mp4",
+          "source_trajectory": "rand_25QY0N1WEZ__02"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1U12KRBTWC",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002449.mp4",
+          "source_trajectory": "rand_1U12KRBTWC__06"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_2J2W2VDRRO",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003854.mp4",
+          "source_trajectory": "rand_2J2W2VDRRO__02"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_28N56YOZXC",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003283.mp4",
+          "source_trajectory": "rand_28N56YOZXC__01"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_117L64AH1R",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000746.mp4",
+          "source_trajectory": "rand_117L64AH1R__06"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_13AAK4PO2O",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000876.mp4",
+          "source_trajectory": "rand_13AAK4PO2O__07"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_0X6SZC14TF",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000568.mp4",
+          "source_trajectory": "rand_0X6SZC14TF__08"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_2EHRZQL8Y6",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003685.mp4",
+          "source_trajectory": "rand_2EHRZQL8Y6__03"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_0Y83K1TKNT",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000640.mp4",
+          "source_trajectory": "rand_0Y83K1TKNT__00"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1OCQNTE24T",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002127.mp4",
+          "source_trajectory": "rand_1OCQNTE24T__03"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_0TKY8IYX0W",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000375.mp4",
+          "source_trajectory": "rand_0TKY8IYX0W__05"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_18TWRPGQIS",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001135.mp4",
+          "source_trajectory": "rand_18TWRPGQIS__08"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_26WRBYAPUY",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003172.mp4",
+          "source_trajectory": "rand_26WRBYAPUY__00"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1VKRDNWFKE",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002515.mp4",
+          "source_trajectory": "rand_1VKRDNWFKE__02"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_24Z3FYN9F5",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003051.mp4",
+          "source_trajectory": "rand_24Z3FYN9F5__09"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_17V8IC2JIT",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001083.mp4",
+          "source_trajectory": "rand_17V8IC2JIT__06"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1JY83CS1BA",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001841.mp4",
+          "source_trajectory": "rand_1JY83CS1BA__06"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_2CE9RSYSM8",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003535.mp4",
+          "source_trajectory": "rand_2CE9RSYSM8__03"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1M4MU8KSIY",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001973.mp4",
+          "source_trajectory": "rand_1M4MU8KSIY__08"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_20K0H65GUU",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002747.mp4",
+          "source_trajectory": "rand_20K0H65GUU__05"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1U0UUO457V",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002434.mp4",
+          "source_trajectory": "rand_1U0UUO457V__01"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_004NVCOKV7",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000001.mp4",
+          "source_trajectory": "rand_004NVCOKV7__01"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_16W8ARYM6G",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001044.mp4",
+          "source_trajectory": "rand_16W8ARYM6G__06"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1GN0K5NA2V",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001619.mp4",
+          "source_trajectory": "rand_1GN0K5NA2V__02"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_2GLQYGBEU5",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003786.mp4",
+          "source_trajectory": "rand_2GLQYGBEU5__04"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_2712IUKDND",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003200.mp4",
+          "source_trajectory": "rand_2712IUKDND__08"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_12FL0PZP12",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000849.mp4",
+          "source_trajectory": "rand_12FL0PZP12__00"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1BBH5VM6IR",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001322.mp4",
+          "source_trajectory": "rand_1BBH5VM6IR__05"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_0Z5CXF4ZQP",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000677.mp4",
+          "source_trajectory": "rand_0Z5CXF4ZQP__07"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1G0SYPVGVT",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001561.mp4",
+          "source_trajectory": "rand_1G0SYPVGVT__04"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1LPWCNA3ER",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001940.mp4",
+          "source_trajectory": "rand_1LPWCNA3ER__05"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_2DSGBFQM2L",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003656.mp4",
+          "source_trajectory": "rand_2DSGBFQM2L__04"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1BIF7BVRJ4",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001354.mp4",
+          "source_trajectory": "rand_1BIF7BVRJ4__07"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1FVJ238UE7",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001542.mp4",
+          "source_trajectory": "rand_1FVJ238UE7__05"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_265ZXGNG1J",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003108.mp4",
+          "source_trajectory": "rand_265ZXGNG1J__06"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1VW0ZFXD17",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002550.mp4",
+          "source_trajectory": "rand_1VW0ZFXD17__07"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1BEWWU2K6Q",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001343.mp4",
+          "source_trajectory": "rand_1BEWWU2K6Q__06"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1CSHS4LKIJ",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001439.mp4",
+          "source_trajectory": "rand_1CSHS4LKIJ__02"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1RUXCWNZMC",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002302.mp4",
+          "source_trajectory": "rand_1RUXCWNZMC__09"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_296QU3RR8Q",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003361.mp4",
+          "source_trajectory": "rand_296QU3RR8Q__09"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_22UTWB66S8",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002889.mp4",
+          "source_trajectory": "rand_22UTWB66S8__07"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_0JL0G525XH",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000281.mp4",
+          "source_trajectory": "rand_0JL0G525XH__01"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1A2P58J9VK",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001199.mp4",
+          "source_trajectory": "rand_1A2P58J9VK__02"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1JB634CLNN",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001827.mp4",
+          "source_trajectory": "rand_1JB634CLNN__02"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_0VGB1NG35B",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000494.mp4",
+          "source_trajectory": "rand_0VGB1NG35B__04"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_2LN9D9BZBV",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003957.mp4",
+          "source_trajectory": "rand_2LN9D9BZBV__05"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1ONEJHCOVS",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002142.mp4",
+          "source_trajectory": "rand_1ONEJHCOVS__08"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_22VKISLY30",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002901.mp4",
+          "source_trajectory": "rand_22VKISLY30__09"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_1EDHTQFUNP",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001481.mp4",
+          "source_trajectory": "rand_1EDHTQFUNP__04"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_2D6SERJ1DO",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003604.mp4",
+          "source_trajectory": "rand_2D6SERJ1DO__02"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_19U2D4IL4V",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001160.mp4",
+          "source_trajectory": "rand_19U2D4IL4V__03"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_21QA5FKS58",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002818.mp4",
+          "source_trajectory": "rand_21QA5FKS58__06"
+        },
+        {
+          "task": "flatten",
+          "asset_id": "rand_27ULACQ3RP",
+          "source_video": "data/datasets/rgb_flatten_success_release_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003227.mp4",
+          "source_trajectory": "rand_27ULACQ3RP__05"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0E362JU16I",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000228.mp4",
+          "source_trajectory": "rand_0E362JU16I_000006"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_244NPT0F0J",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002863.mp4",
+          "source_trajectory": "rand_244NPT0F0J_000003"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1KMN65OI4O",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001795.mp4",
+          "source_trajectory": "rand_1KMN65OI4O_000003"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1RJ8D5A7EC",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002200.mp4",
+          "source_trajectory": "rand_1RJ8D5A7EC_000000_r002"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1UPT0NGFMM",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002376.mp4",
+          "source_trajectory": "rand_1UPT0NGFMM_000004"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_12CMB9NKG1",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000799.mp4",
+          "source_trajectory": "rand_12CMB9NKG1_000008"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_117L64AH1R",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000728.mp4",
+          "source_trajectory": "rand_117L64AH1R_000002_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_2EBUYCB46V",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003545.mp4",
+          "source_trajectory": "rand_2EBUYCB46V_000009"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1H2L4705WL",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001617.mp4",
+          "source_trajectory": "rand_1H2L4705WL_000002_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_27QVZO5VN5",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003100.mp4",
+          "source_trajectory": "rand_27QVZO5VN5_000000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1BBH5VM6IR",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001281.mp4",
+          "source_trajectory": "rand_1BBH5VM6IR_000001"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_155MRLXVMW",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000930.mp4",
+          "source_trajectory": "rand_155MRLXVMW_000004"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_24R3ZE960E",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002895.mp4",
+          "source_trajectory": "rand_24R3ZE960E_000008"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1OCQNTE24T",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002051.mp4",
+          "source_trajectory": "rand_1OCQNTE24T_000004"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1GIQSRDLN2",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001555.mp4",
+          "source_trajectory": "rand_1GIQSRDLN2_000006"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1YQ82NEHKT",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002570.mp4",
+          "source_trajectory": "rand_1YQ82NEHKT_000001"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_2DQCL6CL8T",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003520.mp4",
+          "source_trajectory": "rand_2DQCL6CL8T_000000_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_2F80FLJVIL",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003594.mp4",
+          "source_trajectory": "rand_2F80FLJVIL_000000_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_2DSGBFQM2L",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003531.mp4",
+          "source_trajectory": "rand_2DSGBFQM2L_000000_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_14L6VNJRF9",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000908.mp4",
+          "source_trajectory": "rand_14L6VNJRF9_000001"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1MO2JOL3Z7",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001939.mp4",
+          "source_trajectory": "rand_1MO2JOL3Z7_000001"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0VBR02U024",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000475.mp4",
+          "source_trajectory": "rand_0VBR02U024_000006"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1EDHTQFUNP",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001434.mp4",
+          "source_trajectory": "rand_1EDHTQFUNP_000005"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_2968QV5JF1",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003230.mp4",
+          "source_trajectory": "rand_2968QV5JF1_000002"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0ME2Z034NN",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000297.mp4",
+          "source_trajectory": "rand_0ME2Z034NN_000004"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_13Q8PAC94Q",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000878.mp4",
+          "source_trajectory": "rand_13Q8PAC94Q_000003"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0Z5CXF4ZQP",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000658.mp4",
+          "source_trajectory": "rand_0Z5CXF4ZQP_000008"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_26L07UTNT4",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003044.mp4",
+          "source_trajectory": "rand_26L07UTNT4_000004"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_2CE9RSYSM8",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003409.mp4",
+          "source_trajectory": "rand_2CE9RSYSM8_000001"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_2CN2KHC0C0",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003435.mp4",
+          "source_trajectory": "rand_2CN2KHC0C0_000008"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_12CR1HRKKE",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000806.mp4",
+          "source_trajectory": "rand_12CR1HRKKE_000005"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1XGYTK3QMJ",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002531.mp4",
+          "source_trajectory": "rand_1XGYTK3QMJ_000003_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0AYSPSNK8T",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000219.mp4",
+          "source_trajectory": "rand_0AYSPSNK8T_000006"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_2CBVS72PJD",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003404.mp4",
+          "source_trajectory": "rand_2CBVS72PJD_000006_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1FVJ238UE7",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001497.mp4",
+          "source_trajectory": "rand_1FVJ238UE7_000007"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_28R28NJ9TT",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003187.mp4",
+          "source_trajectory": "rand_28R28NJ9TT_000000_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1C5J5MGWB5",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001378.mp4",
+          "source_trajectory": "rand_1C5J5MGWB5_000002_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1E69F9VRN4",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001420.mp4",
+          "source_trajectory": "rand_1E69F9VRN4_000006"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0IX189WGFR",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000263.mp4",
+          "source_trajectory": "rand_0IX189WGFR_000002"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1TSMB7S1IE",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002321.mp4",
+          "source_trajectory": "rand_1TSMB7S1IE_000008"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1PWPVI9OXJ",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002142.mp4",
+          "source_trajectory": "rand_1PWPVI9OXJ_000002_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_28Y9ZV7P4R",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003205.mp4",
+          "source_trajectory": "rand_28Y9ZV7P4R_000007"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_26MEH085GX",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003052.mp4",
+          "source_trajectory": "rand_26MEH085GX_000002"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_249RUXCM75",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002879.mp4",
+          "source_trajectory": "rand_249RUXCM75_000007_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1F9YNONW4N",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001478.mp4",
+          "source_trajectory": "rand_1F9YNONW4N_000003_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_11SEFBSFKK",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000774.mp4",
+          "source_trajectory": "rand_11SEFBSFKK_000000_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1Q7ETFUCKR",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002151.mp4",
+          "source_trajectory": "rand_1Q7ETFUCKR_000002_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1UEV2E1PJ2",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002370.mp4",
+          "source_trajectory": "rand_1UEV2E1PJ2_000007"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1ALD8ZQDU4",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001195.mp4",
+          "source_trajectory": "rand_1ALD8ZQDU4_000007"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_11J8S4NHQ9",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000754.mp4",
+          "source_trajectory": "rand_11J8S4NHQ9_000003"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_21SL3KXM69",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002711.mp4",
+          "source_trajectory": "rand_21SL3KXM69_000000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_21GKNQCZ4B",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002681.mp4",
+          "source_trajectory": "rand_21GKNQCZ4B_000000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1AWWJ9TCB8",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001245.mp4",
+          "source_trajectory": "rand_1AWWJ9TCB8_000009_r001"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_29Y6R278T5",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003308.mp4",
+          "source_trajectory": "rand_29Y6R278T5_000001"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_288NETYWUM",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003135.mp4",
+          "source_trajectory": "rand_288NETYWUM_000000_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1I1LBRHDZL",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001645.mp4",
+          "source_trajectory": "rand_1I1LBRHDZL_000004_r001"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_2J9L12THIB",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003752.mp4",
+          "source_trajectory": "rand_2J9L12THIB_000005"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_24Y512G41S",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002929.mp4",
+          "source_trajectory": "rand_24Y512G41S_000002_r008"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1IS9ZV2NCW",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001722.mp4",
+          "source_trajectory": "rand_1IS9ZV2NCW_000000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1X249KBY3Y",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002491.mp4",
+          "source_trajectory": "rand_1X249KBY3Y_000007"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0FGHC5MNWV",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000233.mp4",
+          "source_trajectory": "rand_0FGHC5MNWV_000000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_19VLXSSFLD",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001132.mp4",
+          "source_trajectory": "rand_19VLXSSFLD_000001"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_232X14D5PP",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002801.mp4",
+          "source_trajectory": "rand_232X14D5PP_000001"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_11L6QS0SAZ",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000768.mp4",
+          "source_trajectory": "rand_11L6QS0SAZ_000007"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_265ZXGNG1J",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002999.mp4",
+          "source_trajectory": "rand_265ZXGNG1J_000000_r001"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_18TWRPGQIS",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001098.mp4",
+          "source_trajectory": "rand_18TWRPGQIS_000009"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0V15754TTS",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000451.mp4",
+          "source_trajectory": "rand_0V15754TTS_000002_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_296QU3RR8Q",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003246.mp4",
+          "source_trajectory": "rand_296QU3RR8Q_000008_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1CSHS4LKIJ",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001401.mp4",
+          "source_trajectory": "rand_1CSHS4LKIJ_000003"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1VKTA3O4NL",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002434.mp4",
+          "source_trajectory": "rand_1VKTA3O4NL_000000_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_28N56YOZXC",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003175.mp4",
+          "source_trajectory": "rand_28N56YOZXC_000008"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1LN4VU7300",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001863.mp4",
+          "source_trajectory": "rand_1LN4VU7300_000004_r001"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_16V49KL0R9",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001000.mp4",
+          "source_trajectory": "rand_16V49KL0R9_000005_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0VGB1NG35B",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000488.mp4",
+          "source_trajectory": "rand_0VGB1NG35B_000006"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_19ZIM30DGZ",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001144.mp4",
+          "source_trajectory": "rand_19ZIM30DGZ_000005"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0T6A7W6QY9",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000352.mp4",
+          "source_trajectory": "rand_0T6A7W6QY9_000000_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0X2J5FX39U",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000539.mp4",
+          "source_trajectory": "rand_0X2J5FX39U_000003_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1M8PJ2BE57",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001921.mp4",
+          "source_trajectory": "rand_1M8PJ2BE57_000005"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1G0SYPVGVT",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001515.mp4",
+          "source_trajectory": "rand_1G0SYPVGVT_000003_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_2LFN8HW5AG",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003814.mp4",
+          "source_trajectory": "rand_2LFN8HW5AG_000008"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_2C3IQKWMNQ",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003385.mp4",
+          "source_trajectory": "rand_2C3IQKWMNQ_000004_r007"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_24Z3FYN9F5",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002937.mp4",
+          "source_trajectory": "rand_24Z3FYN9F5_000006"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1Y31BR25CA",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002540.mp4",
+          "source_trajectory": "rand_1Y31BR25CA_000006"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1JY83CS1BA",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001775.mp4",
+          "source_trajectory": "rand_1JY83CS1BA_000004"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_2HA52Y4C1D",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003667.mp4",
+          "source_trajectory": "rand_2HA52Y4C1D_000004"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_29DC1LGB9H",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003261.mp4",
+          "source_trajectory": "rand_29DC1LGB9H_000009_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0UYXAJYKTZ",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000436.mp4",
+          "source_trajectory": "rand_0UYXAJYKTZ_000005"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_041L4IHB7W",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000106.mp4",
+          "source_trajectory": "rand_041L4IHB7W_000008"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_128O8MCE0P",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000787.mp4",
+          "source_trajectory": "rand_128O8MCE0P_000006"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0Z3TA1FA1C",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000638.mp4",
+          "source_trajectory": "rand_0Z3TA1FA1C_000000_r001"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_225EQHMJP5",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-002/observation.images.cam_high/episode_002737.mp4",
+          "source_trajectory": "rand_225EQHMJP5_000000_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1MRNMN7QY0",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001949.mp4",
+          "source_trajectory": "rand_1MRNMN7QY0_000002"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0V7RGHZ8JM",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000455.mp4",
+          "source_trajectory": "rand_0V7RGHZ8JM_000009_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_28L0FM4KOI",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003150.mp4",
+          "source_trajectory": "rand_28L0FM4KOI_000004"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0Y83K1TKNT",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000629.mp4",
+          "source_trajectory": "rand_0Y83K1TKNT_000009"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0XQT1WCCJN",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000618.mp4",
+          "source_trajectory": "rand_0XQT1WCCJN_000005_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_1GX7ZBY2SX",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-001/observation.images.cam_high/episode_001597.mp4",
+          "source_trajectory": "rand_1GX7ZBY2SX_000008_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_2CQX7CIBKN",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-003/observation.images.cam_high/episode_003467.mp4",
+          "source_trajectory": "rand_2CQX7CIBKN_000005_r000"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_089NYY0BW7",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000187.mp4",
+          "source_trajectory": "rand_089NYY0BW7_000000_r001"
+        },
+        {
+          "task": "fold",
+          "asset_id": "rand_0UVZH267ZC",
+          "source_video": "data/datasets/rgb_fold_generated_best_released_train400_v1_20260911/videos/chunk-000/observation.images.cam_high/episode_000423.mp4",
+          "source_trajectory": "rand_0UVZH267ZC_000000"
+        }
+      ],
+      "unique_trajectories": 200,
+      "unique_garments": 169,
+      "task_counts": {
+        "flatten": 100,
+        "fold": 100
+      },
+      "composition": "20 columns x 10 rows, flatten top 5 rows and fold bottom 5; 12 s starting at source time 0. Camera crop pulls back to full collection. Source sampled at 10 Hz, encoded at 25 fps, 1x time. Recorded clips, not concurrent simulation.",
+      "reproduction": "website/make_scale_showcase.py"
+    },
+    "robots": {
+      "file": "robots-overview.mp4",
+      "source_directory": "outputs/presentation/retarget_appearance_v03/matched",
+      "source_pattern": "b_{robot}_{task}_matched.mp4",
+      "robots": [
+        "piper",
+        "aloha2",
+        "x5",
+        "fr3_duo",
+        "ur5e_2f85"
+      ],
+      "composition": "5 columns x 2 rows, flatten top/fold bottom, 2400x720, 25 fps, 10 s, 1x. Individual paired files robot-{robot}.mp4 are 1280x480.",
+      "scope": "PIPER recorded motion; other robots retargeted kinematic references. Shared visual_layout, camera matched per robot across tasks. Not closed-loop policy validation."
+    },
+    "asset_pool": {
+      "file": "../garment-collection-web.mp4",
+      "assets": 500,
+      "scope": "Existing geometry/material preview; not 500 parallel simulations.",
+      "source": "outputs/presentation/asset_stage_500_v6_project_floor"
+    }
+  },
+  "supporting_selection": {
+    "page": "../../explore.html",
+    "trajectories": 24,
+    "garment_atlas": 500,
+    "metadata": "../catalog/catalog.json"
+  },
+  "excluded_from_home": [
+    {
+      "source": "../evidence/human-intervention.mp4",
+      "reason": "High camera clips lifted cloth; source marks training_eligible=false. Preserve for technical inspection, not main evidence."
+    },
+    {
+      "source": "../evidence/appearance-synchronized.mp4",
+      "reason": "Camera/material changes distract from the primary story. Preserve supporting source."
+    },
+    {
+      "source": "../trajectory-wall-web.mp4",
+      "reason": "Replaced by 200 distinct trajectories; retained as secondary no-script fallback."
+    }
+  ],
+  "training_set": {
+    "trajectories": 7848,
+    "flatten": 3992,
+    "fold": 3856,
+    "flatten_garments": 400,
+    "fold_garments": 399
+  }
+}
